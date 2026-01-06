@@ -1,0 +1,55 @@
+services:
+  lumo-bridge-dev:
+    build:
+      context: .
+      target: development
+    container_name: lumo-bridge-dev
+    user: "1000:1000"
+    ports:
+      - "${PORT}:${PORT}"
+      - "9229:9229"  # Node.js debugger port
+    env_file:
+      - .env
+    environment:
+      # Development-specific overrides
+      - USER_DATA_DIR=/app/user-data
+      - HEADLESS=${HEADLESS:-false}
+      - DISPLAY=${DISPLAY:-:0}
+      - NODE_ENV=${NODE_ENV:-development}
+    volumes:
+      # Mount source code for live editing
+      - ./src:/app/src:rw
+      - ./package.json:/app/package.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      # Persist browser profile data
+      - ./user-data:/app/user-data:rw
+      # Persist node_modules (performance optimization)
+      - node_modules:/app/node_modules
+      # For X11 forwarding
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    # Required for Chrome sandbox
+    security_opt:
+      - seccomp:unconfined
+    shm_size: 2gb
+    stdin_open: true  # Keep stdin open for interactive debugging
+    tty: true         # Allocate a pseudo-TTY
+    restart: unless-stopped
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main-slim
+    container_name: open-webui
+    ports:
+      - "8080:8080"
+    environment:
+      - OPENAI_API_BASE_URLS=http://lumo-bridge-dev:${PORT}/v1
+      - OPENAI_API_KEYS=${API_KEY}
+      - ENABLE_OPENAI_API=true
+    volumes:
+      - open-webui-data:/app/backend/data
+    restart: unless-stopped
+    depends_on:
+      - lumo-bridge-dev
+
+volumes:
+  node_modules:
+  open-webui-data:
