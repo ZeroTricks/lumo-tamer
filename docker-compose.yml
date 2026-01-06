@@ -1,0 +1,25 @@
+services:
+  lumo-bridge:
+    build:
+      context: .
+      target: production
+    container_name: lumo-bridge
+    user: "1000:1000"
+    ports:
+      - "${PORT}:${PORT}"
+    env_file:
+      - .env
+    environment:
+      # Production-specific overrides
+      - HEADLESS=${HEADLESS:-true}
+      - USER_DATA_DIR=/app/user-data
+      - DISPLAY=${DISPLAY:-99}
+      - NODE_ENV=${NODE_ENV:-production}
+    volumes:
+      # Persist browser profile data
+      - ./user-data:/app/user-data
+    # Required for Chrome sandbox
+    security_opt:
+      - seccomp:unconfined
+    shm_size: 2gb
+    restart: unless-stopped
