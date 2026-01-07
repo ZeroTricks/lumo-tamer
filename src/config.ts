@@ -14,6 +14,7 @@ function getRequiredEnv(key: string): string {
 export const serverConfig = {
   port: parseInt(getRequiredEnv('PORT'), 10),
   apiKey: getRequiredEnv('API_KEY'),
+  modelName: getRequiredEnv('MODEL_NAME'),
 };
 
 export const browserConfig: BrowserConfig = {

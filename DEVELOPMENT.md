@@ -190,7 +190,7 @@ vim src/browser/chatbox.ts  # or VS Code, etc.
 curl http://localhost:3000/v1/chat/completions \
   -H "Authorization: Bearer your-secret-api-key-here" \
   -H "Content-Type: application/json" \
-  -d '{"model":"chatbox-default","messages":[{"role":"user","content":"test"}]}'
+  -d '{"model":"your-model-name","messages":[{"role":"user","content":"test"}]}'
 
 # 6. Need to debug?
 make shell
