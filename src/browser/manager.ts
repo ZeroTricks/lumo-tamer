@@ -27,6 +27,19 @@ export class BrowserManager {
 
     // Get or create page
     this.page = this.context.pages()[0] || await this.context.newPage();
+
+    // Stub the __name helper to prevent TypeScript/tsx injection errors
+    await this.page.addInitScript(() => {
+      (window as any).__name = (func: any) => func;
+    });
+
+    // Forward browser console logs to Node.js
+    this.page.on('console', (msg: any) => {
+      const type = msg.type();
+      const text = msg.text();
+      console.log(`[Browser ${type}]`, text);
+    });
+
     await this.page.goto(browserConfig.url);
 
     console.log(`Navigated to: ${browserConfig.url}`);

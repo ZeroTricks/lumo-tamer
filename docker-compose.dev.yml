@@ -47,8 +47,8 @@ services:
     volumes:
       - open-webui-data:/app/backend/data
     restart: unless-stopped
-    depends_on:
-      - lumo-bridge-dev
+    # depends_on:
+      # - lumo-bridge-dev
 
 volumes:
   node_modules:

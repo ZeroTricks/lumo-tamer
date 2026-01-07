@@ -42,7 +42,7 @@ COPY tsconfig.json ./
 FROM base AS builder
 
 # Install all dependencies (including dev dependencies for building)
-RUN npm ci
+RUN npm i
 
 # Copy source code
 COPY src ./src
@@ -56,7 +56,7 @@ RUN npm run build
 FROM base AS production
 
 # Install production dependencies only
-RUN npm ci --only=production
+RUN npm i --only=production
 
 # Install Playwright browsers to system-wide location accessible by all users
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
@@ -69,6 +69,9 @@ COPY --from=builder /app/dist ./dist
 
 # Create user-data directory with proper permissions
 RUN mkdir -p /app/user-data && chmod -R 777 /app/user-data
+
+# Change ownership of app files to user 1000
+RUN chown -R 1000:1000 /app
 
 # Expose API port
 EXPOSE 3000
@@ -101,6 +104,9 @@ COPY src ./src
 
 # Create user-data directory with proper permissions
 RUN mkdir -p /app/user-data && chmod -R 777 /app/user-data
+
+# Change ownership of app files to user 1000
+RUN chown -R 1000:1000 /app
 
 # Expose API port and debugger port
 EXPOSE 3000 9229

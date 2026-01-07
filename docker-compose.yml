@@ -7,6 +7,7 @@ services:
     user: "1000:1000"
     ports:
       - "${PORT}:${PORT}"
+      # - "9222:9222"  # Chrome Remote Debugging
     env_file:
       - .env
     environment:
@@ -18,6 +19,7 @@ services:
     volumes:
       # Persist browser profile data
       - ./user-data:/app/user-data
+      # - /tmp/.X11-unix:/tmp/.X11-unix:rw
     # Required for Chrome sandbox
     security_opt:
       - seccomp:unconfined

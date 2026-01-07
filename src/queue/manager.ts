@@ -9,7 +9,7 @@ export class RequestQueue {
   }
 
   async add<T>(fn: () => Promise<T>): Promise<T> {
-    return this.queue.add(fn);
+    return this.queue.add(fn) as Promise<T>;
   }
 
   getSize(): number {
