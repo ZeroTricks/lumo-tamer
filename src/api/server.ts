@@ -97,15 +97,18 @@ export class APIServer {
 
             try {
               // Send message
+              console.log('[Server] Sending message to chatbox...');
               await chatbox.sendMessage(lastUserMessage.content);
+              console.log('[Server] Message sent, starting stream...');
 
-              // Stream response
-              for await (const delta of chatbox.streamResponse()) {
+              // Stream response with callback for each delta
+              await chatbox.streamResponse((delta) => {
+                console.log('[Server] Delta callback received:', delta.length, 'chars');
                 const chunk: OpenAIStreamChunk = {
                   id,
                   object: 'chat.completion.chunk',
                   created,
-                  model: request.model || 'chatbox-default',
+                  model: request.model || 'lumo',
                   choices: [
                     {
                       index: 0,
@@ -115,14 +118,15 @@ export class APIServer {
                   ],
                 };
                 res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-              }
+              });
+              console.log('[Server] Stream completed');
 
               // Send final chunk
               const finalChunk: OpenAIStreamChunk = {
                 id,
                 object: 'chat.completion.chunk',
                 created,
-                model: request.model || 'chatbox-default',
+                model: request.model || 'lumo',
                 choices: [
                   {
                     index: 0,
