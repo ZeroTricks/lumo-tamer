@@ -122,8 +122,7 @@ export type ResponseStreamEvent =
 
 export interface BrowserConfig {
   url: string;
-  headless: boolean;
-  userDataDir: string;
+  cdpEndpoint: string; // Chrome DevTools Protocol endpoint for remote browser
 }
 
 export interface ChatboxSelectors {

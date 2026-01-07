@@ -19,8 +19,7 @@ export const serverConfig = {
 
 export const browserConfig: BrowserConfig = {
   url: getRequiredEnv('CHATBOX_URL'),
-  headless: getRequiredEnv('HEADLESS') === 'true',
-  userDataDir: getRequiredEnv('USER_DATA_DIR'),
+  cdpEndpoint: getRequiredEnv('CDP_ENDPOINT'),
 };
 
 export const chatboxSelectors: ChatboxSelectors = {

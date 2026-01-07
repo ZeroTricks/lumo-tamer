@@ -3,7 +3,7 @@ dist
 .env
 .git
 .gitignore
-user-data
+browser-data
 *.log
 .DS_Store
 README.md
