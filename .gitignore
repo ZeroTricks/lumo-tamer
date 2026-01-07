@@ -1,6 +1,6 @@
 node_modules/
 dist/
 .env
-user-data/
+browser-data/
 *.log
 .DS_Store

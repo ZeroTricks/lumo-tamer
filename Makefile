@@ -24,35 +24,44 @@ clean: ## Clean build artifacts
 
 # Docker development
 dev-docker: ## Start development container
-	docker compose -f docker-compose.dev.yml up || [ $$? -eq 130 ]
+	docker compose up app-dev browser-dev || [ $$? -eq 130 ]
 
 dev-build: ## Build and start development container
-	docker compose -f docker-compose.dev.yml up --build || [ $$? -eq 130 ]
+	docker compose up app-dev browser-dev --build || [ $$? -eq 130 ]
 
 dev-down: ## Stop development container
-	docker compose -f docker-compose.dev.yml down
+	docker compose down
 
 dev-restart: ## Restart development container
-	docker compose -f docker-compose.dev.yml restart
+	docker compose restart app-dev browser-dev
 
-shell: ## Open shell in development container
-	docker compose -f docker-compose.dev.yml exec lumo-bridge-dev /bin/bash
+shell: ## Open shell in development app container
+	docker compose exec app-dev /bin/bash
 
-logs: ## Follow container logs
-	docker compose -f docker-compose.dev.yml logs -f
+shell-browser: ## Open shell in development browser container
+	docker compose exec browser-dev /bin/bash
+
+logs: ## Follow all container logs
+	docker compose logs -f app-dev browser-dev
+
+logs-app: ## Follow app container logs only
+	docker compose logs -f app-dev
+
+logs-browser: ## Follow browser container logs only
+	docker compose logs -f browser-dev
 
 # Production
 prod-build: ## Build production container
-	docker compose build
+	docker compose build app browser-dev
 
 prod-up: ## Start production container
-	docker compose up -d
+	docker compose up -d app browser-dev
 
 prod-down: ## Stop production container
 	docker compose down
 
 prod-logs: ## View production logs
-	docker compose logs -f
+	docker compose logs -f app browser-dev
 
 # Utilities
 x11-enable: ## Enable X11 forwarding (Linux)
@@ -62,5 +71,4 @@ clean-sessions: ## Clear saved login sessions
 	rm -rf sessions/*
 
 clean-all: clean ## Clean everything including docker volumes
-	docker compose -f docker-compose.dev.yml down -v
 	docker compose down -v

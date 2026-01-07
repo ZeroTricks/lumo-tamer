@@ -1,7 +1,15 @@
 import { chromium, BrowserContext, Page } from 'playwright';
 import { browserConfig } from '../config.js';
-import fs from 'fs/promises';
-import path from 'path';
+import {promises as dns} from 'dns';
+
+const host = new URL(browserConfig.cdpEndpoint).hostname;
+
+const { address } = await dns.lookup(host, {
+  family: 4,
+  hints: dns.ADDRCONFIG,
+});
+
+const ipEndPoint = browserConfig.cdpEndpoint.replace(host, address);
 
 export class BrowserManager {
   private context: BrowserContext | null = null;
@@ -9,21 +17,18 @@ export class BrowserManager {
 
   async initialize(): Promise<void> {
     console.log('Initializing browser...');
+    console.log(`Connecting to remote browser at ${browserConfig.cdpEndpoint}: ${ipEndPoint}`);
 
-    // Ensure user data directory exists
-    await fs.mkdir(browserConfig.userDataDir, { recursive: true });
+    const browser = await chromium.connectOverCDP(ipEndPoint);
 
-    this.context = await chromium.launchPersistentContext(browserConfig.userDataDir, {
-      headless: browserConfig.headless,
+    // Get the default context (remote browsers don't support persistent contexts the same way)
+    const contexts = browser.contexts();
+    this.context = contexts.length > 0 ? contexts[0] : await browser.newContext({
       viewport: { width: 1280, height: 720 },
       userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-      ],
     });
 
-    console.log(`Browser launched (headless: ${browserConfig.headless})`);
+    console.log(`Connected to remote browser (CDP: ${browserConfig.cdpEndpoint})`);
 
     // Get or create page
     this.page = this.context.pages()[0] || await this.context.newPage();
