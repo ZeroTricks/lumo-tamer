@@ -68,7 +68,7 @@ curl http://localhost:${PORT}/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${API_KEY}" \
   -d '{
-    "model": "chatbox-default",
+    "model": "${MODEL_NAME}",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```

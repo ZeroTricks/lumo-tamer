@@ -33,7 +33,7 @@ OpenAI Client → Express API Server → Request Queue → Playwright Browser �
 All configuration is environment-based via `.env`
 
 Configuration is loaded in [src/config.ts](src/config.ts) and exported as:
-- `serverConfig` - Port and API key
+- `serverConfig` - Port, API key, and model name
 - `browserConfig` - URL, headless mode, session directory
 - `chatboxSelectors` - DOM selectors for chatbox interaction
 
@@ -109,13 +109,13 @@ For headed browser mode in containers (required for Playwright Inspector login):
 curl http://localhost:3000/v1/chat/completions \
   -H "Authorization: Bearer your-secret-api-key" \
   -H "Content-Type: application/json" \
-  -d '{"model":"chatbox-default","messages":[{"role":"user","content":"Hello"}],"stream":false}'
+  -d '{"model":"your-model-name","messages":[{"role":"user","content":"Hello"}],"stream":false}'
 
 # Using OpenAI Python SDK
 from openai import OpenAI
 client = OpenAI(base_url="http://localhost:3000/v1", api_key="your-secret-api-key")
 response = client.chat.completions.create(
-    model="chatbox-default",
+    model="your-model-name",  # Use the MODEL_NAME from your .env
     messages=[{"role": "user", "content": "Hello"}],
     stream=True
 )

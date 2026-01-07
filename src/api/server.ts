@@ -57,7 +57,7 @@ export class APIServer {
         object: 'list',
         data: [
           {
-            id: 'chatbox-default',
+            id: serverConfig.modelName,
             object: 'model',
             created: Date.now(),
             owned_by: 'lumo-bridge',
@@ -161,7 +161,7 @@ export class APIServer {
             id: `chatcmpl-${randomUUID()}`,
             object: 'chat.completion',
             created: Math.floor(Date.now() / 1000),
-            model: request.model || 'chatbox-default',
+            model: request.model || serverConfig.modelName,
             choices: [
               {
                 index: 0,

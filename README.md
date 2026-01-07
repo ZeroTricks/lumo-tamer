@@ -67,7 +67,7 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="chatbox-default",
+    model="your-model-name",  # Use the MODEL_NAME from your .env
     messages=[
         {"role": "user", "content": "Hello!"}
     ],
@@ -85,7 +85,7 @@ curl http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your-secret-api-key-here" \
   -d '{
-    "model": "chatbox-default",
+    "model": "your-model-name",
     "messages": [{"role": "user", "content": "Hello!"}],
     "stream": false
   }'
@@ -168,7 +168,7 @@ OpenAI-compatible chat completions endpoint.
 **Request:**
 ```json
 {
-  "model": "chatbox-default",
+  "model": "your-model-name",
   "messages": [
     {"role": "user", "content": "Hello!"}
   ],
@@ -182,7 +182,7 @@ OpenAI-compatible chat completions endpoint.
   "id": "chatcmpl-xxx",
   "object": "chat.completion",
   "created": 1234567890,
-  "model": "chatbox-default",
+  "model": "your-model-name",
   "choices": [{
     "index": 0,
     "message": {
