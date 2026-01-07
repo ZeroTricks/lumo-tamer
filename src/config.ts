@@ -27,4 +27,10 @@ export const chatboxSelectors: ChatboxSelectors = {
   input: getRequiredEnv('SELECTOR_INPUT'),
   sendButton: getRequiredEnv('SELECTOR_SEND_BUTTON'),
   messages: getRequiredEnv('SELECTOR_MESSAGES'),
+  completionIndicator: getRequiredEnv('SELECTOR_COMPLETION_INDICATOR'),
+};
+
+export const responseTimeouts = {
+  withText: parseInt(getRequiredEnv('RESPONSE_TIMEOUT_WITH_TEXT')),
+  empty: parseInt(getRequiredEnv('RESPONSE_TIMEOUT_EMPTY')),
 };
