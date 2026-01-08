@@ -123,10 +123,12 @@ export type ResponseStreamEvent =
 export interface BrowserConfig {
   url: string;
   cdpEndpoint: string; // Chrome DevTools Protocol endpoint for remote browser
+  enableWebSearch: boolean;
 }
 
 export interface ChatboxSelectors {
   input: string;
   messages: string;
   completionIndicator?: string;
+  webSearch: string;
 }

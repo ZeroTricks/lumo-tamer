@@ -299,7 +299,7 @@ export class ChatboxInteractor {
       } catch (error) {
         // No changes detected for N seconds - assume response is complete
         const elapsed = Date.now() - startTime;
-        logger.warning(`Timeout after ${elapsed}ms, response considered complete`);
+        logger.warn(`Timeout after ${elapsed}ms, response considered complete`);
 
         const finalText = await this.page.evaluate(() => window.__lumoLastText || '');
 
