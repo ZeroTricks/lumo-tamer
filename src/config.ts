@@ -27,6 +27,7 @@ export const browserConfig: BrowserConfig = {
   cdpEndpoint: getRequiredEnv('CDP_ENDPOINT'),
   enableWebSearch: getBooleanEnv('ENABLE_WEBSEARCH'),
   showSources: getBooleanEnv('SHOW_SOURCES'),
+  behaviour: getRequiredEnv('BEHAVIOUR'),
 };
 
 export const chatboxSelectors: ChatboxSelectors = {
