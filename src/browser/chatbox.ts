@@ -106,51 +106,15 @@ export class ChatboxInteractor {
   }
 
   /**
-   * Streams the chatbot's response as it's being generated in the browser DOM.
-   *
-   * HOW IT WORKS:
-   * 1. Injects a MutationObserver into the browser to watch the last message container
-   * 2. The observer tracks two things:
-   *    - Text changes (new content being added to the response)
-   *    - Completion indicator (e.g., a thumb-up icon that signals response is done)
-   * 3. When either event occurs, the observer sets a flag (__lumoTextChanged) to notify us
-   * 4. We use waitForFunction with a timeout to wait for these notifications
-   * 5. When notified, we send any new text delta to the callback
-   * 6. We exit when: completion indicator appears OR text stops changing for N seconds
-   *
-   * NORMAL EVENT FLOW:
-   * - Setup phase: Inject observer into browser, start monitoring
-   * - Streaming phase (repeats): Wait for change → Get new text → Send delta → Check completion
-   * - Completion phase: Cleanup observer and return full text
-   *
-   * COMPLETION CONDITIONS (whichever happens first):
-   * - Completion indicator detected (immediate exit)
-   * - No text changes for 2s (after some text received)
-   * - No text changes for 20s (if no text received yet - indicates error/empty response)
-   * - Overall timeout reached (default 60s)
-   *
-   * @param onDelta - Callback invoked with each new chunk of text as it arrives
-   * @param timeoutMs - Maximum time to wait for the entire response (default 60s)
-   * @returns The complete response text
+   * Injects a MutationObserver into the browser to monitor the last message container.
+   * The observer tracks text changes and completion indicators.
    */
-  async streamResponse(
-    onDelta?: (delta: string) => void | Promise<void>,
-    timeoutMs: number = 60000
-  ): Promise<string> {
-    const startTime = Date.now();
-    let previousText = '';
-    const noChangeTimeoutWithText = responseTimeouts.withText; // Complete after N ms of no changes when we have text
-    const noChangeTimeoutEmpty = responseTimeouts.empty; // Wait longer when no text received yet
-
-    // Set up MutationObserver in the browser to watch the LAST .assistant-msg-container
+  private async setupResponseObserver(): Promise<void> {
     const selector = chatboxSelectors.messages;
     const contentElements = this.contentElements;
 
     logger.debug(`Injecting MutationObserver on '${selector} ...'`);
 
-    // ========== BROWSER SETUP PHASE ==========
-    // Inject a MutationObserver into the browser context that will monitor the DOM
-    // for changes and set flags when text changes or completion indicator appears
     await this.page.evaluate(
       ({ sel, cont, indicatorSel }: { sel: string; cont: string; indicatorSel?: string }) => {
         console.log('[Lumo Browser] Setting up observer for selector:', sel, 'content:', cont, 'indicator:', indicatorSel);
@@ -234,82 +198,152 @@ export class ChatboxInteractor {
       },
       { sel: selector, cont: contentElements, indicatorSel: chatboxSelectors.completionIndicator }
     );
+  }
 
-    // ========== STREAMING LOOP ==========
-    // Repeatedly wait for changes, send deltas, and check for completion
+  /**
+   * Waits for text changes in the browser, with adaptive timeout based on whether text has been received.
+   * @param previousText - The text received so far
+   * @param noChangeTimeoutWithText - Timeout when text has been received
+   * @param noChangeTimeoutEmpty - Timeout when no text received yet
+   * @returns The current text and completion status, or null if timeout
+   */
+  private async waitForTextChange(
+    previousText: string,
+    noChangeTimeoutWithText: number,
+    noChangeTimeoutEmpty: number
+  ): Promise<{ text: string; completed: boolean } | null> {
+    logger.debug(`Waiting for text changes... (prevText length: ${previousText.length})`);
+
+    // Adaptive timeout: wait longer if we haven't received any text yet (empty response scenario)
+    const currentTimeout = previousText.length === 0 ? noChangeTimeoutEmpty : noChangeTimeoutWithText;
+
+    const waitStart = Date.now();
+
+    try {
+      // Custom timeout promise (because Playwright's built-in timeout doesn't work reliably)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Custom timeout')), currentTimeout);
+      });
+
+      // Wait for __lumoTextChanged flag to become true OR timeout
+      // The flag is set by the browser-side observer when text or completion indicator changes
+      await Promise.race([
+        this.page.waitForFunction(
+          (prevText: string) => {
+            const win = window as any;
+            return win.__lumoTextChanged && win.__lumoLastText !== prevText;
+          },
+          { timeout: 300000 }, // Very long timeout - we control actual timeout with Promise.race
+          previousText
+        ),
+        timeoutPromise
+      ]);
+
+      const waitDuration = Date.now() - waitStart;
+
+      // Fetch the current state from the browser
+      const { text: currentText, completed } = await this.page.evaluate(() => {
+        console.log('[Lumo Browser] Text change detected, resetting flag');
+        const text = window.__lumoLastText || '';
+        const completed = window.__lumoCompleted || false;
+        window.__lumoTextChanged = false;  // Reset so we wait for next change
+        return { text, completed };
+      });
+
+      logger.debug(`Delta (${waitDuration}ms, ${previousText.length}→${currentText.length}${completed ? ', complete' : ''}): ${currentText.slice(previousText.length)}`);
+
+      return { text: currentText, completed };
+    } catch (error) {
+      // Timeout occurred
+      return null;
+    }
+  }
+
+  /**
+   * Processes a text delta by invoking the callback if provided.
+   */
+  private async processDelta(delta: string, onDelta?: (delta: string) => void | Promise<void>): Promise<void> {
+    if (delta.length > 0 && onDelta) {
+      await onDelta(delta);
+    }
+  }
+
+  /**
+   * Streams the chatbot's response as it's being generated in the browser DOM.
+   *
+   * HOW IT WORKS:
+   * 1. Injects a MutationObserver into the browser to watch the last message container
+   * 2. The observer tracks two things:
+   *    - Text changes (new content being added to the response)
+   *    - Completion indicator (e.g., a thumb-up icon that signals response is done)
+   * 3. When either event occurs, the observer sets a flag (__lumoTextChanged) to notify us
+   * 4. We use waitForFunction with a timeout to wait for these notifications
+   * 5. When notified, we send any new text delta to the callback
+   * 6. We exit when: completion indicator appears OR text stops changing for N seconds
+   *
+   * NORMAL EVENT FLOW:
+   * - Setup phase: Inject observer into browser, start monitoring
+   * - Streaming phase (repeats): Wait for change → Get new text → Send delta → Check completion
+   * - Completion phase: Cleanup observer and return full text
+   *
+   * COMPLETION CONDITIONS (whichever happens first):
+   * - Completion indicator detected (immediate exit)
+   * - No text changes for 2s (after some text received)
+   * - No text changes for 20s (if no text received yet - indicates error/empty response)
+   * - Overall timeout reached (default 60s)
+   *
+   * @param onDelta - Callback invoked with each new chunk of text as it arrives
+   * @param timeoutMs - Maximum time to wait for the entire response (default 60s)
+   * @returns The complete response text
+   */
+  async streamResponse(
+    onDelta?: (delta: string) => void | Promise<void>,
+    timeoutMs: number = 60000
+  ): Promise<string> {
+    const startTime = Date.now();
+    let previousText = '';
+    const noChangeTimeoutWithText = responseTimeouts.withText;
+    const noChangeTimeoutEmpty = responseTimeouts.empty;
+
+    // Setup phase: Inject observer into browser
+    await this.setupResponseObserver();
+
+    // Streaming loop: Repeatedly wait for changes, send deltas, and check for completion
     while (Date.now() - startTime < timeoutMs) {
-      try {
-        logger.debug(`Waiting for text changes... (prevText length: ${previousText.length})`);
+      const result = await this.waitForTextChange(
+        previousText,
+        noChangeTimeoutWithText,
+        noChangeTimeoutEmpty
+      );
 
-        // Adaptive timeout: wait longer if we haven't received any text yet (empty response scenario)
-        const currentTimeout = previousText.length === 0 ? noChangeTimeoutEmpty : noChangeTimeoutWithText;
-        // logger.debug(`Using timeout: ${currentTimeout}ms`);
-
-        const waitStart = Date.now();
-
-        // Custom timeout promise (because Playwright's built-in timeout doesn't work reliably)
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Custom timeout')), currentTimeout);
-        });
-
-        // Wait for __lumoTextChanged flag to become true OR timeout
-        // The flag is set by the browser-side observer when text or completion indicator changes
-        await Promise.race([
-          this.page.waitForFunction(
-            (prevText: string) => {
-              const win = window as any;
-              return win.__lumoTextChanged && win.__lumoLastText !== prevText;
-            },
-            { timeout: 300000 }, // Very long timeout - we control actual timeout with Promise.race
-            previousText
-          ),
-          timeoutPromise
-        ]);
-
-        const waitDuration = Date.now() - waitStart;
-        // Fetch the current state from the browser
-        const { text: currentText, completed } = await this.page.evaluate(() => {
-          console.log('[Lumo Browser] Text change detected, resetting flag');
-          const text = window.__lumoLastText || '';
-          const completed = window.__lumoCompleted || false;
-          window.__lumoTextChanged = false;  // Reset so we wait for next change
-          return { text, completed };
-        });
-
-
-        // Calculate the delta (only the new text since last iteration)
-        const delta = currentText.slice(previousText.length);
-
-        logger.debug(`Delta (${waitDuration}ms, ${previousText.length}→${currentText.length}${completed ? ', complete' : ''}): ${delta}`);
-
-        if (delta.length > 0 && onDelta) {
-          await onDelta(delta);  // Send new text chunk to callback
-        }
-
-        previousText = currentText;
-
-        // If the completion indicator was detected (e.g., thumb-up icon), exit immediately
-        if (completed) {
-          logger.debug('Completion indicator detected, response complete');
-          logger.info(`[Assistant] ${currentText}`);
-          await this.cleanupObserver();
-          return currentText;
-        }
-
-      } catch (error) {
-        // No changes detected for N seconds - assume response is complete
+      // Timeout occurred - response is complete
+      if (result === null) {
         const elapsed = Date.now() - startTime;
         logger.warn(`Timeout after ${elapsed}ms, response considered complete`);
 
         const finalText = await this.page.evaluate(() => window.__lumoLastText || '');
-
         logger.info(`[Assistant] ${finalText}`);
         await this.cleanupObserver();
         return finalText || previousText;
       }
+
+      const { text: currentText, completed } = result;
+
+      // Process the delta
+      const delta = currentText.slice(previousText.length);
+      await this.processDelta(delta, onDelta);
+      previousText = currentText;
+
+      // Check for completion
+      if (completed) {
+        logger.debug('Completion indicator detected, response complete');
+        logger.info(`[Assistant] ${currentText}`);
+        await this.cleanupObserver();
+        return currentText;
+      }
     }
 
-    // Clean up observer on timeout
+    // Overall timeout reached
     await this.cleanupObserver();
     throw new Error('Response timeout');
   }
