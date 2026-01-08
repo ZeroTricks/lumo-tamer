@@ -1,5 +1,5 @@
 import { chromium, BrowserContext, Page } from 'playwright';
-import { browserConfig } from '../config.js';
+import { browserConfig, chatboxSelectors } from '../config.js';
 import {promises as dns} from 'dns';
 import { logger } from '../logger.js';
 
@@ -49,6 +49,17 @@ export class BrowserManager {
     await this.page.goto(browserConfig.url);
 
     logger.info(`Navigated to: ${browserConfig.url}`);
+
+    // Enable web search if configured
+    if (browserConfig.enableWebSearch) {
+      try {
+        logger.debug(`Clicking web search button: ${chatboxSelectors.webSearch}`);
+        await this.page.click(chatboxSelectors.webSearch);
+        logger.info('Web search enabled');
+      } catch (error) {
+        logger.warn(`Failed to click web search button: ${error}`);
+      }
+    }
   }
 
   async getPage(): Promise<Page> {

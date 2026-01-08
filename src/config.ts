@@ -20,12 +20,14 @@ export const serverConfig = {
 export const browserConfig: BrowserConfig = {
   url: getRequiredEnv('CHATBOX_URL'),
   cdpEndpoint: getRequiredEnv('CDP_ENDPOINT'),
+  enableWebSearch: process.env.ENABLE_WEBSEARCH === 'true' || process.env.ENABLE_WEBSEARCH === '1',
 };
 
 export const chatboxSelectors: ChatboxSelectors = {
   input: getRequiredEnv('SELECTOR_INPUT'),
   messages: getRequiredEnv('SELECTOR_MESSAGES'),
   completionIndicator: getRequiredEnv('SELECTOR_COMPLETION_INDICATOR'),
+  webSearch: getRequiredEnv('SELECTOR_WEBSEARCH'),
 };
 
 export const responseTimeouts = {
