@@ -49,8 +49,8 @@ export class ChatboxInteractor {
     logger.debug(`sendMessage: Current message count: ${messagesBefore}`);
 
     // Click send button
-    logger.debug('sendMessage: Clicking send button...');
-    await this.page.click(chatboxSelectors.sendButton);
+    logger.debug('sendMessage: Sending message...');
+    await inputElement.press('Enter');
 
     // Wait a moment for UI to update
     await new Promise(resolve => setTimeout(resolve, 100));

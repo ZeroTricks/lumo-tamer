@@ -127,7 +127,6 @@ export interface BrowserConfig {
 
 export interface ChatboxSelectors {
   input: string;
-  sendButton: string;
   messages: string;
   completionIndicator?: string;
 }
