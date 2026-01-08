@@ -3,6 +3,7 @@ import { chatboxSelectors, responseTimeouts, browserConfig } from '../config.js'
 import { logger } from '../logger.js';
 import { processSources, formatSources } from './sources.js';
 import { setBehaviour } from './behaviour.js';
+import { startNewChat, startPrivateChat } from './actions.js';
 
 // Extend Window interface for custom properties
 declare global {
@@ -23,24 +24,6 @@ export class ChatboxInteractor {
   constructor(private page: Page) { }
 
   /**
-   * Checks if a message is a command (starts with '/').
-   * @param message - The message to check
-   * @returns true if the message is a command, false otherwise
-   */
-  static isCommand(message: string): boolean {
-    return message.startsWith('/');
-  }
-
-  /**
-   * Extracts the command name from a command message.
-   * @param message - The command message (e.g., '/behave')
-   * @returns The command name without the leading '/' (e.g., 'behave')
-   */
-  static getCommandName(message: string): string {
-    return message.slice(1).trim();
-  }
-
-  /**
    * Executes a command and returns a response message.
    * @param command - The command message (with or without leading '/')
    * @returns A response message describing the result
@@ -57,8 +40,17 @@ export class ChatboxInteractor {
 
     switch (lowerCommand) {
       case 'behave':
+      case 'defaultbehaviour':
         await setBehaviour(this.page, browserConfig.behaviour);
         return 'Behaviour settings have been updated successfully.';
+      case 'new':
+      case 'clear':
+      case 'reset':
+        await startNewChat(this.page);
+        return 'New chat started.';
+      case 'private':
+        await startPrivateChat(this.page);
+        return 'Shhhhh';
       default:
         logger.warn(`Unknown command: /${commandName}`);
         throw new Error(`Unknown command: /${commandName}`);
@@ -80,7 +72,7 @@ export class ChatboxInteractor {
     timeoutMs: number = 60000
   ): Promise<string> {
     // Check if this is a command
-    if (ChatboxInteractor.isCommand(message)) {
+    if (message.startsWith('/')) {
       // Execute command and get response
       const commandResponse = await this.executeCommand(message);
 

@@ -16,14 +16,14 @@ export async function setBehaviour(page: Page, behaviourText: string): Promise<v
 
   // Step 2: Wait for and click the personalization tab (sliders icon)
   logger.debug('Waiting for personalization tab...');
-  await page.waitForSelector('use[*|href="#ic-sliders"]', { timeout: 10000 });
+  await page.waitForSelector('use[*|href="#ic-sliders"]', { timeout: 1000 });
   logger.debug('Clicking personalization tab...');
   await page.click('use[*|href="#ic-sliders"]');
 
   // Step 3: Wait for the behaviour textarea and enter text
   logger.debug('Waiting for behaviour textarea...');
   const behaviourSelector = '.personalization-field:nth-child(4) textarea:nth-child(1)';
-  await page.waitForSelector(behaviourSelector, { timeout: 10000 });
+  await page.waitForSelector(behaviourSelector, { timeout: 1000 });
   logger.debug(`Entering behaviour text: ${behaviourText}`);
   await page.fill(behaviourSelector, behaviourText);
 
