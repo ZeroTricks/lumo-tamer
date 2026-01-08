@@ -1,7 +1,8 @@
 import { Page } from 'playwright';
-import { chatboxSelectors, responseTimeouts } from '../config.js';
+import { chatboxSelectors, responseTimeouts, browserConfig } from '../config.js';
 import { logger } from '../logger.js';
 import { processSources, formatSources } from './sources.js';
+import { setBehaviour } from './behaviour.js';
 
 // Extend Window interface for custom properties
 declare global {
@@ -20,6 +21,81 @@ export class ChatboxInteractor {
   private contentElements = 'p';
 
   constructor(private page: Page) { }
+
+  /**
+   * Checks if a message is a command (starts with '/').
+   * @param message - The message to check
+   * @returns true if the message is a command, false otherwise
+   */
+  static isCommand(message: string): boolean {
+    return message.startsWith('/');
+  }
+
+  /**
+   * Extracts the command name from a command message.
+   * @param message - The command message (e.g., '/behave')
+   * @returns The command name without the leading '/' (e.g., 'behave')
+   */
+  static getCommandName(message: string): string {
+    return message.slice(1).trim();
+  }
+
+  /**
+   * Executes a command and returns a response message.
+   * @param command - The command message (with or without leading '/')
+   * @returns A response message describing the result
+   */
+  async executeCommand(command: string): Promise<string> {
+    // Strip leading '/' if present
+    const commandName = command.startsWith('/')
+      ? command.slice(1).trim()
+      : command.trim();
+
+    const lowerCommand = commandName.toLowerCase();
+
+    logger.info(`Executing command: /${lowerCommand}`);
+
+    switch (lowerCommand) {
+      case 'behave':
+        await setBehaviour(this.page, browserConfig.behaviour);
+        return 'Behaviour settings have been updated successfully.';
+      default:
+        logger.warn(`Unknown command: /${commandName}`);
+        throw new Error(`Unknown command: /${commandName}`);
+    }
+  }
+
+  /**
+   * Gets a response for a message, handling both commands and regular messages.
+   * Supports both streaming (with callback) and non-streaming (without callback) modes.
+   *
+   * @param message - The message or command to process
+   * @param onDelta - Optional callback for streaming deltas as they arrive
+   * @param timeoutMs - Maximum time to wait for response (default 60s)
+   * @returns The complete response text
+   */
+  async getResponse(
+    message: string,
+    onDelta?: (delta: string) => void | Promise<void>,
+    timeoutMs: number = 60000
+  ): Promise<string> {
+    // Check if this is a command
+    if (ChatboxInteractor.isCommand(message)) {
+      // Execute command and get response
+      const commandResponse = await this.executeCommand(message);
+
+      // If streaming callback provided, send the response through it
+      if (onDelta) {
+        await onDelta(commandResponse);
+      }
+
+      return commandResponse;
+    } else {
+      // Regular message - send and stream/wait for response
+      await this.sendMessage(message);
+      return await this.streamResponse(onDelta, timeoutMs);
+    }
+  }
 
   private async cleanupObserver(): Promise<void> {
     await this.page.evaluate(() => {
