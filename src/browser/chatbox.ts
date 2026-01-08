@@ -1,5 +1,6 @@
 import { Page } from 'playwright';
 import { chatboxSelectors, responseTimeouts } from '../config.js';
+import { logger } from '../logger.js';
 
 // Extend Window interface for custom properties
 declare global {
@@ -15,14 +16,29 @@ declare global {
 export class ChatboxInteractor {
   private contentElements = 'p';
 
-  constructor(private page: Page) {}
+  constructor(private page: Page) { }
+
+  private async cleanupObserver(): Promise<void> {
+    await this.page.evaluate(() => {
+      console.log('[Lumo Browser] Cleaning up observer');
+      if (window.__lumoObserver) {
+        window.__lumoObserver.disconnect();
+        delete window.__lumoObserver;
+        delete window.__lumoLastText;
+        delete window.__lumoTextChanged;
+        delete window.__lumoCompleted;
+      }
+    });
+  }
 
   async sendMessage(message: string): Promise<void> {
-    console.log('[Lumo] sendMessage: Waiting for input field...');
+    logger.info(`[User] ${message}`);
+
+    logger.debug('sendMessage: Waiting for input field...');
     // Wait for input to be available
     await this.page.waitForSelector(chatboxSelectors.input, { timeout: 10000 });
 
-    console.log('[Lumo] sendMessage: Filling message...');
+    logger.debug('sendMessage: Filling message...');
     // Clear existing text and type new message
     const inputElement = this.page.locator(chatboxSelectors.input);
     await inputElement.clear();
@@ -30,10 +46,10 @@ export class ChatboxInteractor {
 
     // Get the last message count before sending
     const messagesBefore = await this.page.locator(chatboxSelectors.messages).count();
-    console.log(`[Lumo] sendMessage: Current message count: ${messagesBefore}`);
+    logger.debug(`sendMessage: Current message count: ${messagesBefore}`);
 
     // Click send button
-    console.log('[Lumo] sendMessage: Clicking send button...');
+    logger.debug('sendMessage: Clicking send button...');
     await this.page.click(chatboxSelectors.sendButton);
 
     // Wait a moment for UI to update
@@ -41,23 +57,23 @@ export class ChatboxInteractor {
 
     // Check count immediately after clicking
     const messagesAfterClick = await this.page.locator(chatboxSelectors.messages).count();
-    console.log(`[Lumo] sendMessage: Message count after click: ${messagesAfterClick}`);
+    logger.debug(`sendMessage: Message count after click: ${messagesAfterClick}`);
 
     // Wait for new assistant message container to appear (appears immediately with loading animation)
-    console.log('[Lumo] sendMessage: Waiting for new assistant container...');
+    logger.debug('sendMessage: Waiting for new assistant container...');
 
     if (messagesBefore === 0) {
       // First message - just wait for first container to appear
-      console.log('[Lumo] sendMessage: First message - waiting for first container...');
+      logger.debug('sendMessage: First message - waiting for first container...');
       await this.page.waitForSelector(chatboxSelectors.messages, { timeout: 20000 });
-      console.log('[Lumo] sendMessage: First container appeared');
+      logger.debug('sendMessage: First container appeared');
     } else {
       // Subsequent messages - wait for count to increase
-      console.log('[Lumo] sendMessage: Waiting for count to increase from', messagesBefore);
+      logger.debug(`sendMessage: Waiting for count to increase from ${messagesBefore}`);
 
       // Check if count already increased
       if (messagesAfterClick > messagesBefore) {
-        console.log('[Lumo] sendMessage: Container count already increased to', messagesAfterClick);
+        logger.debug(`sendMessage: Container count already increased to' ${messagesAfterClick}`);
       } else {
         // If not, wait for it to increase
         try {
@@ -75,9 +91,10 @@ export class ChatboxInteractor {
             { timeout: 20000, polling: 100 },
             { selector: chatboxSelectors.messages, expectedCount: messagesBefore }
           );
-          console.log('[Lumo] sendMessage: Container count increased');
+          logger.debug('sendMessage: Container count increased');
         } catch (error) {
-          console.error('[Lumo] sendMessage: Timeout waiting for container count increase:', error);
+          logger.error(`sendMessage: Timeout waiting for container count increase:`);
+          logger.error(error);
           throw error;
         }
       }
@@ -120,7 +137,6 @@ export class ChatboxInteractor {
     onDelta?: (delta: string) => void | Promise<void>,
     timeoutMs: number = 60000
   ): Promise<string> {
-    console.log('[Lumo] streamResponse called, setting up MutationObserver');
     const startTime = Date.now();
     let previousText = '';
     const noChangeTimeoutWithText = responseTimeouts.withText; // Complete after N ms of no changes when we have text
@@ -130,7 +146,7 @@ export class ChatboxInteractor {
     const selector = chatboxSelectors.messages;
     const contentElements = this.contentElements;
 
-    console.log('[Lumo] About to inject MutationObserver with selector:', selector, 'contentElements:', contentElements);
+    logger.debug(`Injecting MutationObserver on '${selector} ...'`);
 
     // ========== BROWSER SETUP PHASE ==========
     // Inject a MutationObserver into the browser context that will monitor the DOM
@@ -218,17 +234,16 @@ export class ChatboxInteractor {
       },
       { sel: selector, cont: contentElements, indicatorSel: chatboxSelectors.completionIndicator }
     );
-    console.log('[Lumo] MutationObserver injection completed');
 
     // ========== STREAMING LOOP ==========
     // Repeatedly wait for changes, send deltas, and check for completion
     while (Date.now() - startTime < timeoutMs) {
       try {
-        console.log(`[Lumo] Waiting for text changes... (prevText length: ${previousText.length})`);
+        logger.debug(`Waiting for text changes... (prevText length: ${previousText.length})`);
 
         // Adaptive timeout: wait longer if we haven't received any text yet (empty response scenario)
         const currentTimeout = previousText.length === 0 ? noChangeTimeoutEmpty : noChangeTimeoutWithText;
-        console.log(`[Lumo] Using timeout: ${currentTimeout}ms`);
+        // logger.debug(`Using timeout: ${currentTimeout}ms`);
 
         const waitStart = Date.now();
 
@@ -252,8 +267,6 @@ export class ChatboxInteractor {
         ]);
 
         const waitDuration = Date.now() - waitStart;
-        console.log(`[Lumo] waitForFunction returned after ${waitDuration}ms`);
-
         // Fetch the current state from the browser
         const { text: currentText, completed } = await this.page.evaluate(() => {
           console.log('[Lumo Browser] Text change detected, resetting flag');
@@ -263,76 +276,42 @@ export class ChatboxInteractor {
           return { text, completed };
         });
 
-        console.log(`[Lumo] Received text update: ${currentText.length} chars (was ${previousText.length}), completed: ${completed}`);
 
         // Calculate the delta (only the new text since last iteration)
         const delta = currentText.slice(previousText.length);
+
+        logger.debug(`Delta (${waitDuration}ms, ${previousText.length}→${currentText.length}${completed ? ', complete' : ''}): ${delta}`);
+
         if (delta.length > 0 && onDelta) {
-          console.log(`[Lumo] Sending delta: ${delta.length} chars`);
           await onDelta(delta);  // Send new text chunk to callback
         }
 
         previousText = currentText;
 
-        // ========== COMPLETION CHECK ==========
         // If the completion indicator was detected (e.g., thumb-up icon), exit immediately
         if (completed) {
-          console.log('[Lumo] Completion indicator detected by observer, response complete');
-          // Clean up observer
-          await this.page.evaluate(() => {
-            console.log('[Lumo Browser] Cleaning up observer');
-            if (window.__lumoObserver) {
-              window.__lumoObserver.disconnect();
-              delete window.__lumoObserver;
-              delete window.__lumoLastText;
-              delete window.__lumoTextChanged;
-              delete window.__lumoCompleted;
-            }
-          });
+          logger.debug('Completion indicator detected, response complete');
+          logger.info(`[Assistant] ${currentText}`);
+          await this.cleanupObserver();
           return currentText;
         }
 
       } catch (error) {
-        // ========== TIMEOUT COMPLETION ==========
         // No changes detected for N seconds - assume response is complete
         const elapsed = Date.now() - startTime;
-        console.log(`[Lumo] Timeout after ${elapsed}ms, response complete`);
+        logger.warning(`Timeout after ${elapsed}ms, response considered complete`);
+
         const finalText = await this.page.evaluate(() => window.__lumoLastText || '');
 
-        // Clean up observer
-        await this.page.evaluate(() => {
-          console.log('[Lumo Browser] Cleaning up observer');
-          if (window.__lumoObserver) {
-            window.__lumoObserver.disconnect();
-            delete window.__lumoObserver;
-            delete window.__lumoLastText;
-            delete window.__lumoTextChanged;
-            delete window.__lumoCompleted;
-          }
-        });
-
+        logger.info(`[Assistant] ${finalText}`);
+        await this.cleanupObserver();
         return finalText || previousText;
       }
     }
 
     // Clean up observer on timeout
-    await this.page.evaluate(() => {
-      if (window.__lumoObserver) {
-        window.__lumoObserver.disconnect();
-        delete window.__lumoObserver;
-        delete window.__lumoLastText;
-        delete window.__lumoTextChanged;
-      }
-    });
-
+    await this.cleanupObserver();
     throw new Error('Response timeout');
   }
 
-  async getPageTitle(): Promise<string> {
-    return await this.page.title();
-  }
-
-  async getPageUrl(): Promise<string> {
-    return this.page.url();
-  }
 }

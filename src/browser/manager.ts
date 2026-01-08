@@ -1,6 +1,7 @@
 import { chromium, BrowserContext, Page } from 'playwright';
 import { browserConfig } from '../config.js';
 import {promises as dns} from 'dns';
+import { logger } from '../logger.js';
 
 const host = new URL(browserConfig.cdpEndpoint).hostname;
 
@@ -16,8 +17,8 @@ export class BrowserManager {
   private page: Page | null = null;
 
   async initialize(): Promise<void> {
-    console.log('Initializing browser...');
-    console.log(`Connecting to remote browser at ${browserConfig.cdpEndpoint}: ${ipEndPoint}`);
+    logger.debug('Initializing browser...');
+    logger.debug(`Connecting to remote browser at ${browserConfig.cdpEndpoint} (${ipEndPoint}) ...`);
 
     const browser = await chromium.connectOverCDP(ipEndPoint);
 
@@ -28,7 +29,7 @@ export class BrowserManager {
       userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     });
 
-    console.log(`Connected to remote browser (CDP: ${browserConfig.cdpEndpoint})`);
+    logger.info(`Connected to remote browser at ${browserConfig.cdpEndpoint} (${ipEndPoint})`);
 
     // Get or create page
     this.page = this.context.pages()[0] || await this.context.newPage();
@@ -42,12 +43,12 @@ export class BrowserManager {
     this.page.on('console', (msg: any) => {
       const type = msg.type();
       const text = msg.text();
-      console.log(`[Browser ${type}]`, text);
+      logger.debug(`[Browser ${type}] ${text}`);
     });
 
     await this.page.goto(browserConfig.url);
 
-    console.log(`Navigated to: ${browserConfig.url}`);
+    logger.info(`Navigated to: ${browserConfig.url}`);
   }
 
   async getPage(): Promise<Page> {
@@ -59,6 +60,6 @@ export class BrowserManager {
 
   async close(): Promise<void> {
     await this.context?.close();
-    console.log('Browser closed (session automatically persisted)');
+    logger.info('Browser closed (session automatically persisted)');
   }
 }

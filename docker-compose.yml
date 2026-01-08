@@ -63,7 +63,7 @@ services:
       - ./browser-data:/config
     ports:
       # - "9223:9223"  # CDP endpoint (forwarded via socat)
-      - "3001:3001"  # noVNC web interface (access browser GUI)
+      - "3002:3001"  # noVNC web interface (access browser GUI)
     shm_size: 2gb
     restart: unless-stopped
     security_opt:

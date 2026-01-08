@@ -5,6 +5,7 @@ import { RequestQueue } from '../queue/manager.js';
 import { serverConfig } from '../config.js';
 import { OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse, OpenAIResponseRequest, OpenAIResponse, ResponseStreamEvent } from '../types.js';
 import { randomUUID } from 'crypto';
+import { logger } from '../logger.js';
 
 export class APIServer {
   private app: express.Application;
@@ -40,7 +41,7 @@ export class APIServer {
 
     // Logging
     this.app.use((req: Request, res: Response, next: NextFunction) => {
-      console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
+      logger.debug(`${req.method} ${req.path}`);
       next();
     });
   }
@@ -97,13 +98,11 @@ export class APIServer {
 
             try {
               // Send message
-              console.log('[Server] Sending message to chatbox...');
               await chatbox.sendMessage(lastUserMessage.content);
-              console.log('[Server] Message sent, starting stream...');
 
               // Stream response with callback for each delta
               await chatbox.streamResponse((delta) => {
-                console.log('[Server] Delta callback received:', delta.length, 'chars');
+                logger.debug(`[Server] Sending delta (${delta.length} chars)`);
                 const chunk: OpenAIStreamChunk = {
                   id,
                   object: 'chat.completion.chunk',
@@ -119,7 +118,7 @@ export class APIServer {
                 };
                 res.write(`data: ${JSON.stringify(chunk)}\n\n`);
               });
-              console.log('[Server] Stream completed');
+              logger.debug('[Server] Stream completed');
 
               // Send final chunk
               const finalChunk: OpenAIStreamChunk = {
@@ -177,7 +176,8 @@ export class APIServer {
           res.json(response);
         }
       } catch (error) {
-        console.error('Error processing chat completion:', error);
+        logger.error('Error processing chat completion:')
+        logger.error(error);
         res.status(500).json({ error: String(error) });
       }
     });
@@ -224,10 +224,7 @@ export class APIServer {
             };
 
             try {
-              // Send message first
-              console.log('[Server] Sending message to chatbox...');
               await chatbox.sendMessage(inputText);
-              console.log('[Server] Message sent, starting stream...');
 
               // Event 1: response.created
               emitEvent({
@@ -283,7 +280,7 @@ export class APIServer {
 
               // Stream response with callback for each delta
               await chatbox.streamResponse((delta) => {
-                console.log('[Server] Delta callback received:', delta.length, 'chars');
+                logger.debug(`[Server] Sending delta ( ${delta.length} chars)`);
                 accumulatedText += delta;
 
                 // Event 5+: response.output_text.delta (multiple)
@@ -296,7 +293,7 @@ export class APIServer {
                   sequence_number: sequenceNumber++,
                 });
               });
-              console.log('[Server] Stream completed');
+              logger.debug('[Server] Stream completed');
 
               // Event N-4: response.output_text.done
               emitEvent({
@@ -438,7 +435,8 @@ export class APIServer {
           res.json(response);
         }
       } catch (error) {
-        console.error('Error processing response:', error);
+        logger.error('Error processing response:')
+        logger.error(error);
         res.status(500).json({ error: String(error) });
       }
     });
@@ -455,8 +453,11 @@ export class APIServer {
   async start(): Promise<void> {
     return new Promise((resolve) => {
       this.app.listen(serverConfig.port, () => {
-        console.log(`API server running on http://localhost:${serverConfig.port}`);
-        console.log(`OpenAI-compatible endpoint: http://localhost:${serverConfig.port}/v1/chat/completions`);
+        logger.info('========================================');
+        logger.info('✓ Lumo Bridge is ready!');
+        logger.info(`  base_url: http://localhost:${serverConfig.port}/v1`);
+        logger.info(`  api_key:  ${serverConfig.apiKey.substring(0,3)}...`);
+        logger.info('========================================\n');
         resolve();
       });
     });
