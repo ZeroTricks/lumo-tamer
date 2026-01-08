@@ -85,43 +85,7 @@ export class ChatboxInteractor {
   }
 
   async waitForResponse(timeoutMs: number = 60000): Promise<string> {
-    const startTime = Date.now();
-    let previousText = '';
-    let stableCount = 0;
-    const stabilityThreshold = 3; // Number of checks with same text to consider complete
-
-    while (Date.now() - startTime < timeoutMs) {
-      try {
-        // Get all message elements and take the last one
-        const messages = this.page.locator(chatboxSelectors.messages);
-        const count = await messages.count();
-        if (count === 0) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          continue;
-        }
-        const lastMessage = messages.nth(count - 1);
-        const currentText = await lastMessage.innerText({ timeout: 1000 });
-
-        // Check if text has stabilized (stopped changing)
-        if (currentText === previousText && currentText.length > 0) {
-          stableCount++;
-          if (stableCount >= stabilityThreshold) {
-            return currentText;
-          }
-        } else {
-          stableCount = 0;
-          previousText = currentText;
-        }
-
-        // Small delay between checks
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } catch (error) {
-        // Element might not be ready yet, continue waiting
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-    }
-
-    throw new Error('Response timeout');
+    return await this.streamResponse(undefined, timeoutMs);
   }
 
   /**
@@ -187,16 +151,20 @@ export class ChatboxInteractor {
         win.__lumoTextChanged = false;     // Flag: set to true when text or completion changes
         win.__lumoCompleted = false;       // Flag: set to true when completion indicator appears
 
+        // Lock onto the last container at setup time to avoid switching containers mid-stream
+        const containers = document.querySelectorAll(sel);
+        console.log('[Lumo Browser] Setup: Found', containers.length, 'containers');
+        if (containers.length === 0) {
+          console.error('[Lumo Browser] No containers found at setup!');
+          return;
+        }
+        const targetContainer = containers[containers.length - 1];
+        console.log('[Lumo Browser] Locked onto container:', targetContainer.tagName, targetContainer.className);
+
         // This function is called on every DOM mutation
         const updateText = () => {
-          const containers = document.querySelectorAll(sel);
-          console.log('[Lumo Browser] updateText: Found', containers.length, 'containers');
-          if (containers.length === 0) return;
-
-          // Get the last message container (the current response)
-          const lastContainer = containers[containers.length - 1];
-          const paragraphs = lastContainer.querySelectorAll(cont);
-          console.log('[Lumo Browser] updateText: Found', paragraphs.length, 'paragraphs in last container');
+          const paragraphs = targetContainer.querySelectorAll(cont);
+          console.log('[Lumo Browser] updateText: Found', paragraphs.length, 'paragraphs in target container');
 
           // Extract all text from paragraph elements
           let fullText = '';
@@ -213,11 +181,16 @@ export class ChatboxInteractor {
 
           // Check for completion indicator (e.g., thumb-up icon)
           if (indicatorSel && !win.__lumoCompleted) {
-            const indicator = lastContainer.querySelector(indicatorSel);
+            const indicator = targetContainer.querySelector(indicatorSel);
             if (indicator) {
-              console.log('[Lumo Browser] Completion indicator detected!');
-              win.__lumoCompleted = true;
-              win.__lumoTextChanged = true; // Wake up waitForFunction immediately
+              console.log('[Lumo Browser] Completion indicator detected! Waiting briefly for final text...');
+              // Wait a bit before marking as completed to allow any pending text mutations to process
+              // This prevents a race condition where the completion indicator appears before final text
+              setTimeout(() => {
+                console.log('[Lumo Browser] Marking as completed after delay');
+                win.__lumoCompleted = true;
+                win.__lumoTextChanged = true; // Wake up waitForFunction immediately
+              }, 150);
             }
           }
         };
@@ -232,24 +205,16 @@ export class ChatboxInteractor {
           updateText();
         });
 
-        // Attach observer to the last message container
-        const containers = document.querySelectorAll(sel);
-        console.log('[Lumo Browser] Found', containers.length, 'containers for observation');
-        if (containers.length > 0) {
-          const lastContainer = containers[containers.length - 1];
-          console.log('[Lumo Browser] Observing element:', lastContainer.tagName, lastContainer.className);
+        // Attach observer to the target container
+        console.log('[Lumo Browser] Attaching observer to target container');
+        observer.observe(targetContainer, {
+          childList: true,      // Watch for added/removed child nodes
+          subtree: true,        // Watch all descendants, not just direct children
+          characterData: true   // Watch for text content changes
+        });
 
-          observer.observe(lastContainer, {
-            childList: true,      // Watch for added/removed child nodes
-            subtree: true,        // Watch all descendants, not just direct children
-            characterData: true   // Watch for text content changes
-          });
-
-          win.__lumoObserver = observer;
-          console.log('[Lumo Browser] Observer setup complete');
-        } else {
-          console.error('[Lumo Browser] No containers found to observe!');
-        }
+        win.__lumoObserver = observer;
+        console.log('[Lumo Browser] Observer setup complete');
       },
       { sel: selector, cont: contentElements, indicatorSel: chatboxSelectors.completionIndicator }
     );
