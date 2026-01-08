@@ -1,15 +1,18 @@
 import { Page } from 'playwright';
 import { chatboxSelectors, responseTimeouts } from '../config.js';
 import { logger } from '../logger.js';
+import { processSources, formatSources } from './sources.js';
 
 // Extend Window interface for custom properties
 declare global {
   interface Window {
-    __lumoObserver?: MutationObserver;
-    __lumoLastText?: string;
-    __lumoTextChanged?: boolean;
-    __lumoCompleted?: boolean;
-    __lumoLastChangeTime?: number;
+    __lumoState?: {
+      observer: MutationObserver;
+      lastText: string;
+      textChanged: boolean;
+      completed: boolean;
+      targetContainer: Element;
+    };
   }
 }
 
@@ -21,12 +24,9 @@ export class ChatboxInteractor {
   private async cleanupObserver(): Promise<void> {
     await this.page.evaluate(() => {
       console.log('[Lumo Browser] Cleaning up observer');
-      if (window.__lumoObserver) {
-        window.__lumoObserver.disconnect();
-        delete window.__lumoObserver;
-        delete window.__lumoLastText;
-        delete window.__lumoTextChanged;
-        delete window.__lumoCompleted;
+      if (window.__lumoState) {
+        window.__lumoState.observer.disconnect();
+        delete window.__lumoState;
       }
     });
   }
@@ -118,18 +118,12 @@ export class ChatboxInteractor {
     await this.page.evaluate(
       ({ sel, cont, indicatorSel }: { sel: string; cont: string; indicatorSel?: string }) => {
         console.log('[Lumo Browser] Setting up observer for selector:', sel, 'content:', cont, 'indicator:', indicatorSel);
-        const win = window as any;
 
         // Clean up any existing observer from previous calls
-        if (win.__lumoObserver) {
+        if (window.__lumoState) {
           console.log('[Lumo Browser] Disconnecting existing observer');
-          win.__lumoObserver.disconnect();
+          window.__lumoState.observer.disconnect();
         }
-
-        // Initialize state flags that we'll check from Node.js
-        win.__lumoLastText = '';           // Stores the accumulated text
-        win.__lumoTextChanged = false;     // Flag: set to true when text or completion changes
-        win.__lumoCompleted = false;       // Flag: set to true when completion indicator appears
 
         // Lock onto the last container at setup time to avoid switching containers mid-stream
         const containers = document.querySelectorAll(sel);
@@ -140,6 +134,15 @@ export class ChatboxInteractor {
         }
         const targetContainer = containers[containers.length - 1];
         console.log('[Lumo Browser] Locked onto container:', targetContainer.tagName, targetContainer.className);
+
+        // Initialize state object that we'll check from Node.js
+        window.__lumoState = {
+          observer: null as any, // Will be set after creating the observer
+          lastText: '',
+          textChanged: false,
+          completed: false,
+          targetContainer: targetContainer
+        };
 
         // This function is called on every DOM mutation
         const updateText = () => {
@@ -153,14 +156,14 @@ export class ChatboxInteractor {
           });
 
           // If text changed, update state and set change flag
-          if (fullText !== win.__lumoLastText) {
+          if (fullText !== window.__lumoState!.lastText) {
             console.log('[Lumo Browser] Text changed:', fullText.length, 'chars');
-            win.__lumoLastText = fullText;
-            win.__lumoTextChanged = true;
+            window.__lumoState!.lastText = fullText;
+            window.__lumoState!.textChanged = true;
           }
 
           // Check for completion indicator (e.g., thumb-up icon)
-          if (indicatorSel && !win.__lumoCompleted) {
+          if (indicatorSel && !window.__lumoState!.completed) {
             const indicator = targetContainer.querySelector(indicatorSel);
             if (indicator) {
               console.log('[Lumo Browser] Completion indicator detected! Waiting briefly for final text...');
@@ -168,8 +171,8 @@ export class ChatboxInteractor {
               // This prevents a race condition where the completion indicator appears before final text
               setTimeout(() => {
                 console.log('[Lumo Browser] Marking as completed after delay');
-                win.__lumoCompleted = true;
-                win.__lumoTextChanged = true; // Wake up waitForFunction immediately
+                window.__lumoState!.completed = true;
+                window.__lumoState!.textChanged = true; // Wake up waitForFunction immediately
               }, 150);
             }
           }
@@ -177,7 +180,7 @@ export class ChatboxInteractor {
 
         // Run updateText once to capture initial state
         updateText();
-        console.log('[Lumo Browser] Initial text captured:', win.__lumoLastText ? win.__lumoLastText.length : 0, 'chars');
+        console.log('[Lumo Browser] Initial text captured:', window.__lumoState.lastText ? window.__lumoState.lastText.length : 0, 'chars');
 
         // Create MutationObserver that will call updateText on every DOM change
         const observer = new MutationObserver((mutations) => {
@@ -193,10 +196,14 @@ export class ChatboxInteractor {
           characterData: true   // Watch for text content changes
         });
 
-        win.__lumoObserver = observer;
+        window.__lumoState.observer = observer;
         console.log('[Lumo Browser] Observer setup complete');
       },
-      { sel: selector, cont: contentElements, indicatorSel: chatboxSelectors.completionIndicator }
+      {
+        sel: selector,
+        cont: contentElements,
+        indicatorSel: chatboxSelectors.completionIndicator
+      }
     );
   }
 
@@ -225,13 +232,12 @@ export class ChatboxInteractor {
         setTimeout(() => reject(new Error('Custom timeout')), currentTimeout);
       });
 
-      // Wait for __lumoTextChanged flag to become true OR timeout
+      // Wait for textChanged flag to become true OR timeout
       // The flag is set by the browser-side observer when text or completion indicator changes
       await Promise.race([
         this.page.waitForFunction(
           (prevText: string) => {
-            const win = window as any;
-            return win.__lumoTextChanged && win.__lumoLastText !== prevText;
+            return window.__lumoState?.textChanged && window.__lumoState.lastText !== prevText;
           },
           { timeout: 300000 }, // Very long timeout - we control actual timeout with Promise.race
           previousText
@@ -244,9 +250,11 @@ export class ChatboxInteractor {
       // Fetch the current state from the browser
       const { text: currentText, completed } = await this.page.evaluate(() => {
         console.log('[Lumo Browser] Text change detected, resetting flag');
-        const text = window.__lumoLastText || '';
-        const completed = window.__lumoCompleted || false;
-        window.__lumoTextChanged = false;  // Reset so we wait for next change
+        const text = window.__lumoState?.lastText || '';
+        const completed = window.__lumoState?.completed || false;
+        if (window.__lumoState) {
+          window.__lumoState.textChanged = false;  // Reset so we wait for next change
+        }
         return { text, completed };
       });
 
@@ -266,6 +274,26 @@ export class ChatboxInteractor {
     if (delta.length > 0 && onDelta) {
       await onDelta(delta);
     }
+  }
+
+  /**
+   * Finalizes the response by processing sources, logging, and cleaning up.
+   */
+  private async finalizeResponse(
+    currentText: string,
+    onDelta?: (delta: string) => void | Promise<void>
+  ): Promise<string> {
+    let finalText = currentText;
+    const sources = await processSources(this.page);
+    if (sources) {
+      const sourcesText = formatSources(sources);
+      finalText += sourcesText;
+      // Send sources through the streaming callback
+      await this.processDelta(sourcesText, onDelta);
+    }
+    logger.info(`[Assistant] ${finalText}`);
+    await this.cleanupObserver();
+    return finalText;
   }
 
   /**
@@ -321,10 +349,8 @@ export class ChatboxInteractor {
         const elapsed = Date.now() - startTime;
         logger.warn(`Timeout after ${elapsed}ms, response considered complete`);
 
-        const finalText = await this.page.evaluate(() => window.__lumoLastText || '');
-        logger.info(`[Assistant] ${finalText}`);
-        await this.cleanupObserver();
-        return finalText || previousText;
+        const currentText = await this.page.evaluate(() => window.__lumoState?.lastText || '');
+        return await this.finalizeResponse(currentText || previousText, onDelta);
       }
 
       const { text: currentText, completed } = result;
@@ -337,9 +363,7 @@ export class ChatboxInteractor {
       // Check for completion
       if (completed) {
         logger.debug('Completion indicator detected, response complete');
-        logger.info(`[Assistant] ${currentText}`);
-        await this.cleanupObserver();
-        return currentText;
+        return await this.finalizeResponse(currentText, onDelta);
       }
     }
 

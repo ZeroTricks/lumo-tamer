@@ -11,6 +11,11 @@ function getRequiredEnv(key: string): string {
   return value;
 }
 
+function getBooleanEnv(key: string): boolean {
+  const value = process.env[key];
+  return value === 'true' || value === '1';
+}
+
 export const serverConfig = {
   port: parseInt(getRequiredEnv('PORT'), 10),
   apiKey: getRequiredEnv('API_KEY'),
@@ -20,7 +25,8 @@ export const serverConfig = {
 export const browserConfig: BrowserConfig = {
   url: getRequiredEnv('CHATBOX_URL'),
   cdpEndpoint: getRequiredEnv('CDP_ENDPOINT'),
-  enableWebSearch: process.env.ENABLE_WEBSEARCH === 'true' || process.env.ENABLE_WEBSEARCH === '1',
+  enableWebSearch: getBooleanEnv('ENABLE_WEBSEARCH'),
+  showSources: getBooleanEnv('SHOW_SOURCES'),
 };
 
 export const chatboxSelectors: ChatboxSelectors = {
@@ -28,6 +34,7 @@ export const chatboxSelectors: ChatboxSelectors = {
   messages: getRequiredEnv('SELECTOR_MESSAGES'),
   completionIndicator: getRequiredEnv('SELECTOR_COMPLETION_INDICATOR'),
   webSearch: getRequiredEnv('SELECTOR_WEBSEARCH'),
+  sources: getRequiredEnv('SELECTOR_SOURCES'),
 };
 
 export const responseTimeouts = {
