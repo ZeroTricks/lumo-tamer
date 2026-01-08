@@ -1,0 +1,22 @@
+import { Router, Request, Response } from 'express';
+import { serverConfig } from '../../config.js';
+
+export function createModelsRouter(): Router {
+  const router = Router();
+
+  router.get('/v1/models', (req: Request, res: Response) => {
+    res.json({
+      object: 'list',
+      data: [
+        {
+          id: serverConfig.modelName,
+          object: 'model',
+          created: Date.now(),
+          owned_by: 'lumo-bridge',
+        },
+      ],
+    });
+  });
+
+  return router;
+}
