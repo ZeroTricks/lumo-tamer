@@ -124,6 +124,7 @@ export interface BrowserConfig {
   url: string;
   cdpEndpoint: string; // Chrome DevTools Protocol endpoint for remote browser
   enableWebSearch: boolean;
+  showSources: boolean;
 }
 
 export interface ChatboxSelectors {
@@ -131,4 +132,5 @@ export interface ChatboxSelectors {
   messages: string;
   completionIndicator?: string;
   webSearch: string;
+  sources: string;
 }
