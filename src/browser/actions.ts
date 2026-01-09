@@ -7,13 +7,9 @@ import { logger } from '../logger.js';
  */
 export async function startNewChat(page: Page): Promise<void> {
   logger.debug('Starting new chat...');
-
-  logger.debug('Waiting for new chat button...');
-  await page.waitForSelector('use[*|href="#ic-pen-square"]', { timeout: 1000 });
-
-  logger.debug('Clicking new chat button...');
-  await page.click('use[*|href="#ic-pen-square"]');
-
+  await page
+    .locator('use[*|href="#ic-pen-square"]')
+    .click({ timeout: 1000 });
   logger.info('New chat started');
 }
 
@@ -23,15 +19,9 @@ export async function startNewChat(page: Page): Promise<void> {
  */
 export async function startPrivateChat(page: Page): Promise<void> {
   logger.debug('Starting private chat...');
-
-  // First, start a new chat
   await startNewChat(page);
-
-  logger.debug('Waiting for private button...');
-  await page.waitForSelector('.button-ghost-norm', { timeout: 1000 });
-
-  logger.debug('Clicking private button...');
-  await page.click('.button-ghost-norm');
-
+  await page
+    .locator('.button-ghost-norm')
+    .click({ timeout: 1000 });
   logger.info('Private chat started');
 }
