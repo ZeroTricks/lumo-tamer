@@ -7,12 +7,11 @@ services:
       target: production
     container_name: lumo-bridge-app
     ports:
-      - "${PORT}:${PORT}"
-    env_file:
-      - .env
+      - "3003:3003"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
     environment:
-      - NODE_ENV=${NODE_ENV:-production}
-      - CDP_ENDPOINT=http://browser-dev:9223
+      - NODE_ENV=production
     depends_on:
       - browser-dev
     restart: unless-stopped
@@ -26,14 +25,13 @@ services:
       target: development
     container_name: lumo-bridge-app-dev
     ports:
-      - "${PORT}:${PORT}"
+      - "3003:3003"
       - "9229:9229"  # Node.js debugger port
-    env_file:
-      - .env
     environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - CDP_ENDPOINT=http://browser-dev:9223
+      - NODE_ENV=development
     volumes:
+      # Configuration file
+      - ./config.yaml:/app/config.yaml:ro
       # Mount source code for live editing and hot reload
       - ./src:/app/src:rw
       - ./package.json:/app/package.json:ro
@@ -78,8 +76,8 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - OPENAI_API_BASE_URLS=http://app-dev:${PORT}/v1
-      - OPENAI_API_KEYS=${API_KEY}
+      - OPENAI_API_BASE_URLS=http://app-dev:3003/v1
+      - OPENAI_API_KEYS=
       - ENABLE_OPENAI_API=true
     volumes:
       - open-webui-data:/app/backend/data

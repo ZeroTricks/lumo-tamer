@@ -18,11 +18,11 @@
 
 ## How It Works
 
-1. App reads `CDP_ENDPOINT` from env
+1. App reads `browser.cdpEndpoint` from config.yaml
 2. Playwright connects via `chromium.connectOverCDP()`
 3. Browser persists independently of app lifecycle
 
-**IMPORTANT**: `CDP_ENDPOINT` is required. No bundled browser.
+**IMPORTANT**: `browser.cdpEndpoint` is required. No bundled browser.
 
 ## Docker Setup
 
@@ -42,9 +42,8 @@ services:
     build:
       dockerfile: Dockerfile.app
       target: development
-    environment:
-      - CDP_ENDPOINT=http://browser-dev:9223
     volumes:
+      - ./config.yaml:/app/config.yaml:ro  # Configuration
       - ./src:/app/src:rw  # Hot reload
     depends_on:
       - browser-dev
@@ -71,9 +70,10 @@ make logs-browser  # Browser logs
 
 ## Configuration
 
-```bash
-# .env
-CDP_ENDPOINT=http://browser-dev:9223  # REQUIRED
+```yaml
+# config.yaml
+browser:
+  cdpEndpoint: "http://browser-dev:9223"  # REQUIRED
 ```
 
 ## Before vs After
@@ -94,7 +94,9 @@ docker run -d -p 9222:9222 \
   -e CHROME_CLI="--remote-debugging-address=0.0.0.0 --remote-debugging-port=9222" \
   lscr.io/linuxserver/chromium
 
-export CDP_ENDPOINT=ws://localhost:9222
+# In config.yaml, set:
+# browser:
+#   cdpEndpoint: "ws://localhost:9222"
 npm run dev
 ```
 
@@ -109,8 +111,10 @@ browser:
 
 ### External Service (Selkie, etc.)
 
-```bash
-CDP_ENDPOINT=ws://your-service.com/browser-id
+```yaml
+# config.yaml
+browser:
+  cdpEndpoint: "ws://your-service.com/browser-id"
 ```
 
 ## Troubleshooting

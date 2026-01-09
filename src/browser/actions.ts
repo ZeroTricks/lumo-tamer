@@ -1,5 +1,6 @@
 import { Page } from 'playwright';
 import { logger } from '../logger.js';
+import { chatboxSelectors } from '../config.js';
 
 /**
  * Starts a new chat by clicking the "new chat" button.
@@ -8,7 +9,7 @@ import { logger } from '../logger.js';
 export async function startNewChat(page: Page): Promise<void> {
   logger.debug('Starting new chat...');
   await page
-    .locator('use[*|href="#ic-pen-square"]')
+    .locator(chatboxSelectors.newChatButton)
     .click({ timeout: 1000 });
   logger.info('New chat started');
 }
@@ -21,7 +22,7 @@ export async function startPrivateChat(page: Page): Promise<void> {
   logger.debug('Starting private chat...');
   await startNewChat(page);
   await page
-    .locator('.button-ghost-norm')
+    .locator(chatboxSelectors.privateButton)
     .click({ timeout: 1000 });
   logger.info('Private chat started');
 }
