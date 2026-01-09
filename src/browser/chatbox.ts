@@ -42,7 +42,7 @@ export class ChatboxInteractor {
       case 'behave':
       case 'defaultbehaviour':
         await setBehaviour(this.page, browserConfig.behaviour);
-        return 'Behaviour settings have been updated successfully.';
+        return 'Behaviour settings updated successfully.';
       case 'new':
       case 'clear':
       case 'reset':
@@ -50,7 +50,7 @@ export class ChatboxInteractor {
         return 'New chat started.';
       case 'private':
         await startPrivateChat(this.page);
-        return 'Shhhhh';
+        return 'Shhhhh 🤫';
       default:
         logger.warn(`Unknown command: /${commandName}`);
         throw new Error(`Unknown command: /${commandName}`);
