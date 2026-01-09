@@ -53,8 +53,8 @@ export class BrowserManager {
     // Enable web search if configured
     if (browserConfig.enableWebSearch) {
       try {
-        logger.debug(`Clicking web search button: ${chatboxSelectors.webSearch}`);
-        await this.page.click(chatboxSelectors.webSearch);
+        logger.debug(`Clicking web search button: ${chatboxSelectors.webSearchToggle}`);
+        await this.page.click(chatboxSelectors.webSearchToggle);
         logger.info('Web search enabled');
       } catch (error) {
         logger.warn(`Failed to click web search button: ${error}`);

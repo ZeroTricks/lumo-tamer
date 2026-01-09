@@ -6,7 +6,7 @@ OpenAI-compatible API for web chatboxes using Playwright automation.
 
 ```bash
 # Setup
-cp .env.example .env  # Edit with your chatbox URL and selectors
+cp config.example.yaml config.yaml  # Edit with your chatbox URL and selectors
 npm install
 npm run dev
 
@@ -47,7 +47,7 @@ See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for all commands.
 **Find DOM selectors** using DevTools:
 1. Right-click element → Inspect
 2. Test in console: `document.querySelector('your-selector')`
-3. Add to `.env` file
+3. Add to `config.yaml` file
 
 For complex sites, modify [src/browser/chatbox.ts](src/browser/chatbox.ts).
 
@@ -64,7 +64,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design.
 
 - **Selectors not working**: Verify in DevTools, check for dynamic IDs/shadow DOM
 - **Response timeout**: Increase timeout in [src/browser/chatbox.ts](src/browser/chatbox.ts)
-- **Browser not connecting**: Check `CDP_ENDPOINT` in `.env`, verify port 9222
+- **Browser not connecting**: Check `browser.cdpEndpoint` in `config.yaml`, verify port 9222
 
 See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for development workflow.
 

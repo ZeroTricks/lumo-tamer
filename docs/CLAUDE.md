@@ -11,7 +11,7 @@ OpenAI Client → API Server → Queue → Playwright → Web Chatbox
 - [src/queue/manager.ts](../src/queue/manager.ts) - Serial request processing
 - [src/browser/manager.ts](../src/browser/manager.ts) - Playwright lifecycle, CDP connection
 - [src/browser/chatbox.ts](../src/browser/chatbox.ts) - DOM interaction via selectors
-- [src/config.ts](../src/config.ts) - Environment config loader
+- [src/config.ts](../src/config.ts) - YAML config loader with Zod validation
 
 ## Key Concepts
 
@@ -38,17 +38,17 @@ make shell           # Container shell
 
 ## Configuration
 
-All in `.env`, loaded via [src/config.ts](../src/config.ts):
+All in `config.yaml`, loaded via [src/config.ts](../src/config.ts):
 - `serverConfig` - Port, API key, model name
-- `browserConfig` - CDP endpoint, headless mode, sessions
+- `browserConfig` - CDP endpoint, URL, behavior settings
 - `chatboxSelectors` - DOM selectors
 
 ## Common Tasks
 
 ### New Chatbox Integration
-1. Set `CHATBOX_URL` in `.env`
+1. Set `browser.url` in `config.yaml`
 2. Find selectors in DevTools
-3. Update `SELECTOR_*` in `.env`
+3. Update `selectors.*` in `config.yaml`
 4. If selectors fail, modify [src/browser/chatbox.ts](../src/browser/chatbox.ts)
 
 ### Customize Login Detection

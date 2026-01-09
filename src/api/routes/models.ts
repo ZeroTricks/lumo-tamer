@@ -9,7 +9,7 @@ export function createModelsRouter(): Router {
       object: 'list',
       data: [
         {
-          id: serverConfig.modelName,
+          id: serverConfig.apiModelName,
           object: 'model',
           created: Date.now(),
           owned_by: 'lumo-bridge',

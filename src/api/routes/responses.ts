@@ -79,7 +79,7 @@ async function handleStreamingRequest(
           object: 'response',
           status: 'in_progress',
           created_at: createdAt,
-          model: request.model || serverConfig.modelName,
+          model: request.model || serverConfig.apiModelName,
         },
         sequence_number: sequenceNumber++,
       });
@@ -161,7 +161,7 @@ async function handleStreamingRequest(
         incomplete_details: null,
         instructions: request.instructions || null,
         max_output_tokens: request.max_output_tokens || null,
-        model: request.model || serverConfig.modelName,
+        model: request.model || serverConfig.apiModelName,
         output: [
           {
             type: 'message',
@@ -246,7 +246,7 @@ async function handleNonStreamingRequest(
     incomplete_details: null,
     instructions: request.instructions || null,
     max_output_tokens: request.max_output_tokens || null,
-    model: request.model || serverConfig.modelName,
+    model: request.model || serverConfig.apiModelName,
     output: [
       {
         type: 'message',

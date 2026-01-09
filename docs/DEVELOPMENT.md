@@ -17,23 +17,23 @@ make dev-down     # Stop
 
 ```bash
 npm install
-cp .env.example .env  # Edit with your config
+cp config.example.yaml config.yaml  # Edit with your config
 npm run dev
 ```
 
 ### First Time Setup
 
-1. Configure `.env`:
-   - `CHATBOX_URL` - Target URL
-   - `API_KEY` - Your secret key
-   - `SELECTOR_*` - DOM selectors (find via DevTools)
+1. Configure `config.yaml`:
+   - `browser.url` - Target URL
+   - `server.apiKey` - Your secret key
+   - `selectors.*` - DOM selectors (find via DevTools)
 
 2. Test the API:
 ```bash
-curl http://localhost:${PORT}/v1/chat/completions \
-  -H "Authorization: Bearer ${API_KEY}" \
+curl http://localhost:3003/v1/chat/completions \
+  -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
-  -d '{"model":"${MODEL_NAME}","messages":[{"role":"user","content":"Hello"}]}'
+  -d '{"model":"lumo","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
 ### Common Commands
@@ -125,7 +125,7 @@ make dev-restart
 
 ### Change Config
 ```bash
-vim .env  # Auto-reloads
+vim config.yaml  # Auto-reloads
 ```
 
 ## Troubleshooting
@@ -136,7 +136,7 @@ vim .env  # Auto-reloads
 - noVNC: Visit http://localhost:3001
 - X11: Run `make x11-enable`
 
-**Port conflict**: Change `PORT` in `.env`
+**Port conflict**: Change `server.port` in `config.yaml`
 
 **Container crash**: `make clean-all && make dev-build`
 

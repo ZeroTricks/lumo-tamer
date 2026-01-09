@@ -126,7 +126,7 @@ async function handleNonStreamingRequest(
     id: `chatcmpl-${randomUUID()}`,
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
-    model: request.model || serverConfig.modelName,
+    model: request.model || serverConfig.apiModelName,
     choices: [
       {
         index: 0,

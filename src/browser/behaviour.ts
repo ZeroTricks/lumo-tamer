@@ -1,5 +1,6 @@
 import { Page } from 'playwright';
 import { logger } from '../logger.js';
+import { chatboxSelectors } from '../config.js';
 
 /**
  * Sets the behaviour text in the application's personalization settings.
@@ -12,28 +13,27 @@ export async function setBehaviour(page: Page, behaviourText: string): Promise<v
 
   // Open settings and navigate to personalization
   await page
-    .locator('use[*|href="#ic-cog-wheel"]')
+    .locator(chatboxSelectors.settingsCog)
     .click();
 
   await page
-    .locator('.sidebar-container use[*|href="#ic-sliders"]')
+    .locator(chatboxSelectors.personalizationMenu)
     .click();
 
   // Enter behaviour text
-  const behaviourSelector = '.personalization-field:nth-child(4) textarea';
   await page
-    .locator(behaviourSelector)
+    .locator(chatboxSelectors.behaviourField)
     .first()  // there's another for mobile
     .fill(behaviourText, { timeout: 1000 });
 
   // Save and close
   await page
-    .locator('.personalization-footer .button-solid-norm')
+    .locator(chatboxSelectors.saveSettings)
     .first()  // there's another for mobile
     .click({force: true}); // possibly disabled when nothing changed
 
   await page
-    .locator('.modal-close-button')
+    .locator(chatboxSelectors.modalClose)
     .click();
 
   logger.info('Behaviour successfully set');
