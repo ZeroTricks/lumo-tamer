@@ -4,6 +4,7 @@ import { EndpointDependencies, OpenAIResponseRequest, OpenAIResponse, ResponseSt
 import { serverConfig } from '../../config.js';
 import { logger } from '../../logger.js';
 import { ChatboxInteractor } from '../../browser/chatbox.js';
+import { handleInstructions } from '../instructions.js';
 
 export function createResponsesRouter(deps: EndpointDependencies): Router {
   const router = Router();
@@ -11,6 +12,9 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
   router.post('/v1/responses', async (req: Request, res: Response) => {
     try {
       const request: OpenAIResponseRequest = req.body;
+
+      // Handle developer message if present
+      await handleInstructions(request, deps);
 
       // Extract input text
       let inputText: string;

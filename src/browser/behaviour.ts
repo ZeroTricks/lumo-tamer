@@ -24,7 +24,7 @@ export async function setBehaviour(page: Page, behaviourText: string): Promise<v
   await page
     .locator(chatboxSelectors.behaviourField)
     .first()  // there's another for mobile
-    .fill(behaviourText, { timeout: 1000 });
+    .fill(behaviourText, { timeout: 3000 });
 
   // Save and close
   await page
@@ -37,4 +37,17 @@ export async function setBehaviour(page: Page, behaviourText: string): Promise<v
     .click();
 
   logger.info('Behaviour successfully set');
+}
+
+/**
+ * Process a developer message and set behaviour based on instructions.
+ *
+ * @param page - Playwright page instance
+ * @param instructions - The developer message content to process
+ */
+export async function setBehaviourFromInstructions(page: Page, instructions: string): Promise<void> {
+  logger.info('Processing developer instructions...');
+  // TODO: Implement developer message processing logic
+  // For now, just call setBehaviour with the instructions
+  await setBehaviour(page, instructions);
 }

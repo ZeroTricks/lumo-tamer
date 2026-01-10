@@ -19,6 +19,8 @@ const browserConfigSchema = z.object({
   behaviour: z.string().min(1, 'Behaviour instruction is required'),
   behaviourAllowOverwrite: z.boolean(),
   privateByDefault: z.boolean(),
+  instructionsUseTools: z.boolean(),
+  instructionsToolsDescription: z.string(),
 });
 
 const selectorsSchema = z.object({

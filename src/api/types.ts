@@ -1,11 +1,13 @@
 import { BrowserManager } from '../browser/manager.js';
 import { RequestQueue } from '../queue/manager.js';
 import { ChatboxInteractor } from '../browser/chatbox.js';
+import { Page } from 'playwright';
 
 export interface EndpointDependencies {
   browserManager: BrowserManager;
   queue: RequestQueue;
   getChatbox: () => Promise<ChatboxInteractor>;
+  getPage: () => Promise<Page>;
 }
 
 // Chat Completions API types
@@ -61,6 +63,7 @@ export interface OpenAIResponseRequest {
   max_output_tokens?: number;
   store?: boolean;
   metadata?: Record<string, string>;
+  tools?: any[];
 }
 
 export interface OpenAIResponse {
