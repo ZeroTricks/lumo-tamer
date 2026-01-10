@@ -158,8 +158,8 @@ export class ChatboxInteractor {
               }
               return false;
             },
-            { timeout: 20000, polling: 100 },
-            { selector: chatboxSelectors.messages, expectedCount: messagesBefore }
+            { selector: chatboxSelectors.messages, expectedCount: messagesBefore },
+            { timeout: 20000, polling: 100 }
           );
           logger.debug('sendMessage: Container count increased');
         } catch (error) {
@@ -297,23 +297,15 @@ export class ChatboxInteractor {
     const waitStart = Date.now();
 
     try {
-      // Custom timeout promise (because Playwright's built-in timeout doesn't work reliably)
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Custom timeout')), currentTimeout);
-      });
-
       // Wait for textChanged flag to become true OR timeout
       // The flag is set by the browser-side observer when text or completion indicator changes
-      await Promise.race([
-        this.page.waitForFunction(
-          (prevText: string) => {
-            return window.__lumoState?.textChanged && window.__lumoState.lastText !== prevText;
-          },
-          { timeout: 300000 }, // Very long timeout - we control actual timeout with Promise.race
-          previousText
-        ),
-        timeoutPromise
-      ]);
+      await this.page.waitForFunction(
+        (prevText: string) => {
+          return window.__lumoState?.completed || (window.__lumoState?.textChanged && window.__lumoState.lastText !== prevText);
+        },
+        previousText,
+        { timeout: currentTimeout }
+      );
 
       const waitDuration = Date.now() - waitStart;
 
