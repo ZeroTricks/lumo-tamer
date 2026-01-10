@@ -4,3 +4,4 @@ config.yaml
 browser-data/
 *.log
 .DS_Store
+todo.md
