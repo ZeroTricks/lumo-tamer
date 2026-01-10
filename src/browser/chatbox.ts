@@ -4,7 +4,7 @@ import { logger } from '../logger.js';
 import { processSources, formatSources } from './sources.js';
 import { processToolCalls } from './tools.js';
 import { setBehaviour } from './behaviour.js';
-import { startNewChat, startPrivateChat } from './actions.js';
+import { openChatByKeyword, startNewChat, startPrivateChat } from './actions.js';
 import type { ToolCall } from '../types.js';
 
 // Extend Window interface for custom properties
@@ -31,14 +31,18 @@ export class ChatboxInteractor {
    * @returns A response message describing the result
    */
   async executeCommand(command: string): Promise<string> {
-    // Strip leading '/' if present
-    const commandName = command.startsWith('/')
+    // Strip leading '/' if present and parse command with parameters
+    const commandText = command.startsWith('/')
       ? command.slice(1).trim()
       : command.trim();
 
+    // Extract command name and parameters: /command param1 param2 ...
+    const match = commandText.match(/^(\S+)(?:\s+(.*))?$/);
+    const commandName = match?.[1] || commandText;
+    const params = match?.[2] || '';
     const lowerCommand = commandName.toLowerCase();
 
-    logger.info(`Executing command: /${lowerCommand}`);
+    logger.info(`Executing command: /${lowerCommand}${params ? ` with params: ${params}` : ''}`);
 
     switch (lowerCommand) {
       case 'behave':
@@ -53,6 +57,9 @@ export class ChatboxInteractor {
       case 'private':
         await startPrivateChat(this.page);
         return 'Shhhhh 🤫';
+      case 'open':
+        return openChatByKeyword(this.page, params);
+
       default:
         logger.warn(`Unknown command: /${commandName}`);
         throw new Error(`Unknown command: /${commandName}`);

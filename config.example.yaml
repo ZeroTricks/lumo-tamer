@@ -48,6 +48,9 @@ selectors:
   behaviourField: ".personalization-field:nth-child(4) textarea"
   saveSettings: ".personalization-footer .button-solid-norm"
   modalClose: ".modal-close-button"
+  previousChat: ".chat-history-container a"
+  expandSidebar: "use[*|href="#ic-chevron-right"]"
+
 
 # Response timeout configuration (milliseconds)
 timeouts:
