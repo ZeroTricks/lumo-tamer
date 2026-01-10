@@ -23,7 +23,10 @@ export async function handleInstructions(
 
   // Extract messages array from either request type
   if ('input' in request && Array.isArray(request.input)) {
-    messages = request.input;
+    // Filter to only include message items, not function_call_output items
+    messages = request.input.filter((item): item is { role: string; content: string } =>
+      typeof item === 'object' && 'role' in item && 'content' in item
+    );
   } else if ('messages' in request && Array.isArray(request.messages)) {
     messages = request.messages;
   }

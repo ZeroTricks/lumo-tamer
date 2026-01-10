@@ -136,7 +136,7 @@ async function handleNonStreamingRequest(
         index: 0,
         message: {
           role: 'assistant',
-          content: result,
+          content: result.text,
         },
         finish_reason: 'stop',
       },

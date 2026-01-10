@@ -8,7 +8,7 @@ import { setupAuthMiddleware, setupLoggingMiddleware } from './middleware.js';
 import { createHealthRouter } from './routes/health.js';
 import { createModelsRouter } from './routes/models.js';
 import { createChatCompletionsRouter } from './routes/chat-completions.js';
-import { createResponsesRouter } from './routes/responses.js';
+import { createResponsesRouter } from './routes/responses/index.js';
 import { EndpointDependencies } from './types.js';
 
 export class APIServer {
