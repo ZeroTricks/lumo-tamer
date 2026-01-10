@@ -4,6 +4,7 @@ import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatR
 import { serverConfig } from '../../config.js';
 import { logger } from '../../logger.js';
 import { ChatboxInteractor } from '../../browser/chatbox.js';
+import { handleInstructions } from '../instructions.js';
 
 export function createChatCompletionsRouter(deps: EndpointDependencies): Router {
   const router = Router();
@@ -16,6 +17,9 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       if (!request.messages || request.messages.length === 0) {
         return res.status(400).json({ error: 'Messages array is required' });
       }
+
+      // Handle developer message if present
+      await handleInstructions(request, deps);
 
       // Get the last user message
       const lastUserMessage = [...request.messages].reverse().find(m => m.role === 'user');

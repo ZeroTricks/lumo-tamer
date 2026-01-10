@@ -1,13 +1,13 @@
 import { chromium, BrowserContext, Page } from 'playwright';
 import { browserConfig, chatboxSelectors } from '../config.js';
-import {promises as dns} from 'dns';
+import {promises as dns, ADDRCONFIG} from 'dns';
 import { logger } from '../logger.js';
 
 const host = new URL(browserConfig.cdpEndpoint).hostname;
 
 const { address } = await dns.lookup(host, {
   family: 4,
-  hints: dns.ADDRCONFIG,
+  hints: ADDRCONFIG,
 });
 
 const ipEndPoint = browserConfig.cdpEndpoint.replace(host, address);

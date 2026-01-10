@@ -46,6 +46,7 @@ export class APIServer {
       browserManager: this.browserManager,
       queue: this.queue,
       getChatbox: () => this.getChatbox(),
+      getPage: () => this.browserManager.getPage(),
     };
   }
 
