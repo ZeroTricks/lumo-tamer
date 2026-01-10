@@ -36,6 +36,8 @@ const selectorsSchema = z.object({
   behaviourField: z.string().min(1, 'Behaviour field selector is required'),
   saveSettings: z.string().min(1, 'Personalization save selector is required'),
   modalClose: z.string().min(1, 'Modal close selector is required'),
+  previousChat: z.string().min(1, 'Previous chat selector is required'),
+  expandSidebar: z.string().min(1, 'Sidebar expander selector is required'),
 });
 
 const timeoutsSchema = z.object({
