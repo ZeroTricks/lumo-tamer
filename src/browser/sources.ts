@@ -1,11 +1,7 @@
 import { Page } from 'playwright';
 import { chatboxSelectors, browserConfig } from '../config.js';
 import { logger } from '../logger.js';
-
-export interface Source {
-  url: string;
-  title: string;
-}
+import type { Source } from '../types.js';
 
 /**
  * Formats sources into a markdown string to append to the response.
@@ -39,76 +35,60 @@ export async function processSources(page: Page): Promise<Source[] | null> {
 
   const sourcesSel = chatboxSelectors.sources;
 
-  // Check if sources exist and get the first one to click
-  const sourcesIconExists = await page.evaluate(
-    (sourcesSel: string) => {
-      const targetContainer = window.__lumoState?.targetContainer;
-      if (!targetContainer) {
-        console.log('[Lumo Browser] No target container in state');
-        return false;
-      }
-
-      const sources = targetContainer.querySelectorAll(sourcesSel);
-      if (sources.length > 0) {
-        console.log('[Lumo Browser] Found', sources.length, 'sources at completion');
-        return true;
-      }
-      return false;
-    },
-    sourcesSel
-  );
-
-  if (!sourcesIconExists) {
-    return null; // No sources to process
-  }
-
-  logger.debug('Sources were detected in the response, extracting...');
-
   try {
-    // Click the sources icon using the stored target container
-    await page.evaluate(
-      (sourcesSel: string) => {
-        const targetContainer = window.__lumoState?.targetContainer;
-        if (!targetContainer) return;
+    // Get the target container element handle from __lumoState
+    // This ensures we're checking the same container that was observed during streaming
+    const targetContainerHandle = await page.evaluateHandle(() => window.__lumoState?.targetContainer);
+    const targetContainer = targetContainerHandle.asElement();
 
-        const sourcesIcon = targetContainer.querySelector(sourcesSel) as HTMLElement;
-        if (sourcesIcon) {
-          console.log('[Lumo Browser] Clicking sources icon');
-          sourcesIcon.click();
-        }
-      },
-      sourcesSel
-    );
+    if (!targetContainer) {
+      logger.debug('No target container found in __lumoState');
+      return null;
+    }
+
+    // Check if sources icons exist in the target container
+    const sourcesIcons = await targetContainer.$$(sourcesSel);
+
+    if (sourcesIcons.length === 0) {
+      logger.debug('No sources found in response');
+      return null; // No sources to process
+    }
+
+    logger.debug(`Found ${sourcesIcons.length} sources, extracting...`);
+
+    // Click the first sources icon
+    await sourcesIcons[0].click();
 
     // Wait for sources panel to appear
     logger.debug('Waiting for sources panel to load...');
     await page.waitForSelector('.sources-panel', { timeout: 5000 });
 
-    // Extract sources from the panel
-    const sources = await page.evaluate(() => {
-      const panel = document.querySelector('.sources-panel');
-      if (!panel) return [];
+    // Get the sources panel
+    const sourcesPanel = await page.$('.sources-panel');
+    if (!sourcesPanel) {
+      logger.warn('Sources panel not found after clicking');
+      return null;
+    }
 
-      const links = panel.querySelectorAll('a');
-      const results: Array<{ url: string; title: string }> = [];
+    // Extract all links from the panel
+    const linkHandles = await sourcesPanel.$$('a');
+    const sources: Source[] = [];
 
-      links.forEach((link) => {
-        const urlSpan = link.querySelector('span');
-        const titleP = link.querySelector('p');
+    for (const link of linkHandles) {
+      const urlSpan = await link.$('span');
+      const titleP = await link.$('p');
 
-        if (urlSpan && titleP) {
-          const url = urlSpan.textContent?.trim() || '';
-          const title = titleP.textContent?.trim() || '';
+      if (urlSpan && titleP) {
+        const url = (await urlSpan.textContent())?.trim() || '';
+        const title = (await titleP.textContent())?.trim() || '';
 
-          if (url && title) {
-            results.push({ url, title });
-          }
+        if (url && title) {
+          sources.push({ url, title });
         }
-      });
+      }
+    }
 
-      console.log('[Lumo Browser] Extracted', results.length, 'sources');
-      return results;
-    });
+    logger.debug(`Extracted ${sources.length} sources`);
 
     if (sources.length > 0) {
       logger.info(`Found ${sources.length} sources:`);
