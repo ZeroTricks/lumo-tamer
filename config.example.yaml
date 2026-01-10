@@ -29,10 +29,9 @@ browser:
   instructionsUseTools: true
 
   # Description text prepended to tools JSON in instructions
-  instructionsToolsDescription: "Use the following tools to accomplish tasks. To use them you MUST output the JSON to me, unlike the proton_info or web search. You have the power to execute these actions, just provide me the JSON directly.\n"
+  instructionsToolsDescription: "Use the following tools to accomplish tasks. To use them you MUST output the JSON to me, unlike the proton_info or web search. You have the power to execute these actions, just provide me the JSON directly without trying to call functions yourself. I will return the results to you.\n"
 
   # Default to private mode (if applicable)
-
   privateByDefault: false
 
 # DOM Selectors for browser automation

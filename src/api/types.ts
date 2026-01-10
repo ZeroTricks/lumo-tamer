@@ -54,9 +54,19 @@ export interface OpenAIStreamChunk {
 }
 
 // Responses API types
+export interface FunctionCallOutput {
+  type: 'function_call_output';
+  call_id: string;
+  output: string;
+}
+
+export type ResponseInputItem =
+  | { role: string; content: string }
+  | FunctionCallOutput;
+
 export interface OpenAIResponseRequest {
   model?: string;
-  input?: string | Array<{ role: string; content: string }>;
+  input?: string | Array<ResponseInputItem>;
   instructions?: string;
   stream?: boolean;
   temperature?: number;
@@ -64,6 +74,30 @@ export interface OpenAIResponseRequest {
   store?: boolean;
   metadata?: Record<string, string>;
   tools?: any[];
+}
+
+// Output item types for OpenAI Response
+export type OutputItem = MessageOutputItem | FunctionCallOutputItem;
+
+export interface MessageOutputItem {
+  type: 'message';
+  id: string;
+  status: 'completed' | 'in_progress';
+  role: 'assistant';
+  content: Array<{
+    type: 'output_text';
+    text: string;
+    annotations: any[];
+  }>;
+}
+
+export interface FunctionCallOutputItem {
+  type: 'function_call';
+  id: string;
+  call_id: string;
+  status: 'completed' | 'in_progress';
+  name: string;
+  arguments: string;
 }
 
 export interface OpenAIResponse {
@@ -77,17 +111,7 @@ export interface OpenAIResponse {
   instructions: string | null;
   max_output_tokens: number | null;
   model: string;
-  output: Array<{
-    type: 'message';
-    id: string;
-    status: 'completed' | 'in_progress';
-    role: 'assistant';
-    content: Array<{
-      type: 'output_text';
-      text: string;
-      annotations: any[];
-    }>;
-  }>;
+  output: OutputItem[];
   parallel_tool_calls: boolean;
   previous_response_id: string | null;
   reasoning: {
@@ -132,4 +156,6 @@ export type ResponseStreamEvent =
   | { type: 'response.content_part.done'; item_id: string; output_index: number; content_index: number; part: any; sequence_number: number }
   | { type: 'response.output_text.delta'; item_id: string; output_index: number; content_index: number; delta: string; sequence_number: number }
   | { type: 'response.output_text.done'; item_id: string; output_index: number; content_index: number; text: string; sequence_number: number }
+  | { type: 'response.function_call_arguments.delta'; item_id: string; output_index: number; delta: string; sequence_number: number }
+  | { type: 'response.function_call_arguments.done'; item_id: string; output_index: number; arguments: string; sequence_number: number }
   | { type: 'error'; code: string; message: string; param: string | null; sequence_number: number };

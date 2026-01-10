@@ -2,8 +2,10 @@ import { Page } from 'playwright';
 import { chatboxSelectors, responseTimeouts, browserConfig } from '../config.js';
 import { logger } from '../logger.js';
 import { processSources, formatSources } from './sources.js';
+import { processToolCalls } from './tools.js';
 import { setBehaviour } from './behaviour.js';
 import { startNewChat, startPrivateChat } from './actions.js';
+import type { ToolCall } from '../types.js';
 
 // Extend Window interface for custom properties
 declare global {
@@ -64,13 +66,13 @@ export class ChatboxInteractor {
    * @param message - The message or command to process
    * @param onDelta - Optional callback for streaming deltas as they arrive
    * @param timeoutMs - Maximum time to wait for response (default 60s)
-   * @returns The complete response text
+   * @returns The complete response text and any tool calls
    */
   async getResponse(
     message: string,
     onDelta?: (delta: string) => void | Promise<void>,
     timeoutMs: number = 60000
-  ): Promise<string> {
+  ): Promise<{ text: string; toolCalls: ToolCall[] | null }> {
     // Check if this is a command
     if (message.startsWith('/')) {
       // Execute command and get response
@@ -81,7 +83,7 @@ export class ChatboxInteractor {
         await onDelta(commandResponse);
       }
 
-      return commandResponse;
+      return { text: commandResponse, toolCalls: null };
     } else {
       // Regular message - send and stream/wait for response
       await this.sendMessage(message);
@@ -169,7 +171,7 @@ export class ChatboxInteractor {
     }
   }
 
-  async waitForResponse(timeoutMs: number = 60000): Promise<string> {
+  async waitForResponse(timeoutMs: number = 60000): Promise<{ text: string; toolCalls: ToolCall[] | null }> {
     return await this.streamResponse(undefined, timeoutMs);
   }
 
@@ -345,12 +347,12 @@ export class ChatboxInteractor {
   }
 
   /**
-   * Finalizes the response by processing sources, logging, and cleaning up.
+   * Finalizes the response by processing sources, tool calls, logging, and cleaning up.
    */
   private async finalizeResponse(
     currentText: string,
     onDelta?: (delta: string) => void | Promise<void>
-  ): Promise<string> {
+  ): Promise<{ text: string; toolCalls: ToolCall[] | null }> {
     let finalText = currentText;
     const sources = await processSources(this.page);
     if (sources) {
@@ -359,9 +361,12 @@ export class ChatboxInteractor {
       // Send sources through the streaming callback
       await this.processDelta(sourcesText, onDelta);
     }
+
+    const toolCalls = await processToolCalls(this.page);
+
     logger.info(`[Assistant] ${finalText}`);
     await this.cleanupObserver();
-    return finalText;
+    return { text: finalText, toolCalls };
   }
 
   /**
@@ -380,7 +385,7 @@ export class ChatboxInteractor {
    * NORMAL EVENT FLOW:
    * - Setup phase: Inject observer into browser, start monitoring
    * - Streaming phase (repeats): Wait for change → Get new text → Send delta → Check completion
-   * - Completion phase: Cleanup observer and return full text
+   * - Completion phase: Cleanup observer and return full text and tool calls
    *
    * COMPLETION CONDITIONS (whichever happens first):
    * - Completion indicator detected (immediate exit)
@@ -390,12 +395,12 @@ export class ChatboxInteractor {
    *
    * @param onDelta - Callback invoked with each new chunk of text as it arrives
    * @param timeoutMs - Maximum time to wait for the entire response (default 60s)
-   * @returns The complete response text
+   * @returns The complete response text and any tool calls
    */
   async streamResponse(
     onDelta?: (delta: string) => void | Promise<void>,
     timeoutMs: number = 60000
-  ): Promise<string> {
+  ): Promise<{ text: string; toolCalls: ToolCall[] | null }> {
     const startTime = Date.now();
     let previousText = '';
     const noChangeTimeoutWithText = responseTimeouts.withText;
@@ -418,7 +423,8 @@ export class ChatboxInteractor {
         logger.warn(`Timeout after ${elapsed}ms, response considered complete`);
 
         const currentText = await this.page.evaluate(() => window.__lumoState?.lastText || '');
-        return await this.finalizeResponse(currentText || previousText, onDelta);
+        const finalResult = await this.finalizeResponse(currentText || previousText, onDelta);
+        return finalResult;
       }
 
       const { text: currentText, completed } = result;
@@ -431,7 +437,8 @@ export class ChatboxInteractor {
       // Check for completion
       if (completed) {
         logger.debug('Completion indicator detected, response complete');
-        return await this.finalizeResponse(currentText, onDelta);
+        const finalResult = await this.finalizeResponse(currentText, onDelta);
+        return finalResult;
       }
     }
 
