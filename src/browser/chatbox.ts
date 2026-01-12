@@ -101,7 +101,7 @@ export class ChatboxInteractor {
 
   private async cleanupObserver(): Promise<void> {
     await this.page.evaluate(() => {
-      console.log('[Lumo Browser] Cleaning up observer');
+      logger.debug('Cleaning up observer');
       if (window.__lumoState) {
         window.__lumoState.observer.disconnect();
         delete window.__lumoState;
@@ -159,9 +159,9 @@ export class ChatboxInteractor {
             ({ selector, expectedCount }: { selector: string; expectedCount: number }) => {
               const elements = document.querySelectorAll(selector);
               const currentCount = elements.length;
-              console.log('[Lumo Browser] Checking count:', currentCount, 'expected:', expectedCount);
+              logger.debug(`Checking count: ${currentCount}, expected: ${expectedCount}`);
               if (currentCount > expectedCount) {
-                console.log('[Lumo Browser] Count increased!', currentCount, '>', expectedCount);
+                logger.debug(`Count increased! ${currentCount}>${expectedCount}`);
                 return true;
               }
               return false;
@@ -198,23 +198,23 @@ export class ChatboxInteractor {
           contentElements: string;
           messageCompletionMarker: string
       }) => {
-        console.log('[Lumo Browser] Setting up observer for selector:', lastMessageSelector, 'content:', contentElements, 'indicator:', messageCompletionMarker);
+        logger.debug(`Setting up observer for selector: ${lastMessageSelector}, content: ${contentElements}, indicator: ${messageCompletionMarker}`);
 
         // Clean up any existing observer from previous calls
         if (window.__lumoState) {
-          console.log('[Lumo Browser] Disconnecting existing observer');
+          logger.debug('Disconnecting existing observer');
           window.__lumoState.observer.disconnect();
         }
 
         // Lock onto the last container at setup time to avoid switching containers mid-stream
         const containers = document.querySelectorAll(lastMessageSelector);
-        console.log('[Lumo Browser] Setup: Found', containers.length, 'containers');
+        logger.debug(`Setup: Found ${containers.length} containers`);
         if (containers.length === 0) {
-          console.error('[Lumo Browser] No containers found at setup!');
+          console.error('No containers found at setup!');
           return;
         }
         const lastMessageContainer = containers[containers.length - 1];
-        console.log('[Lumo Browser] Locked onto container:', lastMessageContainer.tagName, lastMessageContainer.className);
+        logger.debug(`'Locked onto container: ${lastMessageContainer.tagName}  ${lastMessageContainer.className}`);
 
         // Initialize state object that we'll check from Node.js
         window.__lumoState = {
@@ -234,11 +234,11 @@ export class ChatboxInteractor {
           if (!window.__lumoState!.completed) {
             const indicator = lastMessageContainer.querySelector(messageCompletionMarker);
             if (indicator) {
-              console.log('[Lumo Browser] Completion indicator detected! Waiting briefly for final text...');
+              logger.debug('Completion indicator detected! Waiting briefly for final text...');
               // Wait a bit before marking as completed to allow any pending text mutations to process
               // This prevents a race condition where the completion indicator appears before final text
               setTimeout(() => {
-                console.log('[Lumo Browser] Marking as completed after delay');
+                logger.debug('Marking as completed after delay');
                 window.__lumoState!.completed = true;
                 window.__lumoState!.textChanged = true; // Wake up waitForFunction immediately
               }, 150);
@@ -247,7 +247,7 @@ export class ChatboxInteractor {
           }
 
           const blocks = lastMessageContainer.querySelectorAll(contentElements);
-          console.log('[Lumo Browser] updateText: Found', blocks.length, 'paragraphs in target container');
+          logger.debug(`updateText: Found ${ blocks.length} paragraphs in target container`);
 
           // Extract all text from completed blocks
           // This is related to https://github.com/ProtonMail/WebClients/blob/main/applications/lumo/src/app/ui/components/LumoMarkdown/ProgressiveMarkdownRenderer.tsx ,
@@ -262,7 +262,7 @@ export class ChatboxInteractor {
 
           // If text changed, update state and set change flag
           if (fullText !== window.__lumoState!.lastText) {
-            console.log('[Lumo Browser] Text changed:', fullText.length, 'chars');
+            logger.debug(`Text changed: ${fullText.length} chars`);
             window.__lumoState!.lastText = fullText;
             window.__lumoState!.textChanged = true;
           }
@@ -270,16 +270,16 @@ export class ChatboxInteractor {
 
         // Run updateText once to capture initial state
         updateText();
-        console.log('[Lumo Browser] Initial text captured:', window.__lumoState.lastText ? window.__lumoState.lastText.length : 0, 'chars');
+        logger.debug(`Initial text captured: ${window.__lumoState.lastText ? window.__lumoState.lastText.length : 0} chars`);
 
         // Create MutationObserver that will call updateText on every DOM change
         const observer = new MutationObserver((mutations) => {
-          console.log('[Lumo Browser] Mutation detected, mutations:', mutations.length);
+          logger.debug(`Mutation detected, mutations: ${mutations.length}`);
           updateText();
         });
 
         // Attach observer to the target container
-        console.log('[Lumo Browser] Attaching observer to target container');
+        logger.debug('Attaching observer to target container');
         observer.observe(lastMessageContainer, {
           childList: true,      // Watch for added/removed child nodes
           subtree: true,        // Watch all descendants, not just direct children
@@ -287,7 +287,7 @@ export class ChatboxInteractor {
         });
 
         window.__lumoState.observer = observer;
-        console.log('[Lumo Browser] Observer setup complete');
+        logger.debug('Observer setup complete');
       },
       {
         lastMessageSelector,
@@ -331,7 +331,7 @@ export class ChatboxInteractor {
 
       // Fetch the current state from the browser
       const { text: currentText, completed } = await this.page.evaluate(() => {
-        console.log('[Lumo Browser] Text change detected, resetting flag');
+        logger.debug('Text change detected, resetting flag');
         const text = window.__lumoState?.lastText || '';
         const completed = window.__lumoState?.completed || false;
         if (window.__lumoState) {
