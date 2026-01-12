@@ -38,7 +38,8 @@ browser:
 selectors:
   input: ".tiptap"
   messages: ".assistant-msg-container"
-  completionIndicator: "use[*|href=\"#ic-thumb-up\"]"
+  contentElements: "p, li, h1 , h2, h3, h4, h5, h6"
+  messageCompletionMarker: "use[*|href=\"#ic-thumb-up\"]"
   webSearchToggle: ".web-search-button"
   sources: ".source-favicon"
   newChatButton: "use[*|href=\"#ic-pen-square\"]"

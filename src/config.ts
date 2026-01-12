@@ -6,17 +6,17 @@ import { z } from 'zod';
 // Zod schemas for validation
 const serverConfigSchema = z.object({
   port: z.number().int().positive(),
-  apiKey: z.string().min(1, 'API key is required'),
-  apiModelName: z.string().min(1, 'API model name is required'),
+  apiKey: z.string().min(1, 'server.apiKey is required'),
+  apiModelName: z.string().min(1, 'server.apiModelName is required'),
   logLevel: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']),
 });
 
 const browserConfigSchema = z.object({
-  url: z.string().min(1, 'Chatbox URL is required'),
-  cdpEndpoint: z.string().min(1, 'CDP endpoint is required'),
+  url: z.string().min(1, 'browser.url is required'),
+  cdpEndpoint: z.string().min(1, 'browser.cdpEndpoint is required'),
   enableWebSearch: z.boolean(),
   showSources: z.boolean(),
-  behaviour: z.string().min(1, 'Behaviour instruction is required'),
+  behaviour: z.string().min(1, 'browser.behaviour is required'),
   behaviourAllowOverwrite: z.boolean(),
   privateByDefault: z.boolean(),
   instructionsUseTools: z.boolean(),
@@ -24,20 +24,21 @@ const browserConfigSchema = z.object({
 });
 
 const selectorsSchema = z.object({
-  input: z.string().min(1, 'Input selector is required'),
-  messages: z.string().min(1, 'Messages selector is required'),
-  completionIndicator: z.string().optional(),
-  webSearchToggle: z.string().min(1, 'Web search selector is required'),
-  sources: z.string().min(1, 'Sources selector is required'),
-  newChatButton: z.string().min(1, 'New chat selector is required'),
-  privateButton: z.string().min(1, 'Private button selector is required'),
-  settingsCog: z.string().min(1, 'Settings cog selector is required'),
-  personalizationMenu: z.string().min(1, 'Personalization menu selector is required'),
-  behaviourField: z.string().min(1, 'Behaviour field selector is required'),
-  saveSettings: z.string().min(1, 'Personalization save selector is required'),
-  modalClose: z.string().min(1, 'Modal close selector is required'),
-  previousChat: z.string().min(1, 'Previous chat selector is required'),
-  expandSidebar: z.string().min(1, 'Sidebar expander selector is required'),
+  input: z.string().min(1, 'selectors.input is required'),
+  messages: z.string().min(1, 'selectors.messages is required'),
+  contentElements: z.string().min(1, 'selectors.contentElements is required'),
+  messageCompletionMarker: z.string().min(1, 'selectors.messageCompletionMarker is required'),
+  webSearchToggle: z.string().min(1, 'selectors.webSearchToggle is required'),
+  sources: z.string().min(1, 'selectors.sources is required'),
+  newChatButton: z.string().min(1, 'selectors.newChatButton is required'),
+  privateButton: z.string().min(1, 'selectors.privateButton is required'),
+  settingsCog: z.string().min(1, 'selectors.settingsCog is required'),
+  personalizationMenu: z.string().min(1, 'selectors.personalizationMenu is required'),
+  behaviourField: z.string().min(1, 'selectors.behaviourField is required'),
+  saveSettings: z.string().min(1, 'selectors.saveSettings is required'),
+  modalClose: z.string().min(1, 'selectors.modalClose is required'),
+  previousChat: z.string().min(1, 'selectors.previousChat is required'),
+  expandSidebar: z.string().min(1, 'selectors.expandSidebar is required'),
 });
 
 const timeoutsSchema = z.object({

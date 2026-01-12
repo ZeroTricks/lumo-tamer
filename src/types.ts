@@ -9,7 +9,7 @@ declare global {
       lastText: string;
       textChanged: boolean;
       completed: boolean;
-      targetContainer: Element;
+      lastMessageContainer: Element;
     };
   }
 }
