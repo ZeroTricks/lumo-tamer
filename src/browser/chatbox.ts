@@ -112,71 +112,16 @@ export class ChatboxInteractor {
   async sendMessage(message: string): Promise<void> {
     logger.info(`[User] ${message}`);
 
-    logger.debug('sendMessage: Waiting for input field...');
-    // Wait for input to be available
-    await this.page.waitForSelector(chatboxSelectors.input, { timeout: 10000 });
-
-    logger.debug('sendMessage: Filling message...');
+    logger.debug('Sending message...');
     // Clear existing text and type new message
     const inputElement = this.page.locator(chatboxSelectors.input);
     await inputElement.clear();
     await inputElement.fill(message);
-
-    // Get the last message count before sending
-    const messagesBefore = await this.page.locator(chatboxSelectors.messages).count();
-    logger.debug(`sendMessage: Current message count: ${messagesBefore}`);
-
-    // Click send button
-    logger.debug('sendMessage: Sending message...');
     await inputElement.press('Enter');
 
     // Wait a moment for UI to update
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Check count immediately after clicking
-    const messagesAfterClick = await this.page.locator(chatboxSelectors.messages).count();
-    logger.debug(`sendMessage: Message count after click: ${messagesAfterClick}`);
-
-    // Wait for new assistant message container to appear (appears immediately with loading animation)
-    logger.debug('sendMessage: Waiting for new assistant container...');
-
-    if (messagesBefore === 0) {
-      // First message - just wait for first container to appear
-      logger.debug('sendMessage: First message - waiting for first container...');
-      await this.page.waitForSelector(chatboxSelectors.messages, { timeout: 20000 });
-      logger.debug('sendMessage: First container appeared');
-    } else {
-      // Subsequent messages - wait for count to increase
-      logger.debug(`sendMessage: Waiting for count to increase from ${messagesBefore}`);
-
-      // Check if count already increased
-      if (messagesAfterClick > messagesBefore) {
-        logger.debug(`sendMessage: Container count already increased to' ${messagesAfterClick}`);
-      } else {
-        // If not, wait for it to increase
-        try {
-          await this.page.waitForFunction(
-            ({ selector, expectedCount }: { selector: string; expectedCount: number }) => {
-              const elements = document.querySelectorAll(selector);
-              const currentCount = elements.length;
-              logger.debug(`Checking count: ${currentCount}, expected: ${expectedCount}`);
-              if (currentCount > expectedCount) {
-                logger.debug(`Count increased! ${currentCount}>${expectedCount}`);
-                return true;
-              }
-              return false;
-            },
-            { selector: chatboxSelectors.messages, expectedCount: messagesBefore },
-            { timeout: 20000, polling: 100 }
-          );
-          logger.debug('sendMessage: Container count increased');
-        } catch (error) {
-          logger.error(`sendMessage: Timeout waiting for container count increase:`);
-          logger.error(error);
-          throw error;
-        }
-      }
-    }
   }
 
   async waitForResponse(timeoutMs: number = 60000): Promise<{ text: string; toolCalls: ToolCall[] | null }> {
