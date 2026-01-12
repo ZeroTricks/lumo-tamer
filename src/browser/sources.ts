@@ -38,16 +38,16 @@ export async function processSources(page: Page): Promise<Source[] | null> {
   try {
     // Get the target container element handle from __lumoState
     // This ensures we're checking the same container that was observed during streaming
-    const targetContainerHandle = await page.evaluateHandle(() => window.__lumoState?.targetContainer);
-    const targetContainer = targetContainerHandle.asElement();
+    const lastMessageContainerHandle = await page.evaluateHandle(() => window.__lumoState?.lastMessageContainer);
+    const lastMessageContainer = lastMessageContainerHandle.asElement();
 
-    if (!targetContainer) {
+    if (!lastMessageContainer) {
       logger.debug('No target container found in __lumoState');
       return null;
     }
 
     // Check if sources icons exist in the target container
-    const sourcesIcons = await targetContainer.$$(sourcesSel);
+    const sourcesIcons = await lastMessageContainer.$$(sourcesSel);
 
     if (sourcesIcons.length === 0) {
       logger.debug('No sources found in response');

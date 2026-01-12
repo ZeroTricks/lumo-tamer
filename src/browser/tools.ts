@@ -28,16 +28,16 @@ export async function processToolCalls(page: Page): Promise<ToolCall[] | null> {
   try {
     // Get the target container element handle from __lumoState
     // This ensures we're checking the same container that was observed during streaming
-    const targetContainerHandle = await page.evaluateHandle(() => window.__lumoState?.targetContainer);
-    const targetContainer = targetContainerHandle.asElement();
+    const lastMessageContainerHandle = await page.evaluateHandle(() => window.__lumoState?.lastMessageContainer);
+    const lastMessageContainer = lastMessageContainerHandle.asElement();
 
-    if (!targetContainer) {
+    if (!lastMessageContainer) {
       logger.debug('No target container found in __lumoState');
       return null;
     }
 
     // Query for <pre> elements within the target container
-    const preElementHandles = await targetContainer.$$('pre');
+    const preElementHandles = await lastMessageContainer.$$('pre');
     const count = preElementHandles.length;
 
     logger.debug(`Found ${count} <pre> elements in target container`);
