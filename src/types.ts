@@ -6,11 +6,9 @@ declare global {
   interface Window {
     __lumoState?: {
       observer: MutationObserver;
-      lastText: string;
-      textChanged: boolean;
-      completed: boolean;
       lastMessageContainer: Element;
     };
+    __responseMutationHandler?: (text: string, hasCompletionMarker: boolean) => void;
   }
 }
 

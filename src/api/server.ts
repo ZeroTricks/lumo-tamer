@@ -53,7 +53,7 @@ export class APIServer {
   private async getChatbox(): Promise<ChatboxInteractor> {
     if (!this.chatbox) {
       const page = await this.browserManager.getPage();
-      this.chatbox = new ChatboxInteractor(page);
+      this.chatbox = new ChatboxInteractor(page, this.browserManager);
     }
     return this.chatbox;
   }
