@@ -15,6 +15,15 @@ const ipEndPoint = browserConfig.cdpEndpoint.replace(host, address);
 export class BrowserManager {
   private context: BrowserContext | null = null;
   private page: Page | null = null;
+  private responseMutationHandler: ((text: string, hasCompletionMarker: boolean) => void) | null = null;
+
+  /**
+   * Sets the mutation callback that will be invoked when browser mutations occur.
+   * This should be called by ChatboxInteractor before streaming responses.
+   */
+  setResponseMutationHandler(callback: (text: string, hasCompletionMarker: boolean) => void): void {
+    this.responseMutationHandler = callback;
+  }
 
   async initialize(): Promise<void> {
     logger.debug('Initializing browser...');
@@ -24,20 +33,26 @@ export class BrowserManager {
 
     // Get the default context (remote browsers don't support persistent contexts the same way)
     const contexts = browser.contexts();
-    this.context = contexts.length > 0 ? contexts[0] : await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    });
+    this.context = contexts.length > 0 ? contexts[0] : await browser.newContext();
 
     logger.info(`Connected to remote browser at ${browserConfig.cdpEndpoint} (${ipEndPoint})`);
 
     // Get or create page
     this.page = this.context.pages()[0] || await this.context.newPage();
 
-    // Stub the __name helper to prevent TypeScript/tsx injection errors
+    // Expose binding for mutation observer to call from browser context
+    await this.page.exposeBinding('__responseMutationHandler', (source, text: string, hasCompletionMarker: boolean) => {
+      this.responseMutationHandler?.(text, hasCompletionMarker);
+    });
+    logger.debug('Registered __responseMutationHandler binding');
+
     await this.page.addInitScript(() => {
       const w = window as any;
+      
+      // Stub the __name helper to prevent TypeScript/tsx injection errors
       w.__name = (func: any) => func;
+
+      // Allow for logger calls inside page contexts (console.logs don't work there anyway)
       w.logger = {
         ...w['console'],
         debug: w['console'].log,
