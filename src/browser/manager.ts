@@ -1,6 +1,6 @@
 import { chromium, BrowserContext, Page } from 'playwright';
 import { browserConfig, chatboxSelectors } from '../config.js';
-import {promises as dns, ADDRCONFIG} from 'dns';
+import { promises as dns, ADDRCONFIG } from 'dns';
 import { logger } from '../logger.js';
 
 const host = new URL(browserConfig.cdpEndpoint).hostname;
@@ -36,7 +36,13 @@ export class BrowserManager {
 
     // Stub the __name helper to prevent TypeScript/tsx injection errors
     await this.page.addInitScript(() => {
-      (window as any).__name = (func: any) => func;
+      const w = window as any;
+      w.__name = (func: any) => func;
+      w.logger = {
+        ...w['console'],
+        debug: w['console'].log,
+        info: w['console'].log,
+      };
     });
 
     // Forward browser console logs to Node.js
