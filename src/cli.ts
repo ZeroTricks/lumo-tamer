@@ -6,11 +6,16 @@
  */
 
 import * as readline from 'readline';
-import { createApiAdapter, loadAuthTokens, getTokenAgeHours, areTokensExpired } from '../src/proton/api-adapter.js';
-import { SimpleLumoClient } from '../src/proton/simple-client.js';
-import type { Turn } from '../src/proton/types.js';
-import { protonConfig } from '../src/config.js';
-import logger from '../src/logger.js';
+import {
+    createApiAdapter,
+    loadAuthTokens,
+    getTokenAgeHours,
+    areTokensExpired,
+    SimpleLumoClient,
+    type Turn,
+} from './lumo-client/index.js';
+import { protonConfig } from './config.js';
+import logger from './logger.js';
 
 const BUSY_INDICATOR = '...';
 

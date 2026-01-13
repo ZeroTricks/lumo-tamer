@@ -1,9 +1,3 @@
-/**
- * Lumo public key for U2L encryption
- * Source: applications/lumo/src/app/keys.ts
- * See UPSTREAM.md for version info
- */
-
 /*
   lumo-prod-2.pub.gpg: OpenPGP Certificate.
 

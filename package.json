@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "dev:debug": "tsx watch --inspect=0.0.0.0:9229 src/index.ts",
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
     "docker:dev": "docker-compose -f docker-compose.dev.yml up",
@@ -16,7 +16,7 @@
     "docker:shell": "docker-compose -f docker-compose.dev.yml exec lumo-bridge-dev /bin/bash",
     "docker:logs": "docker-compose -f docker-compose.dev.yml logs -f",
     "extract-token": "tsx scripts/extract-auth-token.ts",
-    "lumo": "tsx scripts/lumo-cli.ts",
+    "lumo": "tsx src/cli.ts",
     "sync-upstream": "./scripts/sync-upstream.sh"
   },
   "keywords": [
@@ -45,6 +45,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.11.5",
     "@types/uuid": "^9.0.8",
+    "tsc-alias": "^1.8.16",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   }

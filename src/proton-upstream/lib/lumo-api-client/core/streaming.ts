@@ -1,14 +1,8 @@
-/**
- * SSE stream processor
- * Source: applications/lumo/src/app/lib/lumo-api-client/core/streaming.ts
- * See UPSTREAM.md for version info
- */
-
-import type { GenerationToFrontendMessage } from './types.js';
-import { isGenerationToFrontendMessage } from './types.js';
+import type { GenerationToFrontendMessage } from './types';
+import { isGenerationToFrontendMessage } from './types';
 
 /**
- * Processes streaming data chunks from the API (SSE format)
+ * Processes streaming data chunks from the API
  */
 export class StreamProcessor {
     private leftover = ''; // Remember last line if it was incomplete

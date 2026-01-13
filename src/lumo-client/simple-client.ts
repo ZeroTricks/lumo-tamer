@@ -1,16 +1,17 @@
 /**
- * Simple Lumo API client for PoC
+ * Simple Lumo API client
  * Minimal implementation with U2L encryption support
  */
 
-import { decryptString } from './crypto.js';
+import { decryptString } from '../proton-upstream/crypto/index.js';
 import {
+    DEFAULT_LUMO_PUB_KEY,
     encryptTurns,
     generateRequestId,
     generateRequestKey,
     prepareEncryptedRequestKey,
-} from './encryption.js';
-import { StreamProcessor } from './streaming.js';
+} from '../proton-upstream/lib/lumo-api-client/core/encryption.js';
+import { StreamProcessor } from '../proton-upstream/lib/lumo-api-client/core/streaming.js';
 import type {
     AesGcmCryptoKey,
     Api,
@@ -68,7 +69,7 @@ export class SimpleLumoClient {
         if (enableEncryption) {
             requestKey = await generateRequestKey();
             requestId = generateRequestId();
-            requestKeyEncB64 = await prepareEncryptedRequestKey(requestKey);
+            requestKeyEncB64 = await prepareEncryptedRequestKey(requestKey, DEFAULT_LUMO_PUB_KEY);
             processedTurns = await encryptTurns(turns, requestKey, requestId);
         }
 
@@ -207,7 +208,7 @@ export class SimpleLumoClient {
         if (enableEncryption) {
             requestKey = await generateRequestKey();
             requestId = generateRequestId();
-            requestKeyEncB64 = await prepareEncryptedRequestKey(requestKey);
+            requestKeyEncB64 = await prepareEncryptedRequestKey(requestKey, DEFAULT_LUMO_PUB_KEY);
             processedTurns = await encryptTurns(turns, requestKey, requestId);
         }
 
