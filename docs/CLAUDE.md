@@ -54,9 +54,6 @@ All in `config.yaml`, loaded via [src/config.ts](../src/config.ts):
 ### Customize Login Detection
 Edit `isLoggedIn()` in [src/browser/chatbox.ts](../src/browser/chatbox.ts)
 
-### Adjust Response Detection
-Edit `waitForResponse()` or `streamResponse()` in [src/browser/chatbox.ts](../src/browser/chatbox.ts)
-
 ## Testing
 
 ```bash

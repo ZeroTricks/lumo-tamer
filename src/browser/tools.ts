@@ -23,7 +23,7 @@ import type { ToolCall } from '../types.js';
  * @returns Array of tool calls with name and arguments, or null if no tool calls found
  */
 export async function processToolCalls(page: Page): Promise<ToolCall[] | null> {
-  logger.debug('Checking for tool calls in response...');
+  // logger.debug('Checking for tool calls in response...');
 
   try {
     // Get the target container element handle from __lumoState
@@ -32,7 +32,7 @@ export async function processToolCalls(page: Page): Promise<ToolCall[] | null> {
     const lastMessageContainer = lastMessageContainerHandle.asElement();
 
     if (!lastMessageContainer) {
-      logger.debug('No target container found in __lumoState');
+      logger.warn('No target container found in __lumoState');
       return null;
     }
 
@@ -43,7 +43,7 @@ export async function processToolCalls(page: Page): Promise<ToolCall[] | null> {
     logger.debug(`Found ${count} <pre> elements in target container`);
 
     if (count === 0) {
-      logger.debug('No <pre> elements found in response');
+      // logger.debug('No <pre> elements found in response');
       return null;
     }
 
@@ -55,7 +55,7 @@ export async function processToolCalls(page: Page): Promise<ToolCall[] | null> {
       const content = (await preElement.textContent())?.trim() || '';
 
       if (!content) {
-        logger.debug(`<pre>[${i}] is empty, skipping`);
+        // logger.debug(`<pre>[${i}] is empty, skipping`);
         continue;
       }
 
@@ -69,7 +69,7 @@ export async function processToolCalls(page: Page): Promise<ToolCall[] | null> {
             arguments: parsed.arguments
           };
 
-          logger.debug(`<pre>[${i}] Valid tool call: ${toolCall.name}`);
+          logger.debug(`<pre>[${i}] Tool called: ${toolCall.name}`);
           results.push(toolCall);
         } else {
           logger.warn(`<pre>[${i}] Invalid structure (missing 'name' or 'arguments')`);
