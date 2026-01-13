@@ -4,7 +4,7 @@
  */
 
 import { readFileSync } from 'fs';
-import type { Api, ApiOptions, AuthTokens } from './types.js';
+import type { AuthTokens, Api, ApiOptions } from './types.js';
 import { protonConfig } from '../config.js';
 
 /**
