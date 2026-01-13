@@ -1,7 +1,8 @@
 import pino from 'pino';
+import { serverConfig } from './config.js';
 
-// Get log level from environment, default to 'debug'
-const logLevel = (process.env.LOG_LEVEL || 'debug').toLowerCase();
+// Get log level from config
+const logLevel = serverConfig.logLevel;
 
 // Create logger instance with pretty printing for development
 export const logger = pino({

@@ -5,3 +5,4 @@ browser-data/
 *.log
 .DS_Store
 todo.md
+sessions/auth-tokens.json

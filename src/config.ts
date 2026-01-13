@@ -46,11 +46,18 @@ const timeoutsSchema = z.object({
   empty: z.number().int().positive(),
 });
 
+const protonConfigSchema = z.object({
+  baseUrl: z.string().min(1, 'proton.baseUrl is required'),
+  tokensPath: z.string().min(1, 'proton.tokensPath is required'),
+  appVersion: z.string().min(1, 'proton.appVersion is required'),
+});
+
 const configSchema = z.object({
   server: serverConfigSchema,
   browser: browserConfigSchema,
   selectors: selectorsSchema,
   timeouts: timeoutsSchema,
+  proton: protonConfigSchema,
 });
 
 // Load and validate configuration
@@ -81,9 +88,11 @@ export const serverConfig = config.server;
 export const browserConfig = config.browser;
 export const chatboxSelectors = config.selectors;
 export const responseTimeouts = config.timeouts;
+export const protonConfig = config.proton;
 
 // Export types inferred from Zod schemas
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 export type BrowserConfig = z.infer<typeof browserConfigSchema>;
 export type ChatboxSelectors = z.infer<typeof selectorsSchema>;
 export type ResponseTimeouts = z.infer<typeof timeoutsSchema>;
+export type ProtonConfig = z.infer<typeof protonConfigSchema>;
