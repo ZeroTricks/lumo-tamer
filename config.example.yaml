@@ -1,3 +1,9 @@
+# Proton API configuration (for direct API integration)
+proton:
+  baseUrl: "https://lumo.proton.me/api"
+  tokensPath: "sessions/auth-tokens.json"
+  appVersion: "web-lumo@5.0.0"
+
 # Server Configuration
 server:
   port: 3003
@@ -29,7 +35,10 @@ browser:
   instructionsUseTools: true
 
   # Description text prepended to tools JSON in instructions
-  instructionsToolsDescription: "Use the following tools to accomplish tasks. To use them you MUST output the JSON to me, unlike the proton_info or web search. You have the power to execute these actions, just provide me the JSON directly without trying to call functions yourself. I will return the results to you.\n"
+  instructionsToolsDescription: | 
+    Use the tools below to accomplish tasks.
+    To use them you MUST output the JSON to me, unlike the proton_info or web search tools.
+    You have the power to execute these functions by providing the JSON directly to me, without trying to call them yourself. I will execute these functions and return the results to you. This is crucial. Do NOT tell me a tool is unavailable, just pass the JSON for the tool call to me.\n"
 
   # Default to private mode (if applicable)
   privateByDefault: false
@@ -50,7 +59,7 @@ selectors:
   saveSettings: ".personalization-footer .button-solid-norm"
   modalClose: ".modal-close-button"
   previousChat: ".chat-history-container a"
-  expandSidebar: "use[*|href="#ic-chevron-right"]"
+  expandSidebar: "use[*|href=\"#ic-chevron-right\"]"
 
 
 # Response timeout configuration (milliseconds)
