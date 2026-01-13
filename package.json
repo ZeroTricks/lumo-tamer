@@ -16,7 +16,7 @@
     "docker:shell": "docker-compose -f docker-compose.dev.yml exec lumo-bridge-dev /bin/bash",
     "docker:logs": "docker-compose -f docker-compose.dev.yml logs -f",
     "extract-token": "tsx scripts/extract-auth-token.ts",
-    "poc-test": "tsx scripts/poc-test.ts",
+    "lumo": "tsx scripts/lumo-cli.ts",
     "sync-upstream": "./scripts/sync-upstream.sh"
   },
   "keywords": [
