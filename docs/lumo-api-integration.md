@@ -96,7 +96,7 @@ Client Request → Express API → Queue → Lumo API Client → Proton Backend
 
 ## Proton WebClients Analysis
 
-### Reusable Components from `/tmp/WebClients/applications/lumo/`
+### Reusable Components from `WebClients/applications/lumo/`
 
 #### 1. **API Client Core** (Ready to Use)
 
@@ -224,7 +224,7 @@ data: {"type":"done"}
 
 **Implementation Steps:**
 
-1. **Copy from** `/tmp/WebClients/applications/lumo/`**:**
+1. **Copy from** `WebClients/applications/lumo/`**:**
    - `lib/lumo-api-client/core/` → `src/proton/lumo-api-client/`
    - `crypto/` utilities → `src/proton/crypto/`
    - `types.ts`, `types-api.ts` → `src/proton/types/`
@@ -480,10 +480,10 @@ class ProtonAuthClient {
 
 **Components Available in WebClients:**
 
-- SRP library: `/tmp/WebClients/packages/srp/lib/`
-- Password hashing: `/tmp/WebClients/packages/srp/lib/passwords.ts`
-- Auth API calls: `/tmp/WebClients/packages/shared/lib/api/auth.ts`
-- Session management: `/tmp/WebClients/packages/shared/lib/authentication/`
+- SRP library: `WebClients/packages/srp/lib/`
+- Password hashing: `WebClients/packages/srp/lib/passwords.ts`
+- Auth API calls: `WebClients/packages/shared/lib/api/auth.ts`
+- Session management: `WebClients/packages/shared/lib/authentication/`
 
 **Implementation:**
 
@@ -1159,7 +1159,7 @@ The direct API integration approach is **highly feasible** based on:
 
 **Components to Integrate:**
 
-1. Copy from `/tmp/WebClients/applications/lumo/`:
+1. Copy from `WebClients/applications/lumo/`:
    - `lib/lumo-api-client/core/` → Complete API client
    - `crypto/` utilities → Encryption helpers
    - Type definitions → Full type safety
@@ -1682,10 +1682,10 @@ With API access, we could add:
 
 **Files for Reference:**
 
-- WebClients SRP: `/tmp/WebClients/packages/srp/lib/`
-- Auth API: `/tmp/WebClients/packages/shared/lib/api/auth.ts`
-- LumoApiClient: `/tmp/WebClients/applications/lumo/src/app/lib/lumo-api-client/`
-- Session management: `/tmp/WebClients/packages/shared/lib/authentication/`
+- WebClients SRP: `WebClients/packages/srp/lib/`
+- Auth API: `WebClients/packages/shared/lib/api/auth.ts`
+- LumoApiClient: `WebClients/applications/lumo/src/app/lib/lumo-api-client/`
+- Session management: `WebClients/packages/shared/lib/authentication/`
 
 **External Resources:**
 

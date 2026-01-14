@@ -11,7 +11,7 @@ This document captures learnings from analyzing Proton's WebClients repository f
 ## Repository Structure
 
 ```
-/tmp/WebClients/
+WebClients/
 ├── applications/
 │   ├── lumo/                    # Lumo AI assistant application
 │   ├── mail/                    # Proton Mail
