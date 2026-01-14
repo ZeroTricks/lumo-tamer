@@ -7,6 +7,7 @@ import { ResponseEventEmitter } from './events.js';
 import { buildOutputItems } from './output-builder.js';
 import { createCompletedResponse } from './response-factory.js';
 import type { Turn } from '../../../lumo-client/index.js';
+import type { ConversationId } from '../../../persistence/index.js';
 
 export async function handleStreamingRequest(
   req: Request,
@@ -14,7 +15,8 @@ export async function handleStreamingRequest(
   deps: EndpointDependencies,
   request: OpenAIResponseRequest,
   turns: Turn[],
-  createdCallIds: Set<string>
+  createdCallIds: Set<string>,
+  conversationId?: ConversationId
 ): Promise<void> {
   // Streaming response with event-based format
   res.setHeader('Content-Type', 'text/event-stream');
@@ -107,6 +109,12 @@ export async function handleStreamingRequest(
         createdCallIds,
       });
 
+      // Persist assistant response if conversation store is available
+      if (conversationId && deps.conversationStore) {
+        deps.conversationStore.appendAssistantResponse(conversationId, accumulatedText);
+        logger.debug({ conversationId }, 'Persisted assistant response');
+      }
+
       // Event N-1: response.completed
       const completedResponse = createCompletedResponse(id, createdAt, request, output);
       emitter.emitResponseCompleted(completedResponse);
@@ -125,7 +133,8 @@ export async function handleNonStreamingRequest(
   deps: EndpointDependencies,
   request: OpenAIResponseRequest,
   turns: Turn[],
-  createdCallIds: Set<string>
+  createdCallIds: Set<string>,
+  conversationId?: ConversationId
 ): Promise<void> {
   // Determine if external tools (web_search, etc.) should be enabled
   const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
@@ -154,6 +163,12 @@ export async function handleNonStreamingRequest(
     itemId,
     createdCallIds,
   });
+
+  // Persist assistant response if conversation store is available
+  if (conversationId && deps.conversationStore) {
+    deps.conversationStore.appendAssistantResponse(conversationId, responseText);
+    logger.debug({ conversationId }, 'Persisted assistant response');
+  }
 
   const response = createCompletedResponse(id, createdAt, request, output);
 

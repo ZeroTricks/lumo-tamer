@@ -9,6 +9,8 @@ import { StreamingToolDetector } from '../streaming-tool-detector.js';
 import { isCommand, executeCommand } from '../commands.js';
 import type { Turn } from '../../lumo-client/index.js';
 
+// TODO: add conversation persistence, like /responses
+
 export function createChatCompletionsRouter(deps: EndpointDependencies): Router {
   const router = Router();
 

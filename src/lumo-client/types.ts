@@ -41,4 +41,25 @@ export interface AuthTokens {
     }>;
     localStorage?: Record<string, string>;
     extractedAt: string;
+    // Extended auth data for conversation persistence
+    persistedSession?: PersistedSessionData;
+}
+
+// Persisted session structure (from Proton localStorage ps-{localID})
+export interface PersistedSessionData {
+    localID: number;
+    UserID: string;
+    UID: string;
+    blob?: string;              // Encrypted blob containing keyPassword (base64)
+    payloadVersion: 1 | 2;      // Encryption version
+    persistedAt: number;
+    // ClientKey fetched from API, used to decrypt blob
+    clientKey?: string;
+}
+
+// Decrypted session blob structure
+export interface DecryptedSessionBlob {
+    keyPassword: string;        // The mailbox password
+    type: 'default' | 'offline';
+    offlineKeyPassword?: string;
 }

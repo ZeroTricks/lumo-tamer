@@ -1,0 +1,124 @@
+/**
+ * Persistence types for conversation storage
+ * Compatible with Proton Lumo webclient format
+ */
+
+// Unique identifiers
+export type ConversationId = string;   // UUID format
+export type MessageId = string;        // UUID format
+export type SpaceId = string;          // UUID format
+export type RemoteId = string;         // Server-assigned ID
+
+// Message roles matching Lumo format
+export type MessageRole = 'user' | 'assistant' | 'system' | 'tool_call' | 'tool_result';
+
+// Message status
+export type MessageStatus = 'pending' | 'streaming' | 'completed' | 'failed';
+
+// Conversation status
+export type ConversationStatus = 'generating' | 'completed';
+
+/**
+ * Conversation metadata
+ * Public fields that can be stored unencrypted
+ */
+export interface ConversationMetadata {
+    id: ConversationId;
+    spaceId: SpaceId;
+    createdAt: number;          // Unix timestamp
+    updatedAt: number;          // Unix timestamp
+    starred: boolean;
+}
+
+/**
+ * Conversation private data (encrypted)
+ */
+export interface ConversationPrivate {
+    title: string;
+}
+
+/**
+ * Full conversation record
+ */
+export interface Conversation extends ConversationMetadata {
+    title: string;              // Decrypted
+    status: ConversationStatus;
+}
+
+/**
+ * Message public fields
+ */
+export interface MessagePublic {
+    id: MessageId;
+    conversationId: ConversationId;
+    createdAt: number;          // Unix timestamp
+    role: MessageRole;
+    parentId?: MessageId;       // For branching conversations
+    status: MessageStatus;
+}
+
+/**
+ * Message private data (encrypted)
+ */
+export interface MessagePrivate {
+    content: string;
+    context?: string;
+    toolCall?: string;          // JSON string of tool call
+    toolResult?: string;        // JSON string of tool result
+}
+
+/**
+ * Full message record
+ */
+export interface Message extends MessagePublic, MessagePrivate {}
+
+/**
+ * In-memory conversation state
+ */
+export interface ConversationState {
+    metadata: ConversationMetadata;
+    title: string;
+    status: ConversationStatus;
+    messages: Message[];
+    // Sync tracking
+    dirty: boolean;             // Needs sync to server
+    remoteId?: RemoteId;        // Server-assigned ID (if synced)
+    lastSyncedAt?: number;      // Last successful sync timestamp
+}
+
+/**
+ * Pending change for sync queue
+ */
+export type PendingChange =
+    | { type: 'create_conversation'; conversation: ConversationState }
+    | { type: 'update_conversation'; conversationId: ConversationId; updates: Partial<ConversationMetadata & ConversationPrivate> }
+    | { type: 'create_message'; message: Message }
+    | { type: 'delete_conversation'; conversationId: ConversationId };
+
+/**
+ * Store configuration
+ */
+export interface PersistenceConfig {
+    enabled: boolean;
+    syncInterval: number;           // ms between sync attempts
+    maxConversationsInMemory: number;
+    defaultSpaceName: string;
+}
+
+/**
+ * Message fingerprint for deduplication
+ */
+export interface MessageFingerprint {
+    hash: string;               // SHA-256 of role + content
+    role: MessageRole;
+    index: number;              // Position in conversation
+}
+
+/**
+ * ID mapping between local and remote
+ */
+export interface IdMapEntry {
+    localId: string;
+    remoteId: RemoteId;
+    type: 'space' | 'conversation' | 'message';
+}
