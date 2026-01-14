@@ -2,9 +2,22 @@
  * Converts OpenAI message format to Lumo Turn format
  */
 
-import type { ChatMessage, ResponseInputItem } from './types.js';
+import type { ChatMessage, ResponseInputItem, OpenAITool } from './types.js';
 import type { Turn } from '../lumo-client/index.js';
 import { instructionsConfig } from '../config.js';
+
+/**
+ * Build tool instructions to append to message.
+ * Combines instructions.forTools config with JSON representation of provided tools.
+ *
+ * @param tools - Array of OpenAI tool definitions
+ * @returns Formatted instruction string for tools
+ */
+export function buildToolsInstruction(tools: OpenAITool[]): string {
+  const forTools = instructionsConfig?.forTools ?? '';
+  const toolsJson = JSON.stringify(tools, null, 2);
+  return `${forTools}\n\nAvailable tools:\n${toolsJson}`;
+}
 
 /**
  * Compute effective instructions by combining config defaults with request instructions.
@@ -12,19 +25,36 @@ import { instructionsConfig } from '../config.js';
  * - If request has instructions and append=true: default + request
  * - If request has instructions and append=false: request only
  * - If no request instructions: default (or undefined)
+ * - If toolsInstruction provided, append it at the end
+ *
+ * @param requestInstructions - System/developer message from request
+ * @param toolsInstruction - Optional tools instruction (from buildToolsInstruction)
  */
-function getEffectiveInstructions(requestInstructions?: string): string | undefined {
+function getEffectiveInstructions(
+  requestInstructions?: string,
+  toolsInstruction?: string
+): string | undefined {
   const defaultInstructions = instructionsConfig?.default;
   const append = instructionsConfig?.append ?? false;
 
+  let result: string | undefined;
+
   if (requestInstructions) {
     if (append && defaultInstructions) {
-      return `${defaultInstructions}\n\n${requestInstructions}`;
+      result = `${defaultInstructions}\n\n${requestInstructions}`;
+    } else {
+      result = requestInstructions;
     }
-    return requestInstructions;
+  } else {
+    result = defaultInstructions;
   }
 
-  return defaultInstructions;
+  // Append tools instruction if provided
+  if (toolsInstruction) {
+    result = result ? `${result}\n\n${toolsInstruction}` : toolsInstruction;
+  }
+
+  return result;
 }
 
 /**
@@ -72,10 +102,14 @@ function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: stri
 
 /**
  * Convert OpenAI ChatMessage[] to Lumo Turn[] with system message injection.
+ *
+ * @param messages - Array of chat messages
+ * @param tools - Optional array of tool definitions (triggers legacy tool mode)
  */
-export function convertMessagesToTurns(messages: ChatMessage[]): Turn[] {
+export function convertMessagesToTurns(messages: ChatMessage[], tools?: OpenAITool[]): Turn[] {
   const systemContent = extractSystemMessage(messages);
-  const instructions = getEffectiveInstructions(systemContent);
+  const toolsInstruction = tools && tools.length > 0 ? buildToolsInstruction(tools) : undefined;
+  const instructions = getEffectiveInstructions(systemContent, toolsInstruction);
   return convertChatMessagesToTurns(messages, instructions);
 }
 

@@ -24,11 +24,15 @@ const instructionsConfigSchema = z.object({
   forTools: z.string().optional(),
 }).optional();
 
-// Browser config is now optional (kept for backwards compatibility)
+// Tools configuration
+const toolsConfigSchema = z.object({
+  enableWebSearch: z.boolean().optional().default(false),
+}).optional();
+
+// Browser config is now optional (kept for backwards compatibility with DOM selectors)
 const browserConfigSchema = z.object({
   url: z.string().optional(),
   cdpEndpoint: z.string().optional(),
-  enableWebSearch: z.boolean().optional(),
   showSources: z.boolean().optional(),
   privateByDefault: z.boolean().optional(),
 }).optional();
@@ -40,6 +44,7 @@ const browserConfigSchema = z.object({
 const configSchema = z.object({
   server: serverConfigSchema,
   proton: protonConfigSchema,
+  tools: toolsConfigSchema,
   browser: browserConfigSchema,
   instructions: instructionsConfigSchema,
 });
@@ -71,6 +76,9 @@ const config = loadConfig();
 export const serverConfig = config.server;
 export const protonConfig = config.proton;
 
+// Tools config
+export const toolsConfig = config.tools;
+
 // Browser-related configs are optional and may be undefined
 export const browserConfig = config.browser;
 
@@ -80,5 +88,6 @@ export const instructionsConfig = config.instructions;
 // Export types inferred from Zod schemas
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 export type ProtonConfig = z.infer<typeof protonConfigSchema>;
+export type ToolsConfig = z.infer<typeof toolsConfigSchema>;
 export type BrowserConfig = z.infer<typeof browserConfigSchema>;
 export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;

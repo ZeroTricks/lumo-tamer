@@ -1,9 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse } from '../types.js';
-import { serverConfig } from '../../config.js';
+import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse, OpenAIToolCall } from '../types.js';
+import { serverConfig, toolsConfig } from '../../config.js';
 import { logger } from '../../logger.js';
 import { convertMessagesToTurns } from '../message-converter.js';
+import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../tool-parser.js';
+import { StreamingToolDetector } from '../streaming-tool-detector.js';
 import { isCommand, executeCommand } from '../commands.js';
 import type { Turn } from '../../lumo-client/index.js';
 
@@ -36,7 +38,8 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       }
 
       // Convert messages to Lumo turns (includes system message injection)
-      const turns = convertMessagesToTurns(request.messages);
+      // Pass tools to enable legacy tool instruction injection
+      const turns = convertMessagesToTurns(request.messages, request.tools);
 
       // Add to queue and process
       if (request.stream) {
@@ -135,36 +138,126 @@ async function handleStreamingRequest(
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
+  // Determine if external tools (web_search, etc.) should be enabled
+  const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
+
+  // Check if request has custom tools (legacy mode)
+  const hasCustomTools = request.tools && request.tools.length > 0;
+
   await deps.queue.add(async () => {
     const id = `chatcmpl-${randomUUID()}`;
     const created = Math.floor(Date.now() / 1000);
     const client = deps.getLumoClient();
 
+    // Create detector if custom tools are provided
+    const detector = hasCustomTools ? new StreamingToolDetector() : null;
+    const toolCallsEmitted: OpenAIToolCall[] = [];
+    let toolCallIndex = 0;
+
+    // Helper to emit content delta chunk
+    const emitContentDelta = (content: string) => {
+      if (!content) return;
+      const sseChunk: OpenAIStreamChunk = {
+        id,
+        object: 'chat.completion.chunk',
+        created,
+        model: request.model || serverConfig.apiModelName,
+        choices: [
+          {
+            index: 0,
+            delta: { content },
+            finish_reason: null,
+          },
+        ],
+      };
+      res.write(`data: ${JSON.stringify(sseChunk)}\n\n`);
+    };
+
+    // Helper to emit tool call delta chunk (complete tool call in one chunk)
+    const emitToolCallDelta = (index: number, callId: string, name: string, args: Record<string, unknown>) => {
+      const sseChunk: OpenAIStreamChunk = {
+        id,
+        object: 'chat.completion.chunk',
+        created,
+        model: request.model || serverConfig.apiModelName,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index,
+                  id: callId,
+                  type: 'function',
+                  function: {
+                    name,
+                    arguments: JSON.stringify(args),
+                  },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      };
+      res.write(`data: ${JSON.stringify(sseChunk)}\n\n`);
+    };
+
     try {
       await client.chatWithHistory(
         turns,
         (chunk: string) => {
-          // logger.debug(`[Server] Sending delta (${chunk.length} chars)`);
-          const sseChunk: OpenAIStreamChunk = {
-            id,
-            object: 'chat.completion.chunk',
-            created,
-            model: request.model || serverConfig.apiModelName,
-            choices: [
-              {
-                index: 0,
-                delta: { content: chunk },
-                finish_reason: null,
-              },
-            ],
-          };
-          res.write(`data: ${JSON.stringify(sseChunk)}\n\n`);
+          if (detector) {
+            // Use streaming tool detector
+            const { textToEmit, completedToolCalls } = detector.processChunk(chunk);
+
+            // Emit text delta if any
+            emitContentDelta(textToEmit);
+
+            // Emit tool call deltas for completed tools
+            for (const tc of completedToolCalls) {
+              const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
+              toolCallsEmitted.push({
+                id: callId,
+                type: 'function',
+                function: {
+                  name: tc.name,
+                  arguments: JSON.stringify(tc.arguments),
+                },
+              });
+
+              emitToolCallDelta(toolCallIndex++, callId, tc.name, tc.arguments);
+              logger.debug({ name: tc.name }, '[Server] Tool call emitted in stream');
+            }
+          } else {
+            // No tools - pass through directly
+            emitContentDelta(chunk);
+          }
         },
-        { enableEncryption: true, enableExternalTools: false }
+        { enableEncryption: true, enableExternalTools }
       );
       logger.debug('[Server] Stream completed');
 
-      // Send final chunk
+      // Finalize detector and emit any remaining content
+      if (detector) {
+        const { textToEmit, completedToolCalls } = detector.finalize();
+        emitContentDelta(textToEmit);
+
+        for (const tc of completedToolCalls) {
+          const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
+          toolCallsEmitted.push({
+            id: callId,
+            type: 'function',
+            function: {
+              name: tc.name,
+              arguments: JSON.stringify(tc.arguments),
+            },
+          });
+          emitToolCallDelta(toolCallIndex++, callId, tc.name, tc.arguments);
+        }
+      }
+
+      // Send final chunk with finish_reason
       const finalChunk: OpenAIStreamChunk = {
         id,
         object: 'chat.completion.chunk',
@@ -174,7 +267,7 @@ async function handleStreamingRequest(
           {
             index: 0,
             delta: {},
-            finish_reason: 'stop',
+            finish_reason: toolCallsEmitted.length > 0 ? 'tool_calls' : 'stop',
           },
         ],
       };
@@ -200,14 +293,44 @@ async function handleNonStreamingRequest(
   request: OpenAIChatRequest,
   turns: Turn[]
 ): Promise<void> {
+  // Determine if external tools (web_search, etc.) should be enabled
+  const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
+
+  // Check if request has custom tools (legacy mode)
+  const hasCustomTools = request.tools && request.tools.length > 0;
+
   const result = await deps.queue.add(async () => {
     const client = deps.getLumoClient();
     return await client.chatWithHistory(
       turns,
       undefined,
-      { enableEncryption: true, enableExternalTools: false }
+      { enableEncryption: true, enableExternalTools }
     );
   });
+
+  // Parse tool calls from response if custom tools were provided
+  let content = result;
+  let toolCalls: OpenAIToolCall[] | undefined;
+
+  if (hasCustomTools) {
+    const parsedToolCalls = extractToolCallsFromResponse(result);
+    if (parsedToolCalls) {
+      logger.debug({ count: parsedToolCalls.length }, '[Server] Tool calls detected');
+
+      // Convert to OpenAI format
+      toolCalls = parsedToolCalls.map((tc) => ({
+        id: `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+        type: 'function' as const,
+        function: {
+          name: tc.name,
+          arguments: JSON.stringify(tc.arguments),
+        },
+      }));
+
+      // Strip tool call JSON from content
+      content = stripToolCallsFromResponse(result, parsedToolCalls);
+    }
+  }
 
   const response: OpenAIChatResponse = {
     id: `chatcmpl-${randomUUID()}`,
@@ -219,9 +342,10 @@ async function handleNonStreamingRequest(
         index: 0,
         message: {
           role: 'assistant',
-          content: result,
+          content,
+          ...(toolCalls ? { tool_calls: toolCalls } : {}),
         },
-        finish_reason: 'stop',
+        finish_reason: toolCalls ? 'tool_calls' : 'stop',
       },
     ],
   };

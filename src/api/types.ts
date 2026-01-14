@@ -12,12 +12,38 @@ export interface ChatMessage {
   content: string;
 }
 
+// OpenAI tool definition
+export interface OpenAITool {
+  type: 'function';
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
+}
+
+// Tool call in response
+export interface OpenAIToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
 export interface OpenAIChatRequest {
   model: string;
   messages: ChatMessage[];
   stream?: boolean;
   temperature?: number;
   max_tokens?: number;
+  tools?: OpenAITool[];
+}
+
+// Extended chat message with optional tool calls
+export interface ChatMessageWithTools extends ChatMessage {
+  tool_calls?: OpenAIToolCall[];
 }
 
 export interface OpenAIChatResponse {
@@ -27,7 +53,7 @@ export interface OpenAIChatResponse {
   model: string;
   choices: Array<{
     index: number;
-    message: ChatMessage;
+    message: ChatMessageWithTools;
     finish_reason: string;
   }>;
   usage?: {
@@ -37,6 +63,24 @@ export interface OpenAIChatResponse {
   };
 }
 
+// Streaming tool call delta (used in OpenAI streaming format)
+export interface StreamingToolCallDelta {
+  index: number;
+  id?: string;
+  type?: 'function';
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+}
+
+// Delta in streaming chunks - can have content OR tool_calls
+export interface StreamingDelta {
+  role?: 'assistant';
+  content?: string;
+  tool_calls?: StreamingToolCallDelta[];
+}
+
 export interface OpenAIStreamChunk {
   id: string;
   object: 'chat.completion.chunk';
@@ -44,7 +88,7 @@ export interface OpenAIStreamChunk {
   model: string;
   choices: Array<{
     index: number;
-    delta: Partial<ChatMessage>;
+    delta: StreamingDelta;
     finish_reason: string | null;
   }>;
 }

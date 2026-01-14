@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest } from '../../types.js';
-import { serverConfig } from '../../../config.js';
+import { serverConfig, toolsConfig } from '../../../config.js';
 import { logger } from '../../../logger.js';
 import { ResponseEventEmitter } from './events.js';
 import { buildOutputItems } from './output-builder.js';
@@ -52,6 +52,9 @@ export async function handleStreamingRequest(
       // Event 4: response.content_part.added
       emitter.emitContentPartAdded(itemId, 0, 0);
 
+      // Determine if external tools (web_search, etc.) should be enabled
+      const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
+
       // Get response using SimpleLumoClient
       const responseText = await client.chatWithHistory(
         turns,
@@ -62,7 +65,7 @@ export async function handleStreamingRequest(
           // Event 5+: response.output_text.delta (multiple)
           emitter.emitOutputTextDelta(itemId, 0, 0, delta);
         },
-        { enableEncryption: true, enableExternalTools: false }
+        { enableEncryption: true, enableExternalTools }
       );
       logger.debug('[Server] Stream completed');
 
@@ -124,13 +127,16 @@ export async function handleNonStreamingRequest(
   turns: Turn[],
   createdCallIds: Set<string>
 ): Promise<void> {
+  // Determine if external tools (web_search, etc.) should be enabled
+  const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
+
   // Non-streaming response
   const responseText = await deps.queue.add(async () => {
     const client = deps.getLumoClient();
     return await client.chatWithHistory(
       turns,
       undefined,
-      { enableEncryption: true, enableExternalTools: false }
+      { enableEncryption: true, enableExternalTools }
     );
   });
 
