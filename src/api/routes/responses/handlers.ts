@@ -3,18 +3,17 @@ import { randomUUID } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest } from '../../types.js';
 import { serverConfig } from '../../../config.js';
 import { logger } from '../../../logger.js';
-import { ChatboxInteractor } from '../../../browser/chatbox.js';
 import { ResponseEventEmitter } from './events.js';
-import { buildOutputItems, ToolCall } from './output-builder.js';
+import { buildOutputItems } from './output-builder.js';
 import { createCompletedResponse } from './response-factory.js';
+import type { Turn } from '../../../lumo-client/index.js';
 
 export async function handleStreamingRequest(
   req: Request,
   res: Response,
   deps: EndpointDependencies,
   request: OpenAIResponseRequest,
-  inputText: string,
-  chatbox: ChatboxInteractor,
+  turns: Turn[],
   createdCallIds: Set<string>
 ): Promise<void> {
   // Streaming response with event-based format
@@ -29,6 +28,7 @@ export async function handleStreamingRequest(
     let accumulatedText = '';
 
     const emitter = new ResponseEventEmitter(res);
+    const client = deps.getLumoClient();
 
     try {
       // Event 1: response.created
@@ -52,45 +52,54 @@ export async function handleStreamingRequest(
       // Event 4: response.content_part.added
       emitter.emitContentPartAdded(itemId, 0, 0);
 
-      // Get response (handles both commands and regular messages)
-      const result = await chatbox.getResponse(inputText, (delta: string) => {
-        logger.debug(`[Server] Sending delta ( ${delta.length} chars)`);
-        accumulatedText += delta;
+      // Get response using SimpleLumoClient
+      const responseText = await client.chatWithHistory(
+        turns,
+        (delta: string) => {
+          // logger.debug(`[Server] Sending delta (${delta.length} chars)`);
+          accumulatedText += delta;
 
-        // Event 5+: response.output_text.delta (multiple)
-        emitter.emitOutputTextDelta(itemId, 0, 0, delta);
-      });
+          // Event 5+: response.output_text.delta (multiple)
+          emitter.emitOutputTextDelta(itemId, 0, 0, delta);
+        },
+        { enableEncryption: true, enableExternalTools: false }
+      );
       logger.debug('[Server] Stream completed');
 
       // Update accumulated text from result (in case of discrepancy)
-      accumulatedText = result.text;
+      accumulatedText = responseText;
 
       // Event N-4: response.output_text.done
       emitter.emitOutputTextDone(itemId, 0, 0, accumulatedText);
 
+
+
+      // Tool calls are not supported in API mode yet - pass null
+      const toolCalls = null;
+
       // Emit function call events if tool calls are present
-      if (result.toolCalls) {
-        for (let i = 0; i < result.toolCalls.length; i++) {
-          const toolCall = result.toolCalls[i];
-          const fcId = `fc-${randomUUID()}`;
-          const callId = `call-${randomUUID()}`;
+      // if (result.toolCalls) {
+      //   for (let i = 0; i < result.toolCalls.length; i++) {
+      //     const toolCall = result.toolCalls[i];
+      //     const fcId = `fc-${randomUUID()}`;
+      //     const callId = `call-${randomUUID()}`;
 
-          // Track this call_id as one we created
-          createdCallIds.add(callId);
+      //     // Track this call_id as one we created
+      //     createdCallIds.add(callId);
 
-          // Ensure arguments are JSON-encoded string
-          const argumentsJson = typeof toolCall.arguments === 'string'
-            ? toolCall.arguments
-            : JSON.stringify(toolCall.arguments);
+      //     // Ensure arguments are JSON-encoded string
+      //     const argumentsJson = typeof toolCall.arguments === 'string'
+      //       ? toolCall.arguments
+      //       : JSON.stringify(toolCall.arguments);
 
-          emitter.emitFunctionCallEvents(fcId, callId, toolCall.name, argumentsJson, 1 + i);
-        }
-      }
+      //     emitter.emitFunctionCallEvents(fcId, callId, toolCall.name, argumentsJson, 1 + i);
+      //   }
+      // }
 
-      // Build output array with message and function_call items
+      // Build output array with message item only (no tool calls)
       const output = buildOutputItems({
         text: accumulatedText,
-        toolCalls: result.toolCalls,
+        toolCalls,
         itemId,
         createdCallIds,
       });
@@ -112,23 +121,30 @@ export async function handleNonStreamingRequest(
   res: Response,
   deps: EndpointDependencies,
   request: OpenAIResponseRequest,
-  inputText: string,
-  chatbox: ChatboxInteractor,
+  turns: Turn[],
   createdCallIds: Set<string>
 ): Promise<void> {
   // Non-streaming response
-  const result = await deps.queue.add(async () => {
-    return await chatbox.getResponse(inputText);
+  const responseText = await deps.queue.add(async () => {
+    const client = deps.getLumoClient();
+    return await client.chatWithHistory(
+      turns,
+      undefined,
+      { enableEncryption: true, enableExternalTools: false }
+    );
   });
 
   const id = `resp-${randomUUID()}`;
   const itemId = `item-${randomUUID()}`;
   const createdAt = Math.floor(Date.now() / 1000);
 
-  // Build output array with message and function_call items
+  // Tool calls are not supported in API mode yet - pass null
+  const toolCalls = null;
+
+  // Build output array with message item only (no tool calls)
   const output = buildOutputItems({
-    text: result.text,
-    toolCalls: result.toolCalls,
+    text: responseText,
+    toolCalls,
     itemId,
     createdCallIds,
   });

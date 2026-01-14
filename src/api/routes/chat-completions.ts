@@ -3,8 +3,9 @@ import { randomUUID } from 'crypto';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse } from '../types.js';
 import { serverConfig } from '../../config.js';
 import { logger } from '../../logger.js';
-import { ChatboxInteractor } from '../../browser/chatbox.js';
-import { handleInstructions } from '../instructions.js';
+import { convertMessagesToTurns } from '../message-converter.js';
+import { isCommand, executeCommand } from '../commands.js';
+import type { Turn } from '../../lumo-client/index.js';
 
 export function createChatCompletionsRouter(deps: EndpointDependencies): Router {
   const router = Router();
@@ -18,22 +19,30 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
         return res.status(400).json({ error: 'Messages array is required' });
       }
 
-      // Handle developer message if present
-      await handleInstructions(request, deps);
-
       // Get the last user message
       const lastUserMessage = [...request.messages].reverse().find(m => m.role === 'user');
       if (!lastUserMessage) {
         return res.status(400).json({ error: 'No user message found' });
       }
 
-      const chatbox = await deps.getChatbox();
+      // Check for commands
+      if (isCommand(lastUserMessage.content)) {
+        const result = executeCommand(lastUserMessage.content);
+        if (request.stream) {
+          return handleCommandStreamingResponse(res, request, result.text);
+        } else {
+          return handleCommandNonStreamingResponse(res, request, result.text);
+        }
+      }
+
+      // Convert messages to Lumo turns (includes system message injection)
+      const turns = convertMessagesToTurns(request.messages);
 
       // Add to queue and process
       if (request.stream) {
-        await handleStreamingRequest(req, res, deps, request, lastUserMessage.content, chatbox);
+        await handleStreamingRequest(res, deps, request, turns);
       } else {
-        await handleNonStreamingRequest(req, res, deps, request, lastUserMessage.content, chatbox);
+        await handleNonStreamingRequest(res, deps, request, turns);
       }
     } catch (error) {
       logger.error('Error processing chat completion:');
@@ -45,15 +54,83 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
   return router;
 }
 
+function handleCommandStreamingResponse(
+  res: Response,
+  request: OpenAIChatRequest,
+  text: string
+): void {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const id = `chatcmpl-${randomUUID()}`;
+  const created = Math.floor(Date.now() / 1000);
+
+  // Send the text as a single chunk
+  const chunk: OpenAIStreamChunk = {
+    id,
+    object: 'chat.completion.chunk',
+    created,
+    model: request.model || serverConfig.apiModelName,
+    choices: [
+      {
+        index: 0,
+        delta: { content: text },
+        finish_reason: null,
+      },
+    ],
+  };
+  res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+
+  // Send final chunk
+  const finalChunk: OpenAIStreamChunk = {
+    id,
+    object: 'chat.completion.chunk',
+    created,
+    model: request.model || serverConfig.apiModelName,
+    choices: [
+      {
+        index: 0,
+        delta: {},
+        finish_reason: 'stop',
+      },
+    ],
+  };
+  res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
+
+function handleCommandNonStreamingResponse(
+  res: Response,
+  request: OpenAIChatRequest,
+  text: string
+): void {
+  const response: OpenAIChatResponse = {
+    id: `chatcmpl-${randomUUID()}`,
+    object: 'chat.completion',
+    created: Math.floor(Date.now() / 1000),
+    model: request.model || serverConfig.apiModelName,
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: text,
+        },
+        finish_reason: 'stop',
+      },
+    ],
+  };
+  res.json(response);
+}
+
 async function handleStreamingRequest(
-  req: Request,
   res: Response,
   deps: EndpointDependencies,
   request: OpenAIChatRequest,
-  message: string,
-  chatbox: ChatboxInteractor
-) {
-  // Streaming response
+  turns: Turn[]
+): Promise<void> {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -61,26 +138,30 @@ async function handleStreamingRequest(
   await deps.queue.add(async () => {
     const id = `chatcmpl-${randomUUID()}`;
     const created = Math.floor(Date.now() / 1000);
+    const client = deps.getLumoClient();
 
     try {
-      // Get response (handles both commands and regular messages)
-      await chatbox.getResponse(message, (delta: string) => {
-        logger.debug(`[Server] Sending delta (${delta.length} chars)`);
-        const chunk: OpenAIStreamChunk = {
-          id,
-          object: 'chat.completion.chunk',
-          created,
-          model: request.model || 'lumo',
-          choices: [
-            {
-              index: 0,
-              delta: { content: delta },
-              finish_reason: null,
-            },
-          ],
-        };
-        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-      });
+      await client.chatWithHistory(
+        turns,
+        (chunk: string) => {
+          // logger.debug(`[Server] Sending delta (${chunk.length} chars)`);
+          const sseChunk: OpenAIStreamChunk = {
+            id,
+            object: 'chat.completion.chunk',
+            created,
+            model: request.model || serverConfig.apiModelName,
+            choices: [
+              {
+                index: 0,
+                delta: { content: chunk },
+                finish_reason: null,
+              },
+            ],
+          };
+          res.write(`data: ${JSON.stringify(sseChunk)}\n\n`);
+        },
+        { enableEncryption: true, enableExternalTools: false }
+      );
       logger.debug('[Server] Stream completed');
 
       // Send final chunk
@@ -88,7 +169,7 @@ async function handleStreamingRequest(
         id,
         object: 'chat.completion.chunk',
         created,
-        model: request.model || 'lumo',
+        model: request.model || serverConfig.apiModelName,
         choices: [
           {
             index: 0,
@@ -114,16 +195,18 @@ async function handleStreamingRequest(
 }
 
 async function handleNonStreamingRequest(
-  req: Request,
   res: Response,
   deps: EndpointDependencies,
   request: OpenAIChatRequest,
-  message: string,
-  chatbox: ChatboxInteractor
-) {
-  // Non-streaming response
+  turns: Turn[]
+): Promise<void> {
   const result = await deps.queue.add(async () => {
-    return await chatbox.getResponse(message);
+    const client = deps.getLumoClient();
+    return await client.chatWithHistory(
+      turns,
+      undefined,
+      { enableEncryption: true, enableExternalTools: false }
+    );
   });
 
   const response: OpenAIChatResponse = {
@@ -136,7 +219,7 @@ async function handleNonStreamingRequest(
         index: 0,
         message: {
           role: 'assistant',
-          content: result.text,
+          content: result,
         },
         finish_reason: 'stop',
       },

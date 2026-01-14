@@ -12,6 +12,7 @@ import {
     prepareEncryptedRequestKey,
 } from '../proton-upstream/lib/lumo-api-client/core/encryption.js';
 import { StreamProcessor } from '../proton-upstream/lib/lumo-api-client/core/streaming.js';
+import { logger } from '../logger.js';
 import type {
     AesGcmCryptoKey,
     Api,
@@ -196,6 +197,18 @@ export class SimpleLumoClient {
             endpoint = DEFAULT_ENDPOINT,
         } = options;
 
+        // Log outgoing turns
+        logger.info({
+            turnCount: turns.length,
+            roles: turns.map(t => t.role),
+        }, '[LumoClient] Sending request');
+        for (const turn of turns) {
+            const preview = turn.content && turn.content.length > 200
+                ? turn.content.substring(0, 200) + '...'
+                : turn.content;
+            logger.debug({ role: turn.role, content: preview }, '[LumoClient] Turn');
+        }
+
         const tools: ToolName[] = enableExternalTools
             ? [...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]
             : DEFAULT_INTERNAL_TOOLS;
@@ -234,10 +247,21 @@ export class SimpleLumoClient {
             output: 'stream',
         })) as ReadableStream<Uint8Array>;
 
-        return this.processStream(stream, onChunk, {
+        const response = await this.processStream(stream, onChunk, {
             enableEncryption,
             requestKey,
             requestId,
         });
+
+        // Log response
+        const responsePreview = response.length > 200
+            ? response.substring(0, 200) + '...'
+            : response;
+        logger.info({
+            responseLength: response.length,
+        }, '[LumoClient] Response received');
+        logger.debug({ content: responsePreview }, '[LumoClient] Response content');
+
+        return response;
     }
 }

@@ -11,53 +11,33 @@ const serverConfigSchema = z.object({
   logLevel: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']),
 });
 
-const browserConfigSchema = z.object({
-  url: z.string().min(1, 'browser.url is required'),
-  cdpEndpoint: z.string().min(1, 'browser.cdpEndpoint is required'),
-  enableWebSearch: z.boolean(),
-  showSources: z.boolean(),
-  behaviour: z.string().min(1, 'browser.behaviour is required'),
-  behaviourAllowOverwrite: z.boolean(),
-  privateByDefault: z.boolean(),
-  instructionsUseTools: z.boolean(),
-  instructionsToolsDescription: z.string(),
-});
-
-const selectorsSchema = z.object({
-  input: z.string().min(1, 'selectors.input is required'),
-  messages: z.string().min(1, 'selectors.messages is required'),
-  contentElements: z.string().min(1, 'selectors.contentElements is required'),
-  messageCompletionMarker: z.string().min(1, 'selectors.messageCompletionMarker is required'),
-  webSearchToggle: z.string().min(1, 'selectors.webSearchToggle is required'),
-  sources: z.string().min(1, 'selectors.sources is required'),
-  newChatButton: z.string().min(1, 'selectors.newChatButton is required'),
-  privateButton: z.string().min(1, 'selectors.privateButton is required'),
-  settingsCog: z.string().min(1, 'selectors.settingsCog is required'),
-  personalizationMenu: z.string().min(1, 'selectors.personalizationMenu is required'),
-  behaviourField: z.string().min(1, 'selectors.behaviourField is required'),
-  saveSettings: z.string().min(1, 'selectors.saveSettings is required'),
-  modalClose: z.string().min(1, 'selectors.modalClose is required'),
-  previousChat: z.string().min(1, 'selectors.previousChat is required'),
-  expandSidebar: z.string().min(1, 'selectors.expandSidebar is required'),
-});
-
-const timeoutsSchema = z.object({
-  withText: z.number().int().positive(),
-  empty: z.number().int().positive(),
-});
-
 const protonConfigSchema = z.object({
   baseUrl: z.string().min(1, 'proton.baseUrl is required'),
   tokensPath: z.string().min(1, 'proton.tokensPath is required'),
   appVersion: z.string().min(1, 'proton.appVersion is required'),
 });
 
+// Browser config is now optional (kept for backwards compatibility)
+const browserConfigSchema = z.object({
+  url: z.string().optional(),
+  cdpEndpoint: z.string().optional(),
+  enableWebSearch: z.boolean().optional(),
+  showSources: z.boolean().optional(),
+  behaviour: z.string().optional(),
+  behaviourAllowOverwrite: z.boolean().optional(),
+  privateByDefault: z.boolean().optional(),
+  instructionsUseTools: z.boolean().optional(),
+  instructionsToolsDescription: z.string().optional(),
+}).optional();
+
+
+
+
+
 const configSchema = z.object({
   server: serverConfigSchema,
-  browser: browserConfigSchema,
-  selectors: selectorsSchema,
-  timeouts: timeoutsSchema,
   proton: protonConfigSchema,
+  browser: browserConfigSchema,
 });
 
 // Load and validate configuration
@@ -85,14 +65,12 @@ const config = loadConfig();
 
 // Export configuration objects
 export const serverConfig = config.server;
-export const browserConfig = config.browser;
-export const chatboxSelectors = config.selectors;
-export const responseTimeouts = config.timeouts;
 export const protonConfig = config.proton;
+
+// Browser-related configs are optional and may be undefined
+export const browserConfig = config.browser;
 
 // Export types inferred from Zod schemas
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
-export type BrowserConfig = z.infer<typeof browserConfigSchema>;
-export type ChatboxSelectors = z.infer<typeof selectorsSchema>;
-export type ResponseTimeouts = z.infer<typeof timeoutsSchema>;
 export type ProtonConfig = z.infer<typeof protonConfigSchema>;
+export type BrowserConfig = z.infer<typeof browserConfigSchema>;
