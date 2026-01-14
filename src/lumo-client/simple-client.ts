@@ -34,7 +34,7 @@ const DEFAULT_EXTERNAL_TOOLS: ToolName[] = ['web_search', 'weather', 'stock', 'c
 const DEFAULT_ENDPOINT = 'ai/v1/chat';
 
 export class SimpleLumoClient {
-    constructor(private api: Api) {}
+    constructor(private api: Api) { }
 
     /**
      * Send a message and stream the response
@@ -82,9 +82,9 @@ export class SimpleLumoClient {
             targets: ['message'],
             ...(enableEncryption && requestKeyEncB64 && requestId
                 ? {
-                      request_key: requestKeyEncB64,
-                      request_id: requestId,
-                  }
+                    request_key: requestKeyEncB64,
+                    request_id: requestId,
+                }
                 : {}),
         };
 
@@ -197,17 +197,11 @@ export class SimpleLumoClient {
             endpoint = DEFAULT_ENDPOINT,
         } = options;
 
-        // Log outgoing turns
-        logger.info({
-            turnCount: turns.length,
-            roles: turns.map(t => t.role),
-        }, '[LumoClient] Sending request');
-        for (const turn of turns) {
-            const preview = turn.content && turn.content.length > 200
-                ? turn.content.substring(0, 200) + '...'
-                : turn.content;
-            logger.debug({ role: turn.role, content: preview }, '[LumoClient] Turn');
-        }
+        const turn = turns[turns.length - 1];
+        logger.info(`${turn.role}: ${turn.content && turn.content.length > 200
+            ? turn.content.substring(0, 200) + '...'
+            : turn.content
+        } `);
 
         const tools: ToolName[] = enableExternalTools
             ? [...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]
@@ -232,9 +226,9 @@ export class SimpleLumoClient {
             targets: ['message'],
             ...(enableEncryption && requestKeyEncB64 && requestId
                 ? {
-                      request_key: requestKeyEncB64,
-                      request_id: requestId,
-                  }
+                    request_key: requestKeyEncB64,
+                    request_id: requestId,
+                }
                 : {}),
         };
 
