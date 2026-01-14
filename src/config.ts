@@ -17,17 +17,20 @@ const protonConfigSchema = z.object({
   appVersion: z.string().min(1, 'proton.appVersion is required'),
 });
 
+// Instructions configuration
+const instructionsConfigSchema = z.object({
+  default: z.string().optional(),
+  append: z.boolean().optional().default(false),
+  forTools: z.string().optional(),
+}).optional();
+
 // Browser config is now optional (kept for backwards compatibility)
 const browserConfigSchema = z.object({
   url: z.string().optional(),
   cdpEndpoint: z.string().optional(),
   enableWebSearch: z.boolean().optional(),
   showSources: z.boolean().optional(),
-  behaviour: z.string().optional(),
-  behaviourAllowOverwrite: z.boolean().optional(),
   privateByDefault: z.boolean().optional(),
-  instructionsUseTools: z.boolean().optional(),
-  instructionsToolsDescription: z.string().optional(),
 }).optional();
 
 
@@ -38,6 +41,7 @@ const configSchema = z.object({
   server: serverConfigSchema,
   proton: protonConfigSchema,
   browser: browserConfigSchema,
+  instructions: instructionsConfigSchema,
 });
 
 // Load and validate configuration
@@ -70,7 +74,11 @@ export const protonConfig = config.proton;
 // Browser-related configs are optional and may be undefined
 export const browserConfig = config.browser;
 
+// Instructions config
+export const instructionsConfig = config.instructions;
+
 // Export types inferred from Zod schemas
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 export type ProtonConfig = z.infer<typeof protonConfigSchema>;
 export type BrowserConfig = z.infer<typeof browserConfigSchema>;
+export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;
