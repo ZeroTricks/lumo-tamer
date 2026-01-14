@@ -4,35 +4,61 @@
 
 import type { ChatMessage, ResponseInputItem } from './types.js';
 import type { Turn } from '../lumo-client/index.js';
+import { instructionsConfig } from '../config.js';
 
 /**
- * Convert OpenAI ChatMessage[] to Lumo Turn[] with system message injection.
+ * Compute effective instructions by combining config defaults with request instructions.
  *
- * Per Lumo's pattern, system/developer messages are injected as
- * "[Personal context: ...]" appended to the first user message.
+ * - If request has instructions and append=true: default + request
+ * - If request has instructions and append=false: request only
+ * - If no request instructions: default (or undefined)
  */
-export function convertMessagesToTurns(messages: ChatMessage[]): Turn[] {
-  const turns: Turn[] = [];
+function getEffectiveInstructions(requestInstructions?: string): string | undefined {
+  const defaultInstructions = instructionsConfig?.default;
+  const append = instructionsConfig?.append ?? false;
 
-  // Find system/developer message for context injection
+  if (requestInstructions) {
+    if (append && defaultInstructions) {
+      return `${defaultInstructions}\n\n${requestInstructions}`;
+    }
+    return requestInstructions;
+  }
+
+  return defaultInstructions;
+}
+
+/**
+ * Extract system/developer message content from a ChatMessage array.
+ */
+function extractSystemMessage(messages: ChatMessage[]): string | undefined {
   const systemMsg = messages.find(m =>
     m.role === 'system' || (m.role as string) === 'developer'
   );
+  return systemMsg?.content;
+}
 
-  let systemInjected = false;
+/**
+ * Core conversion: ChatMessage[] to Turn[] with instruction injection.
+ *
+ * Per Lumo's pattern, instructions are injected as
+ * "[Personal context: ...]" appended to the first user message.
+ */
+function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: string): Turn[] {
+  const turns: Turn[] = [];
+  let instructionsInjected = false;
 
   for (const msg of messages) {
-    // Skip system/developer messages - they get injected into first user message
+    // Skip system/developer messages - they're handled via instructions parameter
     if (msg.role === 'system' || (msg.role as string) === 'developer') {
       continue;
     }
 
     let content = msg.content;
 
-    // Inject system context into first user message (per Lumo's pattern)
-    if (msg.role === 'user' && systemMsg && !systemInjected) {
-      content = `${content}\n\n[Personal context: ${systemMsg.content}]`;
-      systemInjected = true;
+    // Inject instructions into first user message
+    if (msg.role === 'user' && instructions && !instructionsInjected) {
+      content = `${content}\n\n[Personal context: ${instructions}]`;
+      instructionsInjected = true;
     }
 
     turns.push({
@@ -45,12 +71,21 @@ export function convertMessagesToTurns(messages: ChatMessage[]): Turn[] {
 }
 
 /**
+ * Convert OpenAI ChatMessage[] to Lumo Turn[] with system message injection.
+ */
+export function convertMessagesToTurns(messages: ChatMessage[]): Turn[] {
+  const systemContent = extractSystemMessage(messages);
+  const instructions = getEffectiveInstructions(systemContent);
+  return convertChatMessagesToTurns(messages, instructions);
+}
+
+/**
  * Convert OpenAI Responses API input to Lumo Turn[].
  * Handles both string input and message array input.
  */
 export function convertResponseInputToTurns(
   input: string | ResponseInputItem[] | undefined,
-  instructions?: string
+  requestInstructions?: string
 ): Turn[] {
   if (!input) {
     return [];
@@ -58,6 +93,7 @@ export function convertResponseInputToTurns(
 
   // Simple string input
   if (typeof input === 'string') {
+    const instructions = getEffectiveInstructions(requestInstructions);
     let content = input;
     if (instructions) {
       content = `${content}\n\n[Personal context: ${instructions}]`;
@@ -66,25 +102,24 @@ export function convertResponseInputToTurns(
   }
 
   // Array of messages - filter out function_call_output items
-  // Keep items that have role+content, excluding only function_call_output type
   const messages = input.filter((item): item is { role: string; content: string } => {
     if (typeof item !== 'object') return false;
-    // Exclude function_call_output items
     if ('type' in item && item.type === 'function_call_output') return false;
-    // Must have role and content
     return 'role' in item && 'content' in item;
   });
 
-  // Convert to ChatMessage format and use existing converter
+  // Convert to ChatMessage format
   const chatMessages: ChatMessage[] = messages.map(m => ({
     role: m.role as 'user' | 'assistant' | 'system',
     content: m.content,
   }));
 
-  // If instructions provided and no system message exists, add one
-  if (instructions && !chatMessages.some(m => m.role === 'system')) {
-    chatMessages.unshift({ role: 'system', content: instructions });
+  // If request instructions provided and no system message exists, add one
+  if (requestInstructions && !chatMessages.some(m => m.role === 'system')) {
+    chatMessages.unshift({ role: 'system', content: requestInstructions });
   }
 
-  return convertMessagesToTurns(chatMessages);
+  const systemContent = extractSystemMessage(chatMessages);
+  const instructions = getEffectiveInstructions(systemContent);
+  return convertChatMessagesToTurns(chatMessages, instructions);
 }

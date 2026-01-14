@@ -11,7 +11,21 @@ server:
   apiModelName: "lumo"
   logLevel: "debug"  # Levels: trace, debug, info, warn, error, fatal
 
-# Browser Configuration
+# Instructions configuration
+instructions:
+  # Default instructions when no system/developer message provided
+  default: "Always answer in plain text: no tables, no quote blocks, no lists, no layout, etc. Be concise."
+
+  # If true, append request instructions to default; if false, request replaces default
+  append: false
+
+  # Description text for tools (prepended to tools JSON)
+  forTools: |
+    Use the tools below to accomplish tasks.
+    To use them you MUST output the JSON to me, unlike the proton_info or web search tools.
+    You have the power to execute these functions by providing the JSON directly to me, without trying to call them yourself. I will execute these functions and return the results to you. This is crucial. Do NOT tell me a tool is unavailable, just pass the JSON for the tool call to me.
+
+# Browser Configuration (legacy, kept for backwards compatibility)
 browser:
   # Lumo chatbox URL
   url: "https://lumo.proton.me"
@@ -24,21 +38,6 @@ browser:
 
   # Show sources inline in responses
   showSources: true
-
-  # Default behavior instructions sent to Lumo
-  behaviour: "Always answer in plain text: no tables, no quote blocks, no lists, no layout, etc. Be concise."
-
-  # Allow per-request behavior override
-  behaviourAllowOverwrite: true
-
-  # Enable tools in developer instructions
-  instructionsUseTools: true
-
-  # Description text prepended to tools JSON in instructions
-  instructionsToolsDescription: | 
-    Use the tools below to accomplish tasks.
-    To use them you MUST output the JSON to me, unlike the proton_info or web search tools.
-    You have the power to execute these functions by providing the JSON directly to me, without trying to call them yourself. I will execute these functions and return the results to you. This is crucial. Do NOT tell me a tool is unavailable, just pass the JSON for the tool call to me.\n"
 
   # Default to private mode (if applicable)
   privateByDefault: false
