@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { randomUUID } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest, FunctionCallOutput } from '../../types.js';
 import { logger } from '../../../logger.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './handlers.js';
@@ -6,6 +7,7 @@ import { createEmptyResponse } from './response-factory.js';
 import { convertResponseInputToTurns } from '../../message-converter.js';
 import { isCommand, executeCommand } from '../../commands.js';
 import type { Turn } from '../../../lumo-client/index.js';
+import type { ConversationId } from '../../../persistence/index.js';
 
 export function createResponsesRouter(deps: EndpointDependencies): Router {
   const router = Router();
@@ -95,14 +97,28 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
         });
       }
 
+      // Extract or generate conversation ID for persistence
+      // For Responses API, use conversation_id, previous_response_id as continuation hint, or generate new
+      const conversationId: ConversationId = request.conversation_id
+        || request.previous_response_id
+        || `conv-${randomUUID()}`;
+
+      // Persist user message if conversation store is available
+      if (deps.conversationStore) {
+        deps.conversationStore.appendMessages(conversationId, [
+          { role: 'user', content: inputText }
+        ]);
+        logger.debug({ conversationId }, 'Persisted user message');
+      }
+
       // Convert input to turns (includes instructions injection)
       const turns = convertResponseInputToTurns(request.input, request.instructions);
 
       // Add to queue and process
       if (request.stream) {
-        await handleStreamingRequest(req, res, deps, request, turns, createdCallIds);
+        await handleStreamingRequest(req, res, deps, request, turns, createdCallIds, conversationId);
       } else {
-        await handleNonStreamingRequest(req, res, deps, request, turns, createdCallIds);
+        await handleNonStreamingRequest(req, res, deps, request, turns, createdCallIds, conversationId);
       }
     } catch (error) {
       logger.error('Error processing response:');

@@ -1,9 +1,11 @@
 import { RequestQueue } from '../queue/manager.js';
 import { SimpleLumoClient } from '../lumo-client/index.js';
+import type { ConversationStore } from '../persistence/index.js';
 
 export interface EndpointDependencies {
   queue: RequestQueue;
   getLumoClient: () => SimpleLumoClient;
+  conversationStore?: ConversationStore;
 }
 
 // Chat Completions API types
@@ -39,6 +41,8 @@ export interface OpenAIChatRequest {
   temperature?: number;
   max_tokens?: number;
   tools?: OpenAITool[];
+  // Custom extension for conversation persistence
+  conversation_id?: string;
 }
 
 // Extended chat message with optional tool calls
@@ -114,6 +118,10 @@ export interface OpenAIResponseRequest {
   store?: boolean;
   metadata?: Record<string, string>;
   tools?: any[];
+  // Continuation from previous response
+  previous_response_id?: string;
+  // Custom extension for conversation persistence
+  conversation_id?: string;
 }
 
 // Output item types for OpenAI Response

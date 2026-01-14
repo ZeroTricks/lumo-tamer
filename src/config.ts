@@ -37,6 +37,15 @@ const browserConfigSchema = z.object({
   privateByDefault: z.boolean().optional(),
 }).optional();
 
+// Persistence configuration for conversation storage
+// TODO: should defaults be here?
+const persistenceConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  syncInterval: z.number().default(30000),          // ms between sync attempts
+  maxConversationsInMemory: z.number().default(100),
+  defaultSpaceName: z.string().default('lumo-bridge'),
+}).optional();
+
 
 
 
@@ -47,6 +56,7 @@ const configSchema = z.object({
   tools: toolsConfigSchema,
   browser: browserConfigSchema,
   instructions: instructionsConfigSchema,
+  persistence: persistenceConfigSchema,
 });
 
 // Load and validate configuration
@@ -85,9 +95,13 @@ export const browserConfig = config.browser;
 // Instructions config
 export const instructionsConfig = config.instructions;
 
+// Persistence config
+export const persistenceConfig = config.persistence;
+
 // Export types inferred from Zod schemas
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 export type ProtonConfig = z.infer<typeof protonConfigSchema>;
 export type ToolsConfig = z.infer<typeof toolsConfigSchema>;
 export type BrowserConfig = z.infer<typeof browserConfigSchema>;
 export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;
+export type PersistenceConfig = z.infer<typeof persistenceConfigSchema>;
