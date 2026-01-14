@@ -42,27 +42,3 @@ browser:
 
   # Default to private mode (if applicable)
   privateByDefault: false
-
-# DOM Selectors for browser automation
-selectors:
-  input: ".tiptap"
-  messages: ".assistant-msg-container"
-  contentElements: "p, li, h1 , h2, h3, h4, h5, h6"
-  messageCompletionMarker: "use[*|href=\"#ic-thumb-up\"]"
-  webSearchToggle: ".web-search-button"
-  sources: ".source-favicon"
-  newChatButton: "use[*|href=\"#ic-pen-square\"]"
-  privateButton: ".button-ghost-norm"
-  settingsCog: "use[*|href=\"#ic-cog-wheel\"]"
-  personalizationMenu: ".sidebar-container use[*|href=\"#ic-sliders\"]"
-  behaviourField: ".personalization-field:nth-child(4) textarea"
-  saveSettings: ".personalization-footer .button-solid-norm"
-  modalClose: ".modal-close-button"
-  previousChat: ".chat-history-container a"
-  expandSidebar: "use[*|href=\"#ic-chevron-right\"]"
-
-
-# Response timeout configuration (milliseconds)
-timeouts:
-  withText: 5000   # Timeout when response has started
-  empty: 20000     # Timeout when waiting for initial response

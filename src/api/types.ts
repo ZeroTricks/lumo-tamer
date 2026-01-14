@@ -1,13 +1,9 @@
-import { BrowserManager } from '../browser/manager.js';
 import { RequestQueue } from '../queue/manager.js';
-import { ChatboxInteractor } from '../browser/chatbox.js';
-import { Page } from 'playwright';
+import { SimpleLumoClient } from '../lumo-client/index.js';
 
 export interface EndpointDependencies {
-  browserManager: BrowserManager;
   queue: RequestQueue;
-  getChatbox: () => Promise<ChatboxInteractor>;
-  getPage: () => Promise<Page>;
+  getLumoClient: () => SimpleLumoClient;
 }
 
 // Chat Completions API types

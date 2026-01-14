@@ -1,9 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { EndpointDependencies, OpenAIResponseRequest, FunctionCallOutput } from '../../types.js';
 import { logger } from '../../../logger.js';
-import { handleInstructions } from '../../instructions.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './handlers.js';
 import { createEmptyResponse } from './response-factory.js';
+import { convertResponseInputToTurns } from '../../message-converter.js';
+import { isCommand, executeCommand } from '../../commands.js';
+import type { Turn } from '../../../lumo-client/index.js';
 
 export function createResponsesRouter(deps: EndpointDependencies): Router {
   const router = Router();
@@ -19,10 +21,9 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
     try {
       const request: OpenAIResponseRequest = req.body;
 
-      // Handle developer message if present
-      await handleInstructions(request, deps);
-
       // Check for function_call_output in input array
+      // Note: Tool calls are not supported in API mode, but we keep the deduplication logic
+      // in case tool calls are added later
       if (Array.isArray(request.input)) {
         const functionOutputs = request.input
           .filter((item): item is FunctionCallOutput =>
@@ -40,14 +41,14 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
 
             logger.debug(`[Server] Processing function_call_output for call_id: ${lastFunctionOutput.call_id}`);
 
+            // Convert function output to a turn
             const outputString = JSON.stringify(lastFunctionOutput);
+            const turns: Turn[] = [{ role: 'user', content: outputString }];
 
-            // Send to chatbox
-            const chatbox = await deps.getChatbox();
             if (request.stream) {
-              await handleStreamingRequest(req, res, deps, request, outputString, chatbox, createdCallIds);
+              await handleStreamingRequest(req, res, deps, request, turns, createdCallIds);
             } else {
-              await handleNonStreamingRequest(req, res, deps, request, outputString, chatbox, createdCallIds);
+              await handleNonStreamingRequest(req, res, deps, request, turns, createdCallIds);
             }
             return; // Early return after processing
           }
@@ -56,7 +57,7 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
         }
       }
 
-      // Extract input text
+      // Extract input text for command checking and deduplication
       let inputText: string;
       if (typeof request.input === 'string') {
         inputText = request.input;
@@ -76,20 +77,32 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       // Check if this message has already been processed
       if (inputText === lastProcessedUserMessage) {
         logger.debug('[Server] Skipping duplicate user message');
-        // Return empty response without processing
         return res.json(createEmptyResponse(request));
       }
 
       // Update last processed message
       lastProcessedUserMessage = inputText;
 
-      const chatbox = await deps.getChatbox();
+      // Check for commands - return error for commands in API mode
+      if (isCommand(inputText)) {
+        const result = executeCommand(inputText);
+        logger.info(`Command received: ${inputText}, response: ${result.text}`);
+        return res.status(400).json({
+          error: {
+            message: result.text,
+            type: 'invalid_request_error',
+          }
+        });
+      }
+
+      // Convert input to turns (includes instructions injection)
+      const turns = convertResponseInputToTurns(request.input, request.instructions);
 
       // Add to queue and process
       if (request.stream) {
-        await handleStreamingRequest(req, res, deps, request, inputText, chatbox, createdCallIds);
+        await handleStreamingRequest(req, res, deps, request, turns, createdCallIds);
       } else {
-        await handleNonStreamingRequest(req, res, deps, request, inputText, chatbox, createdCallIds);
+        await handleNonStreamingRequest(req, res, deps, request, turns, createdCallIds);
       }
     } catch (error) {
       logger.error('Error processing response:');

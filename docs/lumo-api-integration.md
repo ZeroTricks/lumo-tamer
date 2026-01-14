@@ -1334,6 +1334,81 @@ Hello! How can I help you today?
 
 **See also:** [proton-webclients-analysis.md](proton-webclients-analysis.md) for detailed technical documentation
 
+**Status:** ✅ **Phase 2 COMPLETED** (2026-01-14)
+
+---
+
+## Phase 2 Results: Full API Integration
+
+### Summary
+
+Replaced browser-based DOM automation with direct API calls using `SimpleLumoClient`. The OpenAI-compatible API now uses the Lumo API directly.
+
+### Changes Made
+
+| Action | File | Description |
+|--------|------|-------------|
+| Modified | `src/api/types.ts` | `EndpointDependencies` now uses `SimpleLumoClient` |
+| Modified | `src/api/server.ts` | Removed `BrowserManager`, creates `SimpleLumoClient` with auth tokens |
+| Created | `src/api/message-converter.ts` | Converts OpenAI messages to Lumo turns with system message injection |
+| Created | `src/api/commands.ts` | Command stubs that return errors in API mode |
+| Modified | `src/api/routes/chat-completions.ts` | Uses `SimpleLumoClient.chatWithHistory()` |
+| Modified | `src/api/routes/responses/handlers.ts` | Uses `SimpleLumoClient` |
+| Modified | `src/api/routes/responses/index.ts` | Uses message converter |
+| Modified | `src/api/instructions.ts` | Converted to no-op (instructions in message converter) |
+| Modified | `src/index.ts` | Simplified entry point without browser |
+| Modified | `src/config.ts` | Made browser/selectors/timeouts optional |
+| Deleted | `src/browser/` | Entire directory removed |
+
+### Test Results
+
+```bash
+# Non-streaming
+$ curl -X POST http://localhost:3003/v1/chat/completions \
+  -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+  -d '{"model":"lumo","messages":[{"role":"user","content":"What is 2+2?"}],"stream":false}'
+{"id":"chatcmpl-...","choices":[{"message":{"content":"2 + 2 = 4."}}]}
+
+# Streaming
+$ curl -N -X POST ... -d '{"stream":true}'
+data: {"choices":[{"delta":{"content":"H"}}]}
+data: {"choices":[{"delta":{"content":"ello"}}]}
+...
+data: [DONE]
+
+# Multi-turn
+$ curl ... -d '{"messages":[{"role":"user","content":"My name is Mark S."},{"role":"assistant","content":"Hi!"},{"role":"user","content":"What is my name?"}]}'
+{"choices":[{"message":{"content":"Your name is Mark S."}}]}
+
+# Commands (stub)
+$ curl ... -d '{"messages":[{"role":"user","content":"/new"}]}'
+{"choices":[{"message":{"content":"Command /new is not available in API mode..."}}]}
+```
+
+### What Works
+- ✅ Non-streaming chat completions
+- ✅ Streaming chat completions (SSE)
+- ✅ Multi-turn conversations (full history)
+- ✅ System/developer message injection as `[Personal context: ...]`
+- ✅ Health endpoint
+- ✅ CLI (`npm run lumo "message"`)
+
+### Temporarily Disabled
+- ⏸️ Tool calls (pass `null` until API extraction implemented)
+- ⏸️ Slash commands (`/new`, `/private`, `/open`) - return error messages
+
+### Architecture
+
+```
+Client Request → Express API → Queue → SimpleLumoClient → Proton API
+                                              ↓
+                              Encryption/Decryption (Node.js)
+                                              ↓
+                              Stream Processing (SSE)
+```
+
+No browser required for chat operations.
+
 ---
 
 ## Behavior/Instructions Handling

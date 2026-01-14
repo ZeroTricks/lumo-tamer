@@ -1,8 +1,6 @@
 import express from 'express';
-import { BrowserManager } from '../browser/manager.js';
-import { ChatboxInteractor } from '../browser/chatbox.js';
 import { RequestQueue } from '../queue/manager.js';
-import { serverConfig } from '../config.js';
+import { serverConfig, protonConfig } from '../config.js';
 import { logger } from '../logger.js';
 import { setupAuthMiddleware, setupLoggingMiddleware } from './middleware.js';
 import { createHealthRouter } from './routes/health.js';
@@ -10,17 +8,39 @@ import { createModelsRouter } from './routes/models.js';
 import { createChatCompletionsRouter } from './routes/chat-completions.js';
 import { createResponsesRouter } from './routes/responses/index.js';
 import { EndpointDependencies } from './types.js';
+import {
+  SimpleLumoClient,
+  createApiAdapter,
+  loadAuthTokens,
+  getTokenAgeHours,
+  areTokensExpired,
+} from '../lumo-client/index.js';
 
 export class APIServer {
   private app: express.Application;
-  private browserManager: BrowserManager;
-  private chatbox: ChatboxInteractor | null = null;
+  private lumoClient: SimpleLumoClient;
   private queue: RequestQueue;
 
-  constructor(browserManager: BrowserManager) {
+  constructor() {
     this.app = express();
-    this.browserManager = browserManager;
     this.queue = new RequestQueue(1); // Process one message at a time
+
+    // Initialize Lumo client with auth tokens
+    logger.info({ tokensPath: protonConfig.tokensPath }, 'Loading auth tokens');
+    const tokens = loadAuthTokens();
+    const tokenAge = getTokenAgeHours(tokens);
+    logger.info({
+      extractedAt: tokens.extractedAt,
+      ageHours: tokenAge.toFixed(1),
+      cookieCount: tokens.cookies.length,
+    }, 'Tokens loaded');
+
+    if (areTokensExpired(tokens)) {
+      logger.warn('Some cookies have expired. Re-run extract-token if you get auth errors.');
+    }
+
+    const api = createApiAdapter(tokens);
+    this.lumoClient = new SimpleLumoClient(api);
 
     this.setupMiddleware();
     this.setupRoutes();
@@ -43,26 +63,16 @@ export class APIServer {
 
   private getDependencies(): EndpointDependencies {
     return {
-      browserManager: this.browserManager,
       queue: this.queue,
-      getChatbox: () => this.getChatbox(),
-      getPage: () => this.browserManager.getPage(),
+      getLumoClient: () => this.lumoClient,
     };
-  }
-
-  private async getChatbox(): Promise<ChatboxInteractor> {
-    if (!this.chatbox) {
-      const page = await this.browserManager.getPage();
-      this.chatbox = new ChatboxInteractor(page, this.browserManager);
-    }
-    return this.chatbox;
   }
 
   async start(): Promise<void> {
     return new Promise((resolve) => {
       this.app.listen(serverConfig.port, () => {
         logger.info('========================================');
-        logger.info('✓ Lumo Bridge is ready!');
+        logger.info('Lumo Bridge is ready!');
         logger.info(`  base_url: http://localhost:${serverConfig.port}/v1`);
         logger.info(`  api_key:  ${serverConfig.apiKey.substring(0,3)}...`);
         logger.info('========================================\n');
