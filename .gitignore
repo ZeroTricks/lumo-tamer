@@ -6,3 +6,5 @@ browser-data/
 .DS_Store
 todo.md
 sessions/auth-tokens.json
+bin/
+rclone.conf

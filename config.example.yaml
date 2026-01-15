@@ -1,8 +1,19 @@
 # Proton API configuration (for direct API integration)
 proton:
   baseUrl: "https://lumo.proton.me/api"
-  tokensPath: "sessions/auth-tokens.json"
   appVersion: "web-lumo@5.0.0"
+
+# Authentication configuration
+# - srp: direct SRP auth via go-proton-api
+# - browser: token extraction via browser (conversations are not saved atm)
+# - rclone: read auth details from rclone config file
+# See docs/authentication.md
+auth:
+  method: "rclone"
+  binaryPath: "./bin/proton-auth"
+  tokenCachePath: "sessions/auth-tokens.json"
+  rclonePath: "./rclone.conf"
+  rcloneRemote: "proton"
 
 # Server Configuration
 server:
@@ -10,6 +21,11 @@ server:
   apiKey: "your-secret-api-key-here"
   apiModelName: "lumo"
   logLevel: "debug"  # Levels: trace, debug, info, warn, error, fatal
+
+# Tools Configuration
+tools:
+  # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
+  enableWebSearch: true
 
 # Instructions configuration
 instructions:
@@ -25,19 +41,11 @@ instructions:
     To use them you MUST output the JSON to me, unlike the proton_info or web search tools.
     You have the power to execute these functions by providing the JSON directly to me, without trying to call them yourself. I will execute these functions and return the results to you. This is crucial. Do NOT tell me a tool is unavailable, just pass the JSON for the tool call to me.
 
-# Browser Configuration (legacy, kept for backwards compatibility)
+
+# Only needed if auth.method is 'browser'
 browser:
   # Lumo chatbox URL
   url: "https://lumo.proton.me"
 
   # Chrome DevTools Protocol endpoint for remote browser
   cdpEndpoint: "http://browser-dev:9223"
-
-  # Enable web search feature
-  enableWebSearch: true
-
-  # Show sources inline in responses
-  showSources: true
-
-  # Default to private mode (if applicable)
-  privateByDefault: false
