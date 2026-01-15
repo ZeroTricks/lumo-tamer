@@ -14,7 +14,7 @@ import {
     SimpleLumoClient,
     type Turn,
 } from './lumo-client/index.js';
-import { protonConfig } from './config.js';
+import { authConfig } from './config.js';
 import logger from './logger.js';
 
 const BUSY_INDICATOR = '...';
@@ -25,13 +25,13 @@ function clearBusyIndicator(): void {
 }
 
 function initClient(): SimpleLumoClient {
-    logger.info({ tokensPath: protonConfig.tokensPath }, 'Loading auth tokens');
+    logger.info({ tokenCachePath: authConfig.tokenCachePath }, 'Loading auth tokens');
     let tokens;
     try {
         tokens = loadAuthTokens();
     } catch (error) {
-        logger.error({ error, tokensPath: protonConfig.tokensPath }, 'Failed to load auth tokens');
-        logger.error('Run "npm run extract-token" first to extract tokens from browser.');
+        logger.error({ error, tokenCachePath: authConfig.tokenCachePath }, 'Failed to load auth tokens');
+        logger.error('Run "npm run extract-tokens" first to extract tokens from browser.');
         process.exit(1);
     }
 
@@ -43,7 +43,7 @@ function initClient(): SimpleLumoClient {
     }, 'Tokens loaded');
 
     if (areTokensExpired(tokens)) {
-        logger.warn('Some cookies have expired. Re-run extract-token if you get auth errors.');
+        logger.warn('Some cookies have expired. Re-run extract-tokens if you get auth errors.');
     }
 
     const api = createApiAdapter(tokens);
@@ -147,7 +147,7 @@ async function interactiveMode(client: SimpleLumoClient): Promise<void> {
 function handleError(error: unknown): void {
     if (error instanceof Error) {
         if (error.message.includes('401')) {
-            logger.error('Hint: Auth tokens may be invalid or expired. Run "npm run extract-token" to refresh.');
+            logger.error('Hint: Auth tokens may be invalid or expired. Run "npm run extract-tokens" to refresh.');
         } else if (error.message.includes('403')) {
             logger.error('Hint: Access forbidden. Check if account has Lumo access.');
         } else if (error.message.includes('404')) {
