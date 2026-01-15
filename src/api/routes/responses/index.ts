@@ -112,7 +112,7 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       }
 
       // Convert input to turns (includes instructions injection)
-      const turns = convertResponseInputToTurns(request.input, request.instructions);
+      const turns = convertResponseInputToTurns(request.input, request.instructions, request.tools);
 
       // Add to queue and process
       if (request.stream) {
