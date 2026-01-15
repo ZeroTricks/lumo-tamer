@@ -119,7 +119,8 @@ export function convertMessagesToTurns(messages: ChatMessage[], tools?: OpenAITo
  */
 export function convertResponseInputToTurns(
   input: string | ResponseInputItem[] | undefined,
-  requestInstructions?: string
+  requestInstructions?: string,
+  tools?: OpenAITool[]
 ): Turn[] {
   if (!input) {
     return [];
@@ -154,6 +155,8 @@ export function convertResponseInputToTurns(
   }
 
   const systemContent = extractSystemMessage(chatMessages);
-  const instructions = getEffectiveInstructions(systemContent);
+  const toolsInstruction = tools && tools.length > 0 ? buildToolsInstruction(tools) : undefined;
+
+  const instructions = getEffectiveInstructions(systemContent, toolsInstruction);
   return convertChatMessagesToTurns(chatMessages, instructions);
 }
