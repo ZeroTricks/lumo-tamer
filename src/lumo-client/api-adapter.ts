@@ -10,7 +10,7 @@ import { protonConfig } from '../config.js';
 /**
  * Load auth tokens from file
  */
-export function loadAuthTokens(path: string = protonConfig.tokensPath): AuthTokens {
+export function loadAuthTokens(path: string = authConfig.tokenCachePath): AuthTokens {
     const content = readFileSync(path, 'utf-8');
     return JSON.parse(content) as AuthTokens;
 }
@@ -34,7 +34,7 @@ export function createApiAdapter(
     );
 
     if (!lumoAuthCookie) {
-        throw new Error('No AUTH cookie found for lumo.proton.me. Re-run extract-token.');
+        throw new Error('No AUTH cookie found for lumo.proton.me. Re-run extract-tokens.');
     }
 
     // Extract UID from cookie name (AUTH-{uid})

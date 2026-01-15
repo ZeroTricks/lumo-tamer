@@ -13,7 +13,6 @@ const serverConfigSchema = z.object({
 
 const protonConfigSchema = z.object({
   baseUrl: z.string().min(1, 'proton.baseUrl is required'),
-  tokensPath: z.string().min(1, 'proton.tokensPath is required'),
   appVersion: z.string().min(1, 'proton.appVersion is required'),
 });
 
@@ -46,6 +45,16 @@ const persistenceConfigSchema = z.object({
   defaultSpaceName: z.string().default('lumo-bridge'),
 }).optional();
 
+// Auth configuration for SRP-based authentication
+const authConfigSchema = z.object({
+  method: z.enum(['srp', 'browser', 'rclone']).default('browser'),
+  binaryPath: z.string().default('./bin/proton-auth'),
+  tokenCachePath: z.string().default('sessions/auth-tokens.json'),
+  // rclone-specific options
+  rclonePath: z.string().optional(),   // Path to rclone.conf (default: ~/.config/rclone/rclone.conf)
+  rcloneRemote: z.string().optional(), // Section name in rclone config (e.g., "proton-test")
+});
+
 
 
 
@@ -57,6 +66,7 @@ const configSchema = z.object({
   browser: browserConfigSchema,
   instructions: instructionsConfigSchema,
   persistence: persistenceConfigSchema,
+  auth: authConfigSchema,
 });
 
 // Load and validate configuration
@@ -98,6 +108,9 @@ export const instructionsConfig = config.instructions;
 // Persistence config
 export const persistenceConfig = config.persistence;
 
+// Auth config
+export const authConfig = config.auth;
+
 // Export types inferred from Zod schemas
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 export type ProtonConfig = z.infer<typeof protonConfigSchema>;
@@ -105,3 +118,4 @@ export type ToolsConfig = z.infer<typeof toolsConfigSchema>;
 export type BrowserConfig = z.infer<typeof browserConfigSchema>;
 export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;
 export type PersistenceConfig = z.infer<typeof persistenceConfigSchema>;
+export type AuthConfig = z.infer<typeof authConfigSchema>;

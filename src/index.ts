@@ -4,7 +4,7 @@ import { logger } from './logger.js';
 async function main() {
   logger.info('Starting Lumo Bridge...');
 
-  const apiServer = new APIServer();
+  const apiServer = await APIServer.create();
   await apiServer.start();
 
   // Graceful shutdown
