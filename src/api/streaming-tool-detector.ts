@@ -40,6 +40,10 @@ export class StreamingToolDetector {
     return this.pendingText.substring(Math.max(index - 7, 0), index + 7).replace(/\n/g, "\\n");
   }
 
+  public getPendingText(){
+    return this.pendingText;
+  }
+
   /**
    * Process an incoming chunk and return what should be emitted.
    */
@@ -99,7 +103,7 @@ export class StreamingToolDetector {
 
     // Look for raw JSON start (but be careful - need context)
     // Only match if it looks like start of a tool call object
-    const jsonMatch = this.pendingText.match(/(?:^|\n)\s*(\{")/);
+    const jsonMatch = this.pendingText.match(/(?:^|\n)\s*(\{[\n\s]*")/);
     if (jsonMatch && jsonMatch.index !== undefined) {
       logger.debug(`Raw JSON opener found: ${this.showSnippet(jsonMatch.index)}`);
 
@@ -117,15 +121,17 @@ export class StreamingToolDetector {
     }
 
     // No pattern found - emit all but keep last few chars for partial match detection
-    const keepChars = 3; // Keep enough for "```" pattern
+    const keepChars = 10; // Keep enough for "```" pattern
     if (this.pendingText.length > keepChars) {
       result.textToEmit += this.pendingText.slice(0, -keepChars);
       this.pendingText = this.pendingText.slice(-keepChars);
     } else {
       // Not enough chars to be safe, emit nothing and wait for more
       // Actually, emit it all since we're likely at the end
-      result.textToEmit += this.pendingText;
-      this.pendingText = '';
+      // result.textToEmit = "";
+      // result.textToEmit += this.pendingText;
+      // this.pendingText = '';
+      // BUG: last 3 letters are dropped
     }
   }
 
@@ -142,6 +148,10 @@ export class StreamingToolDetector {
       this.buffer += this.pendingText.slice(0, endMatch.index);
       this.pendingText = this.pendingText.slice(endMatch.index + 3);
       this.state = 'normal';
+
+      // fix fenceMatch matching ``` before ```json
+      // TODO: can this be done in processNormalState?
+       this.buffer = this.buffer.replace(/^json/, "");
 
       // Try to parse as tool call
       const toolCall = this.tryParseToolCall(this.buffer.trim());
