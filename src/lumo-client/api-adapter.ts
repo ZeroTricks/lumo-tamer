@@ -5,7 +5,7 @@
 
 import { readFileSync } from 'fs';
 import type { AuthTokens, Api, ApiOptions } from './types.js';
-import { protonConfig } from '../config.js';
+import { protonConfig, authConfig } from '../config.js';
 
 /**
  * Load auth tokens from file
@@ -18,6 +18,7 @@ export function loadAuthTokens(path: string = authConfig.tokenCachePath): AuthTo
 /**
  * Create an API adapter function compatible with Proton's Api interface
  */
+  // TODO: refactor and share common code with createApiFromTokens
 export function createApiAdapter(
     tokens: AuthTokens,
     baseUrl: string = protonConfig.baseUrl

@@ -90,6 +90,7 @@ export class ConversationStore {
      * @param id - Conversation ID
      * @param incoming - Messages from API request
      * @returns Array of newly added messages
+     * @todo Refactor to share code with appendAssistantResponse()
      */
     appendMessages(
         id: ConversationId,
@@ -162,6 +163,7 @@ export class ConversationStore {
      * @param content - Assistant's response content
      * @param status - Message status (default: completed)
      * @returns The created message
+     * @todo Refactor to share code with appendMessages()
      */
     appendAssistantResponse(
         id: ConversationId,

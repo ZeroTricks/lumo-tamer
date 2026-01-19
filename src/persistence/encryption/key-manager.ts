@@ -100,8 +100,9 @@ export class KeyManager {
         try {
             // 1. Fetch user keys
             logger.info('Fetching user keys...');
+            // BUG: this is most likely not the right endpoint to call here. we can add an email but its returning public keys for addresses
             const userKeysResponse = await this.api({
-                url: 'core/v4/keys',
+                url: 'core/v4/keys/all',
                 method: 'get',
             }) as UserKeysResponse;
 
@@ -172,7 +173,9 @@ export class KeyManager {
 
             logger.info('KeyManager initialized successfully');
         } catch (error) {
-            logger.error({ error }, 'Failed to initialize KeyManager');
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error.stack : undefined;
+            logger.error({ errorMessage, errorStack }, 'Failed to initialize KeyManager');
             throw error;
         }
     }

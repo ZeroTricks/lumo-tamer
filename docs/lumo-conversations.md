@@ -630,10 +630,50 @@ curl -X POST http://localhost:3000/v1/responses \
 # 4. Check webclient - conversation should appear with history
 ```
 
+## Sync Service & /save Command
+
+The `SyncService` handles on-demand conversation persistence to the server.
+
+### Setup
+
+Enable in `config.yaml`:
+```yaml
+persistence:
+  enabled: true
+  defaultSpaceName: lumo-bridge
+
+auth:
+  method: rclone
+  rcloneRemote: your-remote-name
+```
+
+### Usage
+
+Send `/save` or `/sync` as a message to trigger sync:
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "lumo", "messages": [{"role": "user", "content": "/save"}]}'
+```
+
+### How It Works
+
+1. **Space Creation**: On first sync, creates a space on the server (or reuses existing)
+2. **Encryption**: Messages encrypted with AES-GCM using space-derived DEK
+3. **AEAD**: Uses `lumo.conversation.{id}` and `lumo.message.{id}` as associated data
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| [src/persistence/sync/sync-service.ts](../src/persistence/sync/sync-service.ts) | SyncService with space creation and conversation sync |
+| [src/api/commands.ts](../src/api/commands.ts) | `/save` command handler |
+
 ## Future Work
 
 - [ ] Background sync coordinator with configurable interval
-- [ ] Space creation on first conversation
-- [ ] Full content encryption before server sync
-- [ ] Chat completions API integration
+- [x] Space creation on first conversation
+- [x] Full content encryption before server sync
+- [x] Chat completions API integration (command context)
 - [ ] Client-side conversation search

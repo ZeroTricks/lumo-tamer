@@ -9,6 +9,7 @@ import { createCompletedResponse } from './response-factory.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../persistence/index.js';
 import { StreamingToolDetector } from 'api/streaming-tool-detector.js';
+import type { CommandContext } from '../../commands.js';
 
 export async function handleStreamingRequest(
   req: Request,
@@ -67,6 +68,11 @@ export async function handleStreamingRequest(
       let toolCallIndex = 0;
 
 
+      // Build command context for /save and other commands
+      const commandContext: CommandContext = {
+        syncInitialized: deps.syncInitialized ?? false,
+      };
+
       // Get response using SimpleLumoClient
       const responseText = await client.chatWithHistory(
         turns,
@@ -105,7 +111,7 @@ export async function handleStreamingRequest(
           }
         },
 
-        { enableEncryption: true, enableExternalTools }
+        { enableEncryption: true, enableExternalTools, commandContext }
       );
 
       logger.debug('[Server] Stream completed');
@@ -120,34 +126,9 @@ export async function handleStreamingRequest(
       // Event N-4: response.output_text.done
       emitter.emitOutputTextDone(itemId, 0, 0, accumulatedText);
 
-
-
-      // Tool calls are not supported in API mode yet - pass null
-      const toolCalls = null;
-
-      // Emit function call events if tool calls are present
-      // if (result.toolCalls) {
-      //   for (let i = 0; i < result.toolCalls.length; i++) {
-      //     const toolCall = result.toolCalls[i];
-      //     const fcId = `fc-${randomUUID()}`;
-      //     const callId = `call-${randomUUID()}`;
-
-      //     // Track this call_id as one we created
-      //     createdCallIds.add(callId);
-
-      //     // Ensure arguments are JSON-encoded string
-      //     const argumentsJson = typeof toolCall.arguments === 'string'
-      //       ? toolCall.arguments
-      //       : JSON.stringify(toolCall.arguments);
-
-      //     emitter.emitFunctionCallEvents(fcId, callId, toolCall.name, argumentsJson, 1 + i);
-      //   }
-      // }
-
       // Build output array with message item only (no tool calls)
       const output = buildOutputItems({
         text: accumulatedText,
-        toolCalls,
         itemId,
         createdCallIds,
       });
@@ -182,13 +163,18 @@ export async function handleNonStreamingRequest(
   // Determine if external tools (web_search, etc.) should be enabled
   const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
 
+  // Build command context for /save and other commands
+  const commandContext: CommandContext = {
+    syncInitialized: deps.syncInitialized ?? false,
+  };
+
   // Non-streaming response
   const responseText = await deps.queue.add(async () => {
     const client = deps.getLumoClient();
     return await client.chatWithHistory(
       turns,
       undefined,
-      { enableEncryption: true, enableExternalTools }
+      { enableEncryption: true, enableExternalTools, commandContext }
     );
   });
 
@@ -196,13 +182,11 @@ export async function handleNonStreamingRequest(
   const itemId = `item-${randomUUID()}`;
   const createdAt = Math.floor(Date.now() / 1000);
 
-  // Tool calls are not supported in API mode yet - pass null
-  const toolCalls = null;
+  // TODO: call tools
 
   // Build output array with message item only (no tool calls)
   const output = buildOutputItems({
     text: responseText,
-    toolCalls,
     itemId,
     createdCallIds,
   });

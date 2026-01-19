@@ -6,8 +6,8 @@ import { logger } from '../../logger.js';
 import { convertMessagesToTurns } from '../message-converter.js';
 import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../tool-parser.js';
 import { StreamingToolDetector } from '../streaming-tool-detector.js';
-import { isCommand, executeCommand } from '../commands.js';
 import type { Turn } from '../../lumo-client/index.js';
+import type { CommandContext } from '../commands.js';
 
 // TODO: add conversation persistence, like /responses
 
@@ -27,16 +27,6 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       const lastUserMessage = [...request.messages].reverse().find(m => m.role === 'user');
       if (!lastUserMessage) {
         return res.status(400).json({ error: 'No user message found' });
-      }
-
-      // Check for commands
-      if (isCommand(lastUserMessage.content)) {
-        const result = executeCommand(lastUserMessage.content);
-        if (request.stream) {
-          return handleCommandStreamingResponse(res, request, result.text);
-        } else {
-          return handleCommandNonStreamingResponse(res, request, result.text);
-        }
       }
 
       // Convert messages to Lumo turns (includes system message injection)
@@ -206,6 +196,11 @@ async function handleStreamingRequest(
     };
 
     try {
+      // Build command context for /save and other commands
+      const commandContext: CommandContext = {
+        syncInitialized: deps.syncInitialized ?? false,
+      };
+
       await client.chatWithHistory(
         turns,
         (chunk: string) => {
@@ -236,7 +231,7 @@ async function handleStreamingRequest(
             emitContentDelta(chunk);
           }
         },
-        { enableEncryption: true, enableExternalTools }
+        { enableEncryption: true, enableExternalTools, commandContext }
       );
       logger.debug('[Server] Stream completed');
 
@@ -301,12 +296,17 @@ async function handleNonStreamingRequest(
   // Check if request has custom tools (legacy mode)
   const hasCustomTools = request.tools && request.tools.length > 0;
 
+  // Build command context for /save and other commands
+  const commandContext: CommandContext = {
+    syncInitialized: deps.syncInitialized ?? false,
+  };
+
   const result = await deps.queue.add(async () => {
     const client = deps.getLumoClient();
     return await client.chatWithHistory(
       turns,
       undefined,
-      { enableEncryption: true, enableExternalTools }
+      { enableEncryption: true, enableExternalTools, commandContext }
     );
   });
 

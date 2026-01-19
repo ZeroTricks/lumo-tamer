@@ -75,4 +75,9 @@ export {
     type SpaceFromApi,
     type ConversationFromApi,
     type MessageFromApi,
+    // Sync service
+    SyncService,
+    getSyncService,
+    resetSyncService,
+    type SyncServiceConfig,
 } from './sync/index.js';
