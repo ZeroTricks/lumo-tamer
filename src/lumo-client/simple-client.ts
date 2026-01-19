@@ -22,11 +22,13 @@ import type {
     ToolName,
     Turn,
 } from './types.js';
+import { executeCommand, isCommand, type CommandContext } from '../api/commands.js';
 
 export interface SimpleLumoClientOptions {
     enableExternalTools?: boolean;
     enableEncryption?: boolean;
     endpoint?: string;
+    commandContext?: CommandContext;
 }
 
 const DEFAULT_INTERNAL_TOOLS: ToolName[] = ['proton_info'];
@@ -48,61 +50,10 @@ export class SimpleLumoClient {
         onChunk?: (content: string) => void,
         options: SimpleLumoClientOptions = {}
     ): Promise<string> {
-        const {
-            enableExternalTools = false,
-            enableEncryption = true,
-            endpoint = DEFAULT_ENDPOINT,
-        } = options;
 
         const turns: Turn[] = [{ role: 'user', content: message }];
+        return this.chatWithHistory(turns, onChunk, options);
 
-        // Determine tools to include
-        const tools: ToolName[] = enableExternalTools
-            ? [...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]
-            : DEFAULT_INTERNAL_TOOLS;
-
-        // Setup encryption if enabled
-        let requestKey: AesGcmCryptoKey | undefined;
-        let requestId: RequestId | undefined;
-        let processedTurns: Turn[] = turns;
-        let requestKeyEncB64: string | undefined;
-
-        if (enableEncryption) {
-            requestKey = await generateRequestKey();
-            requestId = generateRequestId();
-            requestKeyEncB64 = await prepareEncryptedRequestKey(requestKey, DEFAULT_LUMO_PUB_KEY);
-            processedTurns = await encryptTurns(turns, requestKey, requestId);
-        }
-
-        // Build request
-        const request: LumoApiGenerationRequest = {
-            type: 'generation_request',
-            turns: processedTurns,
-            options: { tools },
-            targets: ['message'],
-            ...(enableEncryption && requestKeyEncB64 && requestId
-                ? {
-                    request_key: requestKeyEncB64,
-                    request_id: requestId,
-                }
-                : {}),
-        };
-
-        const payload = { Prompt: request };
-
-        // Call API with streaming
-        const stream = (await this.api({
-            url: endpoint,
-            method: 'post',
-            data: payload,
-            output: 'stream',
-        })) as ReadableStream<Uint8Array>;
-
-        return this.processStream(stream, onChunk, {
-            enableEncryption,
-            requestKey,
-            requestId,
-        });
     }
 
     /**
@@ -195,6 +146,7 @@ export class SimpleLumoClient {
             enableExternalTools = false,
             enableEncryption = true,
             endpoint = DEFAULT_ENDPOINT,
+            commandContext,
         } = options;
 
         const turn = turns[turns.length - 1];
@@ -202,6 +154,16 @@ export class SimpleLumoClient {
             ? turn.content.substring(0, 200) + '...'
             : turn.content
         } `);
+
+        // NOTE: commands and command results will be present in turns
+        if(turn.content && isCommand(turn.content)){
+            const result = await executeCommand(turn.content, commandContext);
+            logger.info(`Command received: ${turn.content}, response: ${result}`);
+
+            if(onChunk)
+                onChunk(result);
+            return result;
+        }
 
         const tools: ToolName[] = enableExternalTools
             ? [...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]
