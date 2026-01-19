@@ -14,14 +14,25 @@ import {
   loadAuthTokens,
   getTokenAgeHours,
   areTokensExpired,
+  type Api,
 } from '../lumo-client/index.js';
 import { AuthManager, parseRcloneConfig } from '../auth/index.js';
+import { getConversationStore } from 'persistence/conversation-store.js';
+import {
+  LumoPersistenceClient,
+  getSyncService,
+  getKeyManager,
+} from 'persistence/index.js';
+import { persistenceConfig } from '../config.js';
 
 export class APIServer {
   private app: express.Application;
   private lumoClient!: SimpleLumoClient;
   private queue: RequestQueue;
   private authManager?: AuthManager;
+  private lumoPersistenceClient!: LumoPersistenceClient;
+  private api!: Api;
+  private syncInitialized = false;
 
   private constructor() {
     this.app = express();
@@ -34,6 +45,7 @@ export class APIServer {
   static async create(): Promise<APIServer> {
     const server = new APIServer();
     await server.initializeAuth();
+    await server.initializeSync();
     server.setupMiddleware();
     server.setupRoutes();
     return server;
@@ -45,6 +57,7 @@ export class APIServer {
   private async initializeAuth(): Promise<void> {
     const method = authConfig?.method ?? 'browser';
 
+    // TODO: get rid of hardcoded defaults. relevant parameters should be required
     if (method === 'srp' && authConfig) {
       logger.info('Using SRP authentication via go-proton-api');
       this.authManager = new AuthManager({
@@ -54,8 +67,10 @@ export class APIServer {
       });
       await this.authManager.initialize();
 
-      const api = this.authManager.createApi();
-      this.lumoClient = new SimpleLumoClient(api);
+      this.api = this.authManager.createApi();
+      this.lumoClient = new SimpleLumoClient(this.api);
+      this.lumoPersistenceClient = new LumoPersistenceClient(this.api);
+
       logger.info('SRP authentication initialized');
 
     } else if (method === 'rclone' && authConfig) {
@@ -77,8 +92,9 @@ export class APIServer {
 
       // Create API adapter using the SRP-style tokens
       // Reuse the same API creation logic as AuthManager
-      const api = this.createApiFromTokens(tokens);
-      this.lumoClient = new SimpleLumoClient(api);
+      this.api = this.createApiFromTokens(tokens);
+      this.lumoClient = new SimpleLumoClient(this.api);
+      this.lumoPersistenceClient = new LumoPersistenceClient(this.api);
 
     } else {
       // Legacy browser-based token loading
@@ -95,14 +111,66 @@ export class APIServer {
         logger.warn('Some cookies have expired. Re-run extract-tokens if you get auth errors.');
       }
 
-      const api = createApiAdapter(tokens);
-      this.lumoClient = new SimpleLumoClient(api);
+      this.api = createApiAdapter(tokens);
+      this.lumoClient = new SimpleLumoClient(this.api);
+      this.lumoPersistenceClient = new LumoPersistenceClient(this.api);
+    }
+  }
+
+  /**
+   * Initialize sync service for conversation persistence
+   * Requires KeyManager to be initialized with mailbox password
+   */
+  private async initializeSync(): Promise<void> {
+    if (!persistenceConfig?.enabled) {
+      logger.info('Persistence is disabled, skipping sync initialization');
+      return;
+    }
+
+    // Check if we have the rclone auth method with keyPassword
+    if (authConfig.method === 'rclone' && authConfig.rcloneRemote) {
+      try {
+        const rclonePath = authConfig.rclonePath ?? '~/.config/rclone/rclone.conf';
+        const tokens = parseRcloneConfig(rclonePath, authConfig.rcloneRemote);
+
+        if (tokens.keyPassword) {
+          logger.info('Initializing KeyManager with rclone keyPassword...');
+
+          // Initialize KeyManager
+          const keyManager = getKeyManager({
+            api: this.api,
+          });
+
+          // The rclone config already has the decrypted keyPassword
+          await keyManager.initialize(tokens.keyPassword);
+
+          // Initialize SyncService
+          getSyncService({
+            api: this.lumoPersistenceClient,
+            keyManager,
+            defaultSpaceName: persistenceConfig.defaultSpaceName,
+          });
+
+          this.syncInitialized = true;
+          logger.info('Sync service initialized successfully');
+        } else {
+          logger.warn('rclone config missing keyPassword - sync will not be available');
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        logger.error({ errorMessage, errorStack }, 'Failed to initialize sync service');
+      }
+    } else {
+      logger.info('Sync requires rclone auth method with keyPassword');
     }
   }
 
   /**
    * Create API adapter from SRP-style tokens (used by rclone)
    */
+  // TODO: move to api-adapter.ts
+  // TODO: refactor and share common code with createApiAdapter
   private createApiFromTokens(tokens: { uid: string; accessToken: string }): ReturnType<typeof createApiAdapter> {
     const baseUrl = protonConfig.baseUrl;
     const appVersion = protonConfig.appVersion;
@@ -165,6 +233,8 @@ export class APIServer {
     return {
       queue: this.queue,
       getLumoClient: () => this.lumoClient,
+      conversationStore: getConversationStore(),
+      syncInitialized: this.syncInitialized,
     };
   }
 
@@ -174,7 +244,7 @@ export class APIServer {
         logger.info('========================================');
         logger.info('Lumo Bridge is ready!');
         logger.info(`  base_url: http://localhost:${serverConfig.port}/v1`);
-        logger.info(`  api_key:  ${serverConfig.apiKey.substring(0,3)}...`);
+        logger.info(`  api_key:  ${serverConfig.apiKey.substring(0, 3)}...`);
         logger.info('========================================\n');
         resolve();
       });
