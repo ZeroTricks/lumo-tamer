@@ -85,18 +85,6 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       // Update last processed message
       lastProcessedUserMessage = inputText;
 
-      // Check for commands - return error for commands in API mode
-      if (isCommand(inputText)) {
-        const result = executeCommand(inputText);
-        logger.info(`Command received: ${inputText}, response: ${result.text}`);
-        return res.status(400).json({
-          error: {
-            message: result.text,
-            type: 'invalid_request_error',
-          }
-        });
-      }
-
       // Extract or generate conversation ID for persistence
       // For Responses API, use conversation_id, previous_response_id as continuation hint, or generate new
       const conversationId: ConversationId = request.conversation_id
@@ -105,10 +93,12 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
 
       // Persist user message if conversation store is available
       if (deps.conversationStore) {
+        // TODO: why is this a isValidContinuation?
         deps.conversationStore.appendMessages(conversationId, [
           { role: 'user', content: inputText }
         ]);
         logger.debug({ conversationId }, 'Persisted user message');
+
       }
 
       // Convert input to turns (includes instructions injection)

@@ -1,22 +1,10 @@
 /**
- * Command handler stubs for API mode.
- * Commands that require browser interaction are not available.
+ * Command handler for API mode.
+ * Supports commands like /save for syncing conversations.
  */
 
-const KNOWN_COMMANDS = [
-  'new',
-  'clear',
-  'reset',
-  'private',
-  'open',
-  'behave',
-  'defaultbehaviour',
-];
-
-export interface CommandResult {
-  text: string;
-  error: boolean;
-}
+import { logger } from '../logger.js';
+import { getSyncService } from '../persistence/index.js';
 
 /**
  * Check if a message is a command (starts with /)
@@ -26,23 +14,76 @@ export function isCommand(message: string): boolean {
 }
 
 /**
- * Execute a command. In API mode, all commands return an error
- * explaining that browser interaction is required.
+ * Command execution context
  */
-export function executeCommand(command: string): CommandResult {
-  const trimmed = command.trim();
-  const cmdMatch = trimmed.match(/^\/(\S+)/);
-  const cmdName = cmdMatch?.[1]?.toLowerCase() || '';
+export interface CommandContext {
+  syncInitialized: boolean;
+}
 
-  if (KNOWN_COMMANDS.includes(cmdName)) {
-    return {
-      text: `Command /${cmdName} is not available in API mode. Commands require browser interaction which has been disabled.`,
-      error: true,
-    };
+/**
+ * Execute a command.
+ *
+ * @param command - The command string (e.g., "/save")
+ * @param context - Optional execution context
+ * @returns Result message
+ */
+export async function executeCommand(
+  command: string,
+  context?: CommandContext
+): Promise<string> {
+    const commandText = command.startsWith('/')
+      ? command.slice(1).trim()
+      : command.trim();
+
+    // Extract command name and parameters: /command param1 param2 ...
+    const match = commandText.match(/^(\S+)(?:\s+(.*))?$/);
+    const commandName = match?.[1] || commandText;
+    const params = match?.[2] || '';
+    const lowerCommand = commandName.toLowerCase();
+
+    logger.info(`Executing command: /${lowerCommand}${params ? ` with params: ${params}` : ''}`);
+
+    switch (lowerCommand) {
+      case 'save':
+      case 'sync':
+        return await handleSaveCommand(context);
+
+      case 'ole':
+        return 'ole!';
+
+      // Unsupported commands (would need browser)
+      case 'new':
+      case 'clear':
+      case 'reset':
+      case 'private':
+      case 'open':
+        return `Command /${lowerCommand} is not available in API mode.`;
+
+      default:
+        logger.warn(`Unknown command: /${commandName}`);
+        throw new Error(`Unknown command: /${commandName}`);
+    }
+}
+
+/**
+ * Handle /save command - sync conversations to server
+ */
+async function handleSaveCommand(context?: CommandContext): Promise<string> {
+  try {
+    if (!context?.syncInitialized) {
+      return 'Sync not initialized. Persistence may be disabled or KeyManager not ready.';
+    }
+
+    const syncService = getSyncService();
+    const syncedCount = await syncService.sync();
+
+    const stats = syncService.getStats();
+    return `Synced ${syncedCount} conversation(s) to server.\n` +
+           `Space: ${stats.spaceId ?? 'none'}\n` +
+           `Mapped conversations: ${stats.mappedConversations}\n` +
+           `Mapped messages: ${stats.mappedMessages}`;
+  } catch (error) {
+    logger.error({ error }, 'Failed to execute /save command');
+    return `Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
   }
-
-  return {
-    text: `Unknown command: /${cmdName}`,
-    error: true,
-  };
 }

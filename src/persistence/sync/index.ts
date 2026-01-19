@@ -3,7 +3,7 @@
  *
  * Provides:
  * - LumoPersistenceClient for API communication
- * - SyncCoordinator for background synchronization
+ * - SyncService for on-demand synchronization
  */
 
 export {
@@ -21,3 +21,10 @@ export {
     type GetSpaceResponse,
     type GetConversationResponse,
 } from './server-client.js';
+
+export {
+    SyncService,
+    getSyncService,
+    resetSyncService,
+    type SyncServiceConfig,
+} from './sync-service.js';

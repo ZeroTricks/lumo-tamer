@@ -22,6 +22,11 @@ server:
   apiModelName: "lumo"
   logLevel: "debug"  # Levels: trace, debug, info, warn, error, fatal
 
+persistence:
+  enabled: true
+  defaultSpaceName: lumo-bridge
+
+
 # Tools Configuration
 tools:
   # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
