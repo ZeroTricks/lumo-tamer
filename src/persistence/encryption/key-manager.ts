@@ -56,15 +56,20 @@ interface MasterKeyResponse {
 }
 
 /**
- * User keys response from API
+ * User response from API (GET core/v4/users)
+ * Returns user info including encrypted private keys
  */
-interface UserKeysResponse {
+interface UserResponse {
     User: {
+        ID: string;
+        Name: string;
         Keys: Array<{
             ID: string;
             PrivateKey: string;  // Armored PGP private key (encrypted with keyPassword)
-            Primary: number;
-            Active: number;
+            Primary: 1 | 0;
+            Active: 1 | 0;
+            Fingerprint: string;
+            Version: number;
         }>;
     };
 }
@@ -98,15 +103,14 @@ export class KeyManager {
         }
 
         try {
-            // 1. Fetch user keys
-            logger.info('Fetching user keys...');
-            // BUG: this is most likely not the right endpoint to call here. we can add an email but its returning public keys for addresses
-            const userKeysResponse = await this.api({
-                url: 'core/v4/keys/all',
+            // 1. Fetch user info (includes encrypted private keys)
+            logger.info('Fetching user info...');
+            const userResponse = await this.api({
+                url: 'core/v4/users',
                 method: 'get',
-            }) as UserKeysResponse;
+            }) as UserResponse;
 
-            const userKeys = userKeysResponse.User?.Keys ?? [];
+            const userKeys = userResponse.User?.Keys ?? [];
             if (userKeys.length === 0) {
                 throw new Error('No user keys found');
             }
@@ -261,10 +265,18 @@ export class KeyManager {
         encryptedMasterKey: string,
         decryptionKeys: PrivateKey[]
     ): Promise<Uint8Array> {
-        // The master key is PGP-encrypted (armored message)
+        // The master key is base64-encoded binary PGP message (not armored text)
+        // See lumoBootstrap.ts:39
         // We need to decrypt it using the user's private keys
+        const binaryMessage = base64ToBytes(encryptedMasterKey);
+        logger.debug({
+            encryptedMasterKeyLength: encryptedMasterKey.length,
+            encryptedMasterKeyStart: encryptedMasterKey.slice(0, 100),
+            encryptedMasterKeyEnd: encryptedMasterKey.slice(-50),
+        }, 'Decrypting master key');
+
         const decrypted = await CryptoProxy.decryptMessage({
-            armoredMessage: encryptedMasterKey,
+            binaryMessage,
             decryptionKeys,
             format: 'binary',
         });

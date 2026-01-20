@@ -12,8 +12,9 @@ import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { promises as dns, ADDRCONFIG } from 'dns';
 import type { AuthTokens, PersistedSessionData } from '../../lumo-client/types.js';
-import { browserConfig, protonConfig } from '../../config.js';
+import { browserConfig, authConfig, protonConfig } from '../../config.js';
 import { logger } from '../../logger.js';
+import { decryptPersistedSession } from '../../persistence/session-keys.js';
 
 // Validate required config
 if (!browserConfig?.cdpEndpoint) {
@@ -45,6 +46,54 @@ async function resolveCdpEndpoint(endpoint: string): Promise<string> {
         logger.warn(`DNS resolution failed for ${host}, using original endpoint`);
         return endpoint;
     }
+}
+
+/**
+ * Extract persisted session from localStorage that matches a specific UID
+ * If targetUid is provided, only return session if it matches
+ */
+function extractPersistedSessionForUid(
+    localStorage: Record<string, string>,
+    targetUid?: string
+): PersistedSessionData | undefined {
+    const sessionKeys = Object.keys(localStorage).filter(k => k.startsWith('ps-'));
+
+    if (sessionKeys.length === 0) {
+        return undefined;
+    }
+
+    for (const key of sessionKeys) {
+        try {
+            const session = JSON.parse(localStorage[key]);
+            if (!session.UID || !session.UserID) continue;
+
+            // If target UID specified, only match that one
+            if (targetUid && session.UID !== targetUid) continue;
+
+            const persistedSession: PersistedSessionData = {
+                localID: session.localID ?? parseInt(key.replace('ps-', '')),
+                UserID: session.UserID,
+                UID: session.UID,
+                blob: session.blob,
+                payloadVersion: session.payloadVersion ?? 1,
+                persistedAt: session.persistedAt ?? Date.now(),
+            };
+
+            logger.info({
+                key,
+                UID: persistedSession.UID.slice(0, 12) + '...',
+                hasBlob: !!persistedSession.blob,
+                payloadVersion: persistedSession.payloadVersion,
+                matchedTarget: !!targetUid,
+            }, 'Found matching persisted session');
+
+            return persistedSession;
+        } catch {
+            continue;
+        }
+    }
+
+    return undefined;
 }
 
 /**
@@ -115,7 +164,8 @@ function extractPersistedSession(localStorage: Record<string, string>): Persiste
 async function fetchClientKey(
     page: Page,
     uid: string,
-    accessToken: string
+    accessToken: string,
+    appVersion: string
 ): Promise<string | undefined> {
     try {
         const currentUrl = page.url();
@@ -124,13 +174,14 @@ async function fetchClientKey(
         // This uses the current domain's API proxy
         logger.debug({ currentUrl, uid: uid.slice(0, 8) + '...' }, 'Fetching ClientKey');
 
-        const result = await page.evaluate(async ({ uid, accessToken }) => {
+        const result = await page.evaluate(async ({ uid, accessToken, appVersion }) => {
             try {
                 // Use relative URL - will be proxied by the current domain
                 const response = await fetch('/api/auth/v4/sessions/local/key', {
                     method: 'GET',
                     headers: {
                         'x-pm-uid': uid,
+                        'x-pm-appversion': appVersion,
                         'Authorization': `Bearer ${accessToken}`,
                     },
                     credentials: 'include',
@@ -146,7 +197,7 @@ async function fetchClientKey(
             } catch (err) {
                 return { error: String(err) };
             }
-        }, { uid, accessToken });
+        }, { uid, accessToken, appVersion });
 
         if ('error' in result) {
             logger.debug({ error: result.error, body: (result as { body?: string }).body?.slice(0, 200) }, 'ClientKey fetch failed from current domain');
@@ -157,12 +208,13 @@ async function fetchClientKey(
                 await page.goto('https://account.proton.me/', { waitUntil: 'domcontentloaded' });
                 await page.waitForTimeout(500);
 
-                const retryResult = await page.evaluate(async ({ uid, accessToken }) => {
+                const retryResult = await page.evaluate(async ({ uid, accessToken, appVersion }) => {
                     try {
                         const response = await fetch('/api/auth/v4/sessions/local/key', {
                             method: 'GET',
                             headers: {
                                 'x-pm-uid': uid,
+                                'x-pm-appversion': appVersion,
                                 'Authorization': `Bearer ${accessToken}`,
                             },
                             credentials: 'include',
@@ -177,7 +229,7 @@ async function fetchClientKey(
                     } catch (err) {
                         return { error: String(err) };
                     }
-                }, { uid, accessToken });
+                }, { uid, accessToken, appVersion });
 
                 // Navigate back
                 await page.goto(currentUrl, { waitUntil: 'domcontentloaded' });
@@ -321,10 +373,11 @@ async function extractTokens(): Promise<void> {
         logger.warn('No account.proton.me origin found in storage state');
     }
 
-    // Try direct page evaluation as fallback for localStorage
+    // Try direct page evaluation as fallback for localStorage and get active session UID
     let directLocalStorage: Record<string, string> = {};
+    let activeSessionUid: string | undefined;
     try {
-        directLocalStorage = await page.evaluate(() => {
+        const result = await page.evaluate(() => {
             const items: Record<string, string> = {};
             for (let i = 0; i < window.localStorage.length; i++) {
                 const key = window.localStorage.key(i);
@@ -332,44 +385,81 @@ async function extractTokens(): Promise<void> {
                     items[key] = window.localStorage.getItem(key) || '';
                 }
             }
-            return items;
+            // Get active session UID from sessionStorage (ua_uid is set by Proton apps)
+            const activeUid = window.sessionStorage.getItem('ua_uid') || undefined;
+            return { localStorage: items, activeUid };
         });
+        directLocalStorage = result.localStorage;
+        activeSessionUid = result.activeUid;
         logger.info({ count: Object.keys(directLocalStorage).length }, 'Direct localStorage extraction');
         logger.debug({ keys: Object.keys(directLocalStorage) }, 'Direct localStorage keys');
+        if (activeSessionUid) {
+            logger.info({ activeSessionUid: activeSessionUid.slice(0, 12) + '...' }, 'Found active session UID');
+        }
     } catch (e) {
         logger.warn({ error: e }, 'Failed to extract localStorage directly from page');
     }
 
-    // Extract persisted session (check all sources)
-    let persistedSession = extractPersistedSession(localStorage);
-    if (!persistedSession) {
-        persistedSession = extractPersistedSession(accountLocalStorage);
+    // Extract persisted session - prioritize matching active session UID
+    // This ensures the ClientKey we fetch matches the blob we're trying to decrypt
+    let persistedSession: PersistedSessionData | undefined;
+
+    if (activeSessionUid) {
+        // First try to find a session matching the active UID
+        persistedSession = extractPersistedSessionForUid(directLocalStorage, activeSessionUid);
+        if (!persistedSession) {
+            persistedSession = extractPersistedSessionForUid(localStorage, activeSessionUid);
+        }
+        if (!persistedSession) {
+            persistedSession = extractPersistedSessionForUid(accountLocalStorage, activeSessionUid);
+        }
     }
+
+    // Fallback to any available session
     if (!persistedSession) {
         persistedSession = extractPersistedSession(directLocalStorage);
+    }
+    if (!persistedSession) {
+        persistedSession = extractPersistedSession(localStorage);
+    }
+    if (!persistedSession) {
+        persistedSession = extractPersistedSession(accountLocalStorage);
     }
 
     // Fetch ClientKey if we have a persisted session with a blob
     if (persistedSession?.blob) {
         // Find the AUTH cookie matching the persisted session's UID
+        // Try account.proton.me first, then lumo.proton.me
         const matchingAuthCookie = relevantCookies.find(
             c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('account.proton.me')
+        ) || relevantCookies.find(
+            c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
         );
 
         if (!matchingAuthCookie) {
-            logger.debug({ sessionUid: persistedSession.UID.slice(0, 8) + '...' }, 'No account AUTH cookie matching session UID, trying fallback');
+            logger.debug({ sessionUid: persistedSession.UID.slice(0, 8) + '...' }, 'No AUTH cookie matching session UID, trying fallback');
         }
 
-        const authCookie = matchingAuthCookie || accountAuthCookie;
+        const authCookie = matchingAuthCookie || accountAuthCookie || lumoAuthCookie;
         if (authCookie) {
             const uid = authCookie.name.replace('AUTH-', '');
             const accessToken = authCookie.value;
 
             logger.info({ uid: uid.slice(0, 8) + '...', sessionUid: persistedSession.UID.slice(0, 8) + '...' }, 'Fetching ClientKey from API...');
-            const clientKey = await fetchClientKey(page, uid, accessToken);
+            const clientKey = await fetchClientKey(page, uid, accessToken, protonConfig.appVersion);
 
             if (clientKey) {
                 persistedSession.clientKey = clientKey;
+
+                // Verify decryption works before saving
+                try {
+                    const decrypted = await decryptPersistedSession(persistedSession);
+                    logger.info({ type: decrypted.type }, 'Successfully verified keyPassword extraction');
+                } catch (err) {
+                    logger.error({ err }, 'ClientKey fetch succeeded but decryption failed');
+                    // Clear clientKey if decryption fails - don't save broken data
+                    persistedSession.clientKey = undefined;
+                }
             }
         } else {
             logger.warn('No AUTH cookie found for ClientKey fetch');

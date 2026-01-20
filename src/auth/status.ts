@@ -9,6 +9,7 @@ import { authConfig } from '../config.js';
 import { parseRcloneConfig } from './rclone/index.js';
 import type { SRPAuthTokens } from './go-proton-api/types.js';
 import { loadAuthTokens, areTokensExpired, getTokenAgeHours } from '../lumo-client/api-adapter.js';
+import { decryptPersistedSession } from '../persistence/session-keys.js';
 
 interface StatusInfo {
     method: string;
@@ -83,7 +84,7 @@ function checkSrpTokens(cachePath: string): StatusInfo {
     return info;
 }
 
-function checkBrowserTokens(tokenCachePath: string): StatusInfo {
+async function checkBrowserTokens(tokenCachePath: string): Promise<StatusInfo> {
     const info: StatusInfo = {
         method: 'browser',
         source: tokenCachePath,
@@ -123,9 +124,24 @@ function checkBrowserTokens(tokenCachePath: string): StatusInfo {
             info.details.uid = uid.slice(0, 12) + '...';
         }
 
-        // Browser method cannot get keyPassword
-        info.details.hasKeyPassword = false;
-        info.warnings.push('keyPassword not available - conversation persistence disabled');
+        // Check if keyPassword can be extracted from persisted session
+        if (tokens.persistedSession?.blob && tokens.persistedSession?.clientKey) {
+            try {
+                await decryptPersistedSession(tokens.persistedSession);
+                info.details.hasKeyPassword = true;
+            } catch {
+                info.details.hasKeyPassword = false;
+                info.warnings.push('Session decryption failed - keyPassword unavailable');
+            }
+        } else {
+            info.details.hasKeyPassword = false;
+            if (!tokens.persistedSession?.blob) {
+                info.warnings.push('No persisted session blob found');
+            }
+            if (!tokens.persistedSession?.clientKey) {
+                info.warnings.push('No clientKey available - run extract-tokens');
+            }
+        }
     } catch (err) {
         info.warnings.push(`Failed to load tokens: ${err}`);
     }
@@ -201,7 +217,7 @@ function printStatus(info: StatusInfo): void {
     }
 }
 
-function main(): void {
+async function main(): Promise<void> {
     console.log('=== Lumo Bridge Auth Status ===');
 
     const method = authConfig?.method || 'browser';
@@ -223,7 +239,7 @@ function main(): void {
 
         case 'browser':
         default:
-            info = checkBrowserTokens(authConfig.tokenCachePath);
+            info = await checkBrowserTokens(authConfig.tokenCachePath);
             break;
     }
 
@@ -247,4 +263,7 @@ function main(): void {
     process.exit(info.valid ? 0 : 1);
 }
 
-main();
+main().catch(err => {
+    console.error('Error:', err);
+    process.exit(1);
+});

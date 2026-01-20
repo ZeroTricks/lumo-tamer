@@ -5,6 +5,7 @@
 
 const KEY_LENGTH_BYTES = 32;
 const IV_LENGTH_BYTES = 12;
+const IV_LENGTH_BYTES_LEGACY = 16; // Proton uses 16-byte IV for session blobs (non-standard but safe)
 const ENCRYPTION_ALGORITHM = 'AES-GCM';
 
 // Helper to merge Uint8Arrays
@@ -120,14 +121,17 @@ export async function encryptData(
 /**
  * Decrypt data using AES-GCM
  * Expects IV prepended to ciphertext
+ * @param with16ByteIV - whether a non-standard IV size of 16 bytes was used on encryption (Proton session blobs use this)
  */
 export async function decryptData(
     key: CryptoKey,
     data: Uint8Array,
-    additionalData?: Uint8Array
+    additionalData?: Uint8Array,
+    with16ByteIV = false
 ): Promise<Uint8Array> {
-    const iv = data.slice(0, IV_LENGTH_BYTES);
-    const ciphertext = data.slice(IV_LENGTH_BYTES);
+    const ivLength = with16ByteIV ? IV_LENGTH_BYTES_LEGACY : IV_LENGTH_BYTES;
+    const iv = data.slice(0, ivLength);
+    const ciphertext = data.slice(ivLength);
     const result = await crypto.subtle.decrypt(
         {
             name: ENCRYPTION_ALGORITHM,

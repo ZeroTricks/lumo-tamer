@@ -22,6 +22,7 @@ import {
   LumoPersistenceClient,
   getSyncService,
   getKeyManager,
+  decryptPersistedSession,
 } from 'persistence/index.js';
 import { persistenceConfig } from '../config.js';
 
@@ -33,6 +34,7 @@ export class APIServer {
   private lumoPersistenceClient!: LumoPersistenceClient;
   private api!: Api;
   private syncInitialized = false;
+  private browserKeyPassword?: string;
 
   private constructor() {
     this.app = express();
@@ -114,6 +116,22 @@ export class APIServer {
       this.api = createApiAdapter(tokens);
       this.lumoClient = new SimpleLumoClient(this.api);
       this.lumoPersistenceClient = new LumoPersistenceClient(this.api);
+
+      // Try to extract keyPassword from persisted session
+      if (tokens.persistedSession?.blob && tokens.persistedSession?.clientKey) {
+        try {
+          const decrypted = await decryptPersistedSession(tokens.persistedSession);
+          this.browserKeyPassword = decrypted.keyPassword;
+          logger.info('Extracted keyPassword from browser session');
+        } catch (err) {
+          logger.warn({ err }, 'Failed to decrypt browser session - keyPassword unavailable');
+        }
+      } else {
+        logger.debug({
+          hasBlob: !!tokens.persistedSession?.blob,
+          hasClientKey: !!tokens.persistedSession?.clientKey,
+        }, 'Browser session missing blob or clientKey - keyPassword unavailable');
+      }
     }
   }
 
@@ -127,42 +145,56 @@ export class APIServer {
       return;
     }
 
-    // Check if we have the rclone auth method with keyPassword
+    // Get keyPassword from whichever auth method has it
+    let keyPassword: string | undefined;
+    let source: string | undefined;
+
     if (authConfig.method === 'rclone' && authConfig.rcloneRemote) {
       try {
         const rclonePath = authConfig.rclonePath ?? '~/.config/rclone/rclone.conf';
         const tokens = parseRcloneConfig(rclonePath, authConfig.rcloneRemote);
-
-        if (tokens.keyPassword) {
-          logger.info('Initializing KeyManager with rclone keyPassword...');
-
-          // Initialize KeyManager
-          const keyManager = getKeyManager({
-            api: this.api,
-          });
-
-          // The rclone config already has the decrypted keyPassword
-          await keyManager.initialize(tokens.keyPassword);
-
-          // Initialize SyncService
-          getSyncService({
-            api: this.lumoPersistenceClient,
-            keyManager,
-            defaultSpaceName: persistenceConfig.defaultSpaceName,
-          });
-
-          this.syncInitialized = true;
-          logger.info('Sync service initialized successfully');
-        } else {
-          logger.warn('rclone config missing keyPassword - sync will not be available');
-        }
+        keyPassword = tokens.keyPassword;
+        source = 'rclone';
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        const errorStack = error instanceof Error ? error.stack : undefined;
-        logger.error({ errorMessage, errorStack }, 'Failed to initialize sync service');
+        logger.error({ errorMessage }, 'Failed to parse rclone config');
       }
-    } else {
-      logger.info('Sync requires rclone auth method with keyPassword');
+    } else if (authConfig.method === 'browser' && this.browserKeyPassword) {
+      keyPassword = this.browserKeyPassword;
+      source = 'browser';
+    } else if (authConfig.method === 'srp' && this.authManager) {
+      keyPassword = this.authManager.getKeyPassword();
+      source = 'srp';
+    }
+
+    if (!keyPassword) {
+      logger.info({ method: authConfig.method }, 'No keyPassword available - sync will not be initialized');
+      return;
+    }
+
+    try {
+      logger.info({ source }, 'Initializing KeyManager with keyPassword...');
+
+      // Initialize KeyManager
+      const keyManager = getKeyManager({
+        api: this.api,
+      });
+
+      await keyManager.initialize(keyPassword);
+
+      // Initialize SyncService
+      getSyncService({
+        api: this.lumoPersistenceClient,
+        keyManager,
+        defaultSpaceName: persistenceConfig.defaultSpaceName,
+      });
+
+      this.syncInitialized = true;
+      logger.info({ source }, 'Sync service initialized successfully');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      logger.error({ errorMessage, errorStack }, 'Failed to initialize sync service');
     }
   }
 
