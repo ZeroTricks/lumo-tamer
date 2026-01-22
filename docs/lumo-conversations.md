@@ -670,6 +670,88 @@ curl -X POST http://localhost:3000/v1/chat/completions \
 | [src/persistence/sync/sync-service.ts](../src/persistence/sync/sync-service.ts) | SyncService with space creation and conversation sync |
 | [src/api/commands.ts](../src/api/commands.ts) | `/save` command handler |
 
+## Current Status & Known Issues
+
+### KeyManager Fix (January 2026)
+
+**Problem**: The KeyManager was calling the wrong API endpoint to fetch user keys.
+
+- **Broken**: `core/v4/keys/all` - Returns PUBLIC keys for an email address (used for encrypting to others)
+- **Fixed**: `core/v4/users` - Returns the authenticated USER's info including their encrypted private keys
+
+The `core/v4/users` endpoint returns a `User` object with a `Keys[]` array containing `PrivateKey` (armored PGP key encrypted with mailbox password).
+
+### Persistence Layer Architecture Analysis (January 2026)
+
+#### Proton Lumo's Persistence Architecture
+
+Proton Lumo webclient uses a **three-tier architecture**:
+
+1. **Redux** - In-memory state, fast UI updates
+2. **IndexedDB** - Local encrypted storage (`DbApi` class)
+3. **Remote API** - Server-side persistence (`LumoApi` class)
+
+**Key insight**: The IndexedDB layer (`DbApi`) is cleanly separated from Redux, but the **sync orchestration** lives entirely in Redux sagas - tightly coupled to generators and Redux state.
+
+#### What's Reusable from Proton Lumo
+
+| Component | Reusability | Notes |
+|-----------|-------------|-------|
+| `LumoApi` (HTTP client) | Medium | Clean HTTP layer but many dependencies (types, conversion, proton-shared) |
+| `RequestScheduler` | High | Standalone 40-line class, rate limiting with priority queues |
+| `DbApi` (IndexedDB) | Medium | Clean class but needs Node.js polyfill (`fake-indexeddb`) |
+| Crypto helpers | High | Already have shims in `proton-shims/` |
+| Conversion functions | Medium | Useful but depend on types and sorting utilities |
+| Sync sagas | Low | Deeply coupled to Redux-saga generators |
+
+#### Options for Moving Forward
+
+**Option 1: Enhance Existing Code (Recommended)**
+
+Keep our `LumoPersistenceClient` and add missing features:
+- Add `RequestScheduler` (simple copy)
+- Add pagination for `listSpaces()`
+- Add master key endpoints
+- Better error handling (conflict detection)
+
+**Pros**: Minimal churn, we control the code
+**Cons**: Diverges from upstream, may miss features
+
+**Option 2: Pull LumoApi with Dependencies**
+
+Pull upstream files: `api.ts`, `scheduler.ts`, `conversion.ts`, `types.ts`, `util.ts`, etc.
+
+**Pros**: Feature parity with webclient
+**Cons**: Many files to pull, shims needed for `@proton/shared`, ongoing maintenance burden
+
+**Option 3: Local IndexedDB Storage**
+
+Add `fake-indexeddb` polyfill and use Proton's `DbApi` for local storage.
+
+**Pros**: Offline-first, same schema as webclient
+**Cons**: Doesn't solve server sync, adds complexity
+
+#### Recommendation
+
+For now, **Option 1** (enhance existing) is most pragmatic:
+1. KeyManager endpoint is fixed ✅
+2. Our `LumoPersistenceClient` covers the basic API needs
+3. Add features incrementally as needed
+
+### Search Capability
+
+**Challenge**: Conversations are encrypted on the server, so search must happen client-side.
+
+**Proton Lumo's approach**:
+1. On app start, `listSpacesPaginate()` fetches ALL spaces
+2. Decrypt conversations into Redux state
+3. Search operates on in-memory Redux state
+
+**For lumo-bridge**:
+- We'd need to pull all conversations on startup for search
+- Memory-intensive for many conversations
+- Consider: Is search needed for an API bridge? Clients typically know their conversation IDs
+
 ## Future Work
 
 - [ ] Background sync coordinator with configurable interval
@@ -677,3 +759,6 @@ curl -X POST http://localhost:3000/v1/chat/completions \
 - [x] Full content encryption before server sync
 - [x] Chat completions API integration (command context)
 - [ ] Client-side conversation search
+- [ ] Add RequestScheduler for rate limiting
+- [ ] Add pagination to listSpaces()
+- [ ] Better error handling (conflict detection, 409 responses)

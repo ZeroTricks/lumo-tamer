@@ -15,7 +15,8 @@ import type { SpaceId, ConversationId, MessageId, RemoteId } from '../types.js';
 
 interface SpaceFromApi {
     ID: string;
-    CreateTime: number;
+    CreateTime: string;     // ISO date string
+    DeleteTime?: string;    // ISO date string (if soft-deleted)
     SpaceKey: string;       // Wrapped space key (base64)
     SpaceTag: string;       // Local ID
     Encrypted?: string;     // Encrypted space metadata
@@ -89,6 +90,7 @@ export interface CreateMessageRequest {
     ConversationID: string;
     Role: number;           // 1 = user, 2 = assistant
     ParentID?: string;
+    ParentId?: string;      // Duplicate for buggy backend (lowercase 'd')
     Status?: number;
     MessageTag: string;
     Encrypted?: string;
@@ -126,7 +128,7 @@ export class LumoPersistenceClient {
     // ============ Space Operations ============
 
     /**
-     * List all spaces
+     * List all spaces (excludes soft-deleted spaces)
      */
     async listSpaces(): Promise<SpaceFromApi[]> {
         try {
@@ -135,7 +137,17 @@ export class LumoPersistenceClient {
                 method: 'get',
             }) as ListSpacesResponse;
 
-            return response.Spaces ?? [];
+            const allSpaces = response.Spaces ?? [];
+            // Filter out soft-deleted spaces (those with DeleteTime set)
+            const activeSpaces = allSpaces.filter(s => !s.DeleteTime);
+
+            logger.debug({
+                total: allSpaces.length,
+                active: activeSpaces.length,
+                deleted: allSpaces.length - activeSpaces.length,
+            }, 'Spaces from API');
+
+            return activeSpaces;
         } catch (error) {
             logger.error({ error }, 'Failed to list spaces');
             throw error;
@@ -295,13 +307,27 @@ export class LumoPersistenceClient {
         request: Omit<CreateMessageRequest, 'ConversationID'>
     ): Promise<RemoteId> {
         try {
+            const data = {
+                ...request,
+                ConversationID: conversationRemoteId,
+            };
+
+            logger.debug({
+                url: `lumo/v1/conversations/${conversationRemoteId}/messages`,
+                Role: data.Role,
+                Status: data.Status,
+                MessageTag: data.MessageTag,
+                ParentID: data.ParentID,
+                ParentId: data.ParentId,
+                hasEncrypted: !!data.Encrypted,
+                encryptedLength: data.Encrypted?.length,
+                encryptedPreview: data.Encrypted?.slice(0, 50),
+            }, 'Creating message - request data');
+
             const response = await this.api({
                 url: `lumo/v1/conversations/${conversationRemoteId}/messages`,
                 method: 'post',
-                data: {
-                    ...request,
-                    ConversationID: conversationRemoteId,
-                },
+                data,
             }) as CreateResponse;
 
             const remoteId = response.Message?.ID;
