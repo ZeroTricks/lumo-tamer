@@ -48,6 +48,9 @@ export async function executeCommand(
       case 'sync':
         return await handleSaveCommand(context);
 
+      case 'deleteallspaces':
+        return await handleDeleteAllSpacesCommand(context);
+
       case 'ole':
         return 'ole!';
 
@@ -85,5 +88,25 @@ async function handleSaveCommand(context?: CommandContext): Promise<string> {
   } catch (error) {
     logger.error({ error }, 'Failed to execute /save command');
     return `Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+  }
+}
+
+/**
+ * Handle /deleteAllSpaces command - delete ALL spaces from server
+ * WARNING: This is destructive!
+ */
+async function handleDeleteAllSpacesCommand(context?: CommandContext): Promise<string> {
+  try {
+    if (!context?.syncInitialized) {
+      return 'Sync not initialized. Persistence may be disabled or KeyManager not ready.';
+    }
+
+    const syncService = getSyncService();
+    const deleted = await syncService.deleteAllSpaces();
+
+    return `Deleted ${deleted} space(s) from server.`;
+  } catch (error) {
+    logger.error({ error }, 'Failed to execute /deleteAllSpaces command');
+    return `Delete failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
   }
 }

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest, FunctionCallOutput } from '../../types.js';
 import { logger } from '../../../logger.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './handlers.js';
@@ -8,6 +8,19 @@ import { convertResponseInputToTurns } from '../../message-converter.js';
 import { isCommand, executeCommand } from '../../commands.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../persistence/index.js';
+
+/**
+ * Generate a deterministic UUID v5-like ID from the first user message.
+ * This ensures that conversations with the same starting message get the same ID,
+ * which is important for clients like Home Assistant that send full history
+ * without a conversation_id.
+ */
+function generateDeterministicConversationId(firstUserMessage: string): ConversationId {
+  const hash = createHash('sha256').update(`lumo-bridge:${firstUserMessage}`).digest('hex');
+  // Format as UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+  // Use version 4 format but with deterministic bytes
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
 
 export function createResponsesRouter(deps: EndpointDependencies): Router {
   const router = Router();
@@ -86,19 +99,53 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       lastProcessedUserMessage = inputText;
 
       // Extract or generate conversation ID for persistence
-      // For Responses API, use conversation_id, previous_response_id as continuation hint, or generate new
-      const conversationId: ConversationId = request.conversation_id
-        || request.previous_response_id
-        || `conv-${randomUUID()}`;
+      // For Responses API, use conversation_id, previous_response_id as continuation hint, or generate deterministic ID
+      // Note: Must be a valid UUID for Lumo server compatibility (no prefixes)
+      let conversationId: ConversationId;
+      if (request.conversation_id) {
+        conversationId = request.conversation_id;
+      } else if (request.previous_response_id) {
+        conversationId = request.previous_response_id;
+      } else {
+        // Generate deterministic ID from first USER message so conversations with same start get same ID
+        // This is important for clients like Home Assistant that send full history without conversation_id
+        // Note: We use first user message, not first message (which might be assistant greeting)
+        const firstUserMessage = Array.isArray(request.input)
+          ? request.input.find((m): m is { role: string; content: string } =>
+              typeof m === 'object' && 'role' in m && m.role === 'user' && 'content' in m
+            )?.content
+          : typeof request.input === 'string' ? request.input : undefined;
 
-      // Persist user message if conversation store is available
-      if (deps.conversationStore) {
-        // TODO: why is this a isValidContinuation?
+        conversationId = firstUserMessage
+          ? generateDeterministicConversationId(firstUserMessage)
+          : randomUUID();
+
+        logger.debug({ conversationId, firstUserMessage: firstUserMessage?.slice(0, 50) }, 'Generated deterministic conversation ID');
+      }
+
+      // Persist all messages from input to conversation store
+      // The deduplication logic in appendMessages will filter out already-stored messages
+      if (deps.conversationStore && Array.isArray(request.input)) {
+        // Extract all user and assistant messages from input (not function outputs)
+        const allMessages = request.input
+          .filter((item): item is { role: string; content: string } => {
+            if (typeof item !== 'object') return false;
+            if ('type' in item && item.type === 'function_call_output') return false;
+            return 'role' in item && 'content' in item &&
+              (item.role === 'user' || item.role === 'assistant');
+          })
+          .map(m => ({ role: m.role, content: m.content }));
+
+        if (allMessages.length > 0) {
+          deps.conversationStore.appendMessages(conversationId, allMessages);
+          logger.debug({ conversationId, messageCount: allMessages.length }, 'Persisted conversation messages');
+        }
+      } else if (deps.conversationStore && typeof request.input === 'string') {
+        // Simple string input - just the user message
         deps.conversationStore.appendMessages(conversationId, [
           { role: 'user', content: inputText }
         ]);
         logger.debug({ conversationId }, 'Persisted user message');
-
       }
 
       // Convert input to turns (includes instructions injection)

@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import stableStringify from 'json-stable-stringify';
 import { logger } from '../../logger.js';
 import {
     generateKey,
@@ -15,6 +16,7 @@ import {
     exportKey,
     wrapKey,
     encryptData,
+    decryptData,
     deriveKey,
 } from '../../proton-shims/aesGcm.js';
 import { LumoPersistenceClient, RoleToInt, StatusToInt } from './server-client.js';
@@ -25,6 +27,17 @@ import type { ConversationState, Message, SpaceId, RemoteId, MessageRole, Messag
 // HKDF parameters matching Proton's implementation
 const SPACE_KEY_DERIVATION_SALT = Buffer.from('Xd6V94/+5BmLAfc67xIBZcjsBPimm9/j02kHPI7Vsuc=', 'base64');
 const SPACE_DEK_CONTEXT = new TextEncoder().encode('dek.space.lumo');
+
+/**
+ * Space private data (encrypted)
+ * Matches Lumo WebClient's ProjectSpace type
+ */
+interface SpacePrivate {
+    isProject: true;
+    projectName?: string;
+    projectInstructions?: string;
+    projectIcon?: string;
+}
 
 /**
  * Conversation private data (encrypted)
@@ -56,6 +69,8 @@ export interface SyncServiceConfig {
     api: LumoPersistenceClient;
     keyManager: KeyManager;
     defaultSpaceName?: string;
+    /** Optional: specify a space UUID directly to bypass name-matching logic */
+    spaceId?: string;
 }
 
 /**
@@ -67,6 +82,7 @@ export class SyncService {
     private api: LumoPersistenceClient;
     private keyManager: KeyManager;
     private defaultSpaceName: string;
+    private configuredSpaceId?: string;
 
     // Current space info
     private spaceId?: SpaceId;
@@ -85,11 +101,17 @@ export class SyncService {
         this.api = config.api;
         this.keyManager = config.keyManager;
         this.defaultSpaceName = config.defaultSpaceName ?? 'lumo-bridge';
+        this.configuredSpaceId = config.spaceId;
     }
 
     /**
      * Ensure a space exists, creating one if needed
      * Called lazily on first sync
+     *
+     * Matching logic:
+     * 1. If spaceId is configured, use that space directly (by UUID)
+     * 2. If defaultSpaceName is set, try to find a space with matching projectName
+     * 3. Otherwise, use the first space we can decrypt
      */
     async ensureSpace(): Promise<{ spaceId: SpaceId; remoteId: RemoteId }> {
         // Already have a space
@@ -97,38 +119,142 @@ export class SyncService {
             return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
         }
 
-        // Check if we already have a lumo-bridge space on the server
-        logger.info('Checking for existing lumo-bridge space...');
+        // Check if we already have a space on the server
+        const searchCriteria = this.configuredSpaceId
+            ? { spaceId: this.configuredSpaceId }
+            : { spaceName: this.defaultSpaceName };
+        logger.info(searchCriteria, 'Checking for existing space...');
         const existingSpaces = await this.api.listSpaces();
 
-        for (const space of existingSpaces) {
-            // Check if this is our space by looking at the SpaceTag
-            // SpaceTag contains the local ID we used when creating
-            if (space.SpaceTag) {
-                // Try to unwrap the space key to verify we can use this space
+        // Log available spaces
+        const spacesWithData = existingSpaces.filter(s => s.Encrypted);
+        logger.info({
+            totalSpaces: existingSpaces.length,
+            spacesWithEncryptedData: spacesWithData.length,
+            spaceTags: existingSpaces.map(s => s.SpaceTag),
+        }, 'Available spaces');
+
+        // If spaceId is configured, find that specific space by UUID
+        if (this.configuredSpaceId) {
+            const space = existingSpaces.find(s => s.SpaceTag === this.configuredSpaceId);
+            if (space) {
                 try {
                     const spaceKey = await this.keyManager.getSpaceKey(space.SpaceTag, space.SpaceKey);
+                    const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
+
                     this.spaceId = space.SpaceTag;
                     this.spaceRemoteId = space.ID;
                     this.spaceKey = spaceKey;
-                    this.dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
+                    this.dataEncryptionKey = dataEncryptionKey;
                     this.idMap.spaces.set(space.SpaceTag, space.ID);
 
                     logger.info({
                         spaceId: space.SpaceTag,
                         remoteId: space.ID,
-                    }, 'Using existing space');
+                    }, 'Using configured space by UUID');
 
                     return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
-                } catch {
-                    // Can't unwrap this key, try next space
-                    continue;
+                } catch (error) {
+                    logger.error({ spaceId: this.configuredSpaceId, error }, 'Failed to decrypt configured space');
+                    throw new Error(`Cannot decrypt configured space ${this.configuredSpaceId}`);
                 }
+            } else {
+                logger.error({ spaceId: this.configuredSpaceId }, 'Configured space not found');
+                throw new Error(`Configured space ${this.configuredSpaceId} not found on server`);
+            }
+        }
+
+        // First pass: look for a space with matching project name
+        logger.info({ totalSpaces: existingSpaces.length, lookingFor: this.defaultSpaceName }, 'Starting first pass - looking for project name match');
+        for (const space of existingSpaces) {
+            if (!space.SpaceTag) continue;
+
+            try {
+                const spaceKey = await this.keyManager.getSpaceKey(space.SpaceTag, space.SpaceKey);
+                const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
+
+                logger.debug({
+                    spaceTag: space.SpaceTag,
+                    hasEncrypted: !!space.Encrypted,
+                    encryptedLength: space.Encrypted?.length ?? 0,
+                }, 'First pass: checking space');
+
+                // Try to decrypt and check project name
+                if (space.Encrypted) {
+                    const spacePrivate = await this.decryptSpacePrivate(space.Encrypted, space.SpaceTag, dataEncryptionKey);
+
+                    logger.debug({
+                        spaceTag: space.SpaceTag,
+                        projectName: spacePrivate?.projectName,
+                        lookingFor: this.defaultSpaceName,
+                        hasEncrypted: !!space.Encrypted,
+                        decryptedOk: !!spacePrivate,
+                    }, 'Checking space for project name match');
+
+                    if (spacePrivate?.projectName === this.defaultSpaceName) {
+                        this.spaceId = space.SpaceTag;
+                        this.spaceRemoteId = space.ID;
+                        this.spaceKey = spaceKey;
+                        this.dataEncryptionKey = dataEncryptionKey;
+                        this.idMap.spaces.set(space.SpaceTag, space.ID);
+
+                        logger.info({
+                            spaceId: space.SpaceTag,
+                            remoteId: space.ID,
+                            projectName: spacePrivate.projectName,
+                        }, 'Found existing space with matching project name');
+
+                        return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
+                    }
+                }
+            } catch (error) {
+                // Can't decrypt this space, try next
+                logger.debug({ spaceTag: space.SpaceTag, error }, 'Could not decrypt space');
+                continue;
+            }
+        }
+
+        // Second pass: fall back to first decryptable space (for backwards compatibility)
+        for (const space of existingSpaces) {
+            if (!space.SpaceTag) continue;
+
+            try {
+                const spaceKey = await this.keyManager.getSpaceKey(space.SpaceTag, space.SpaceKey);
+                const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
+
+                this.spaceId = space.SpaceTag;
+                this.spaceRemoteId = space.ID;
+                this.spaceKey = spaceKey;
+                this.dataEncryptionKey = dataEncryptionKey;
+                this.idMap.spaces.set(space.SpaceTag, space.ID);
+
+                // Try to get project name for logging
+                let projectName = '(unknown)';
+                if (space.Encrypted) {
+                    try {
+                        const spacePrivate = await this.decryptSpacePrivate(space.Encrypted, space.SpaceTag, dataEncryptionKey);
+                        projectName = spacePrivate?.projectName ?? '(no name)';
+                    } catch {
+                        // Ignore decryption errors for logging
+                    }
+                }
+
+                logger.info({
+                    spaceId: space.SpaceTag,
+                    remoteId: space.ID,
+                    projectName,
+                    note: 'No exact match found, using first available space',
+                }, 'Using existing space (fallback)');
+
+                return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
+            } catch {
+                // Can't unwrap this key, try next space
+                continue;
             }
         }
 
         // No existing space found, create a new one
-        logger.info('Creating new lumo-bridge space...');
+        logger.info({ spaceName: this.defaultSpaceName }, 'Creating new space...');
         return await this.createSpace();
     }
 
@@ -145,21 +271,33 @@ export class SyncService {
         // Wrap the space key with the master key
         const wrappedSpaceKey = await this.keyManager.wrapSpaceKey(localId);
 
+        // Derive the data encryption key for encrypting space metadata
+        const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
+
+        // Encrypt space private data (project name, etc.)
+        const spacePrivate: SpacePrivate = {
+            isProject: true,
+            projectName: this.defaultSpaceName,
+        };
+        const encryptedPrivate = await this.encryptSpacePrivate(spacePrivate, localId, dataEncryptionKey);
+
         const remoteId = await this.api.createSpace({
             SpaceKey: wrappedSpaceKey,
             SpaceTag: localId,
+            Encrypted: encryptedPrivate,
         });
 
         // Cache everything locally
         this.spaceId = localId;
         this.spaceRemoteId = remoteId;
         this.spaceKey = spaceKey;
-        this.dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
+        this.dataEncryptionKey = dataEncryptionKey;
         this.idMap.spaces.set(localId, remoteId);
 
         logger.info({
             spaceId: localId,
             remoteId,
+            projectName: this.defaultSpaceName,
         }, 'Created new space');
 
         return { spaceId: localId, remoteId };
@@ -228,9 +366,10 @@ export class SyncService {
 
         if (!conversationRemoteId) {
             // Create new conversation
+            // Note: Use this.spaceId (local space ID) for AD, not conversation.metadata.spaceId
             const encryptedPrivate = await this.encryptConversationPrivate({
                 title: conversation.title,
-            }, conversationId);
+            }, conversationId, this.spaceId!);
 
             conversationRemoteId = await this.api.createConversation(spaceRemoteId, {
                 IsStarred: conversation.metadata.starred,
@@ -244,7 +383,7 @@ export class SyncService {
             // Update existing conversation
             const encryptedPrivate = await this.encryptConversationPrivate({
                 title: conversation.title,
-            }, conversationId);
+            }, conversationId, this.spaceId!);
 
             await this.api.updateConversation({
                 ID: conversationRemoteId,
@@ -280,7 +419,7 @@ export class SyncService {
             context: message.context,
             toolCall: message.toolCall,
             toolResult: message.toolResult,
-        }, message.id);
+        }, message);
 
         const parentRemoteId = message.parentId
             ? this.idMap.messages.get(message.parentId)
@@ -289,6 +428,7 @@ export class SyncService {
         const remoteId = await this.api.createMessage(conversationRemoteId, {
             Role: RoleToInt[message.role as keyof typeof RoleToInt] ?? 1,
             ParentID: parentRemoteId,
+            ParentId: parentRemoteId,  // Duplicate for buggy backend (lowercase 'd')
             Status: StatusToInt[message.status as keyof typeof StatusToInt],
             MessageTag: message.id,
             Encrypted: encryptedPrivate,
@@ -300,10 +440,14 @@ export class SyncService {
 
     /**
      * Encrypt conversation private data
+     *
+     * AD format must match Lumo WebClient (json-stable-stringify with alphabetically sorted keys):
+     * {"app":"lumo","id":"<conversationId>","spaceId":"<spaceId>","type":"conversation"}
      */
     private async encryptConversationPrivate(
         data: ConversationPrivate,
-        conversationId: string
+        conversationId: string,
+        spaceId: string
     ): Promise<string> {
         if (!this.dataEncryptionKey) {
             throw new Error('Data encryption key not initialized');
@@ -311,7 +455,15 @@ export class SyncService {
 
         const json = JSON.stringify(data);
         const plaintext = new TextEncoder().encode(json);
-        const ad = new TextEncoder().encode(`lumo.conversation.${conversationId}`);
+        // AD must be alphabetically sorted JSON (matching json-stable-stringify)
+        const adString = stableStringify({
+            app: 'lumo',
+            type: 'conversation',
+            id: conversationId,
+            spaceId: spaceId,
+        });
+        logger.debug({ adString, conversationId, spaceId }, 'Encrypting conversation with AD');
+        const ad = new TextEncoder().encode(adString);
 
         const encrypted = await encryptData(this.dataEncryptionKey, plaintext, ad);
         return encrypted.toBase64();
@@ -319,10 +471,13 @@ export class SyncService {
 
     /**
      * Encrypt message private data
+     *
+     * AD format must match Lumo WebClient (json-stable-stringify with alphabetically sorted keys):
+     * {"app":"lumo","conversationId":"...","id":"...","parentId":"...","role":"...","type":"message"}
      */
     private async encryptMessagePrivate(
         data: MessagePrivate,
-        messageId: string
+        message: Message
     ): Promise<string> {
         if (!this.dataEncryptionKey) {
             throw new Error('Data encryption key not initialized');
@@ -330,10 +485,83 @@ export class SyncService {
 
         const json = JSON.stringify(data);
         const plaintext = new TextEncoder().encode(json);
-        const ad = new TextEncoder().encode(`lumo.message.${messageId}`);
+        // AD must be alphabetically sorted JSON (matching json-stable-stringify)
+        const adString = stableStringify({
+            app: 'lumo',
+            type: 'message',
+            id: message.id,
+            role: message.role,
+            parentId: message.parentId,
+            conversationId: message.conversationId,
+        });
+        logger.debug({ adString, messageId: message.id }, 'Encrypting message with AD');
+        const ad = new TextEncoder().encode(adString);
 
         const encrypted = await encryptData(this.dataEncryptionKey, plaintext, ad);
         return encrypted.toBase64();
+    }
+
+    /**
+     * Encrypt space private data
+     *
+     * AD format must match Lumo WebClient (json-stable-stringify with alphabetically sorted keys):
+     * {"app":"lumo","id":"<spaceId>","type":"space"}
+     */
+    private async encryptSpacePrivate(
+        data: SpacePrivate,
+        spaceId: string,
+        dataEncryptionKey: CryptoKey
+    ): Promise<string> {
+        const json = JSON.stringify(data);
+        const plaintext = new TextEncoder().encode(json);
+        // AD must be alphabetically sorted JSON (matching json-stable-stringify)
+        const adString = stableStringify({
+            app: 'lumo',
+            type: 'space',
+            id: spaceId,
+        });
+        logger.debug({ adString, spaceId }, 'Encrypting space with AD');
+        const ad = new TextEncoder().encode(adString);
+
+        const encrypted = await encryptData(dataEncryptionKey, plaintext, ad);
+        return encrypted.toBase64();
+    }
+
+    /**
+     * Decrypt space private data
+     *
+     * AD format must match Lumo WebClient (json-stable-stringify with alphabetically sorted keys):
+     * {"app":"lumo","id":"<spaceId>","type":"space"}
+     */
+    private async decryptSpacePrivate(
+        encryptedBase64: string,
+        spaceId: string,
+        dataEncryptionKey: CryptoKey
+    ): Promise<SpacePrivate | null> {
+        try {
+            const encrypted = Buffer.from(encryptedBase64, 'base64');
+            // AD must be alphabetically sorted JSON (matching json-stable-stringify)
+            const adString = stableStringify({
+                app: 'lumo',
+                type: 'space',
+                id: spaceId,
+            });
+            logger.debug({
+                adString,
+                spaceId,
+                encryptedLength: encrypted.length,
+            }, 'Attempting to decrypt space private data');
+            const ad = new TextEncoder().encode(adString);
+
+            const decrypted = await decryptData(dataEncryptionKey, new Uint8Array(encrypted), ad);
+            const json = new TextDecoder().decode(decrypted);
+            logger.debug({ spaceId, json }, 'Successfully decrypted space private data');
+            return JSON.parse(json) as SpacePrivate;
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            logger.warn({ spaceId, error: errorMsg }, 'Failed to decrypt space private data');
+            return null;
+        }
     }
 
     /**
@@ -353,6 +581,38 @@ export class SyncService {
             mappedConversations: this.idMap.conversations.size,
             mappedMessages: this.idMap.messages.size,
         };
+    }
+
+    /**
+     * Delete ALL spaces from the server
+     * WARNING: This is destructive and cannot be undone!
+     */
+    async deleteAllSpaces(): Promise<number> {
+        const spaces = await this.api.listSpaces();
+        logger.warn({ count: spaces.length }, 'Deleting ALL spaces...');
+
+        let deleted = 0;
+        for (const space of spaces) {
+            try {
+                await this.api.deleteSpace(space.ID);
+                deleted++;
+                logger.info({ SpaceTag: space.SpaceTag, ID: space.ID }, 'Deleted space');
+            } catch (error) {
+                logger.error({ SpaceTag: space.SpaceTag, error }, 'Failed to delete space');
+            }
+        }
+
+        // Clear local state
+        this.spaceId = undefined;
+        this.spaceRemoteId = undefined;
+        this.spaceKey = undefined;
+        this.dataEncryptionKey = undefined;
+        this.idMap.spaces.clear();
+        this.idMap.conversations.clear();
+        this.idMap.messages.clear();
+
+        logger.warn({ deleted, total: spaces.length }, 'Finished deleting spaces');
+        return deleted;
     }
 }
 
