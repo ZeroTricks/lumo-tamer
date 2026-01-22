@@ -8,3 +8,4 @@ todo.md
 sessions/auth-tokens.json
 bin/
 rclone.conf
+extra-docs/
