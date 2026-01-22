@@ -127,28 +127,60 @@ Tokens are cached and reused. Re-run the binary when:
 
 ---
 
-## Browser Token Extraction (Legacy)
+## Browser Token Extraction
 
-Extracts authentication cookies from an existing browser session.
+Extracts authentication cookies and encryption keys from an existing browser session.
 
 ### Setup
 
 ```bash
-# With browser container running
-npm run extract-token
+# With browser container running and logged into Lumo
+npm run extract-tokens
 ```
+
+### What It Extracts
+
+When `persistence.enabled: true` in config.yaml:
+- **AUTH cookies** for lumo.proton.me and account.proton.me
+- **ClientKey** from `/api/auth/v4/sessions/local/key` (decrypts persisted session)
+- **keyPassword** derived from persisted session blob
+- **User keys** (encrypted PGP private keys) from `/api/core/v4/users`
+- **Master keys** (encrypted) from `/api/lumo/v1/masterkeys`
+
+When `persistence.enabled: false`:
+- Only AUTH cookies are extracted (faster, no extra API calls)
+
+### How It Works
+
+The extraction uses Playwright to connect to an existing browser session via CDP:
+
+1. Connects to browser via `browser.cdpEndpoint`
+2. Extracts cookies and localStorage from Proton domains
+3. Finds the active session (matching `ua_uid` in sessionStorage)
+4. If persistence enabled:
+   - Fetches ClientKey to decrypt the persisted session blob
+   - Extracts keyPassword (mailbox password)
+   - Fetches user PGP keys via browser context (bypasses scope limitations)
+   - Fetches master keys via browser context (bypasses scope limitations)
+5. Saves everything to `sessions/auth-tokens.json`
+
+### Multiple Sessions
+
+If the browser has multiple Proton sessions (different accounts), extraction prioritizes:
+1. The session matching `ua_uid` (the currently active tab)
+2. The AUTH cookie matching the persisted session UID
+3. Falls back to the first available lumo.proton.me AUTH cookie
 
 ### Limitations
 
-- **No keyPassword**: Cannot derive the mailbox password needed for conversation persistence
-- **No shared conversations**: Conversations created via lumo-bridge won't appear in the Proton web client (and vice versa) because message encryption requires keys that can only be unlocked with keyPassword
 - **Browser dependency**: Requires Playwright and a running browser instance
-- **Manual refresh**: Must re-extract when cookies expire
+- **Manual refresh**: Must re-extract when cookies expire (~24h)
+- **Session-specific**: Extracted keys are tied to the active browser session
 
 ### When to Use
 
-- Quick testing without Go toolchain or rclone
-- Fallback if other auth methods fail
+- Primary method for development with full persistence support
+- When rclone or SRP auth methods are unavailable
 
 ---
 
@@ -156,11 +188,11 @@ npm run extract-token
 
 | Feature | rclone Config | SRP Auth | Browser Extraction |
 |---------|---------------|----------|-------------------|
-| keyPassword | Yes | Yes | No |
-| Conversation sync | Full | Full | None |
+| keyPassword | Yes | Yes | Yes |
+| Conversation sync | Full | Full | Full |
 | Browser required | No | No | Yes |
 | Go toolchain required | No | Yes | No |
-| Extraction step | None | `./bin/proton-auth` | `npm run extract-token` |
+| Extraction step | None | `./bin/proton-auth` | `npm run extract-tokens` |
 | Token refresh | Manual (rclone) | Automatic | Manual |
 | 2FA support | Any (via rclone) | TOTP | Any |
 | CAPTCHA handling | Interactive (rclone) | Fails | Interactive |
@@ -172,7 +204,7 @@ npm run extract-token
 |--------|----------------------|-----------------|
 | rclone | None - reads config directly | Run `rclone lsd remote:`, restart server |
 | SRP | `./bin/proton-auth -o sessions/auth-tokens.json` | Automatic (or re-run binary) |
-| Browser | `npm run extract-token` | Re-run `npm run extract-token` |
+| Browser | `npm run extract-tokens` | Re-run `npm run extract-tokens` |
 
 ---
 
@@ -226,3 +258,47 @@ Ensure the browser container is running and accessible via CDP.
 
 #### "Not logged in"
 Log in to Lumo in the browser first, then re-run extraction.
+
+#### "ClientKey fetch succeeded but decryption failed"
+The browser session may have changed since login. Log out and log back in, then re-run extraction.
+
+#### "No Lumo AUTH cookie found for master keys fetch"
+Multiple browser sessions may exist. Ensure the Lumo tab is active/focused when running extraction.
+
+#### Scope errors during server startup
+If keys were cached but server still gets scope errors, the AUTH cookie used may not match the cached keys. Re-run `npm run extract-tokens` to refresh all cached data.
+
+
+
+
+## Current Token Refresh Status
+- SRP auth method: Has automatic refresh via AuthManager.refresh() in manager.ts:99-138. It calls /auth/refresh endpoint to get new access tokens.
+- rclone auth method: No automatic refresh. You need to run rclone lsd remote: externally to trigger rclone's token refresh, then restart the server.
+- Browser extraction: No automatic refresh. Requires manual re-extraction when tokens expire.
+
+### Would It Be Hard to Add?
+For browser method, yes - it would be complex because:
+
+- Browser tokens are session cookies with limited lifetime
+- The refresh endpoint likely requires the same scopes we're bypassing
+- We'd need to maintain Proton's refresh token flow, which involves cryptographic challenges
+
+For rclone method, moderate - we could detect 401 errors and shell out to rclone lsd to trigger refresh, then reload config.
+
+### Would Cached Keys Still Work After Refresh?
+Yes - the cached userKeys and masterKeys remain valid after token refresh because:
+
+- userKeys are encrypted with your mailbox password (derived from account password), not the access token
+- masterKeys are encrypted with your PGP keys, which are decrypted using keyPassword
+- Only the AUTH-{uid} cookie (access token) expires and gets refreshed - the UID stays the same
+- The keyPassword is derived from your account password, which doesn't change
+
+So after a token refresh:
+
+- New access token ✓ (refreshed)
+- Same UID ✓ (unchanged)
+- Same keyPassword ✓ (unchanged)
+- Cached userKeys ✓ (still valid - encrypted with same password)
+- Cached masterKeys ✓ (still valid - encrypted with same PGP keys)
+
+The only scenario where cached keys become invalid is if you change your Proton password - that would regenerate the keyPassword and potentially re-encrypt your private keys.

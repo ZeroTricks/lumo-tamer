@@ -11,6 +11,8 @@ export {
     getKeyManager,
     resetKeyManager,
     type KeyManagerConfig,
+    type CachedUserKey,
+    type CachedMasterKey,
 } from './key-manager.js';
 
 // Re-export session key utilities
