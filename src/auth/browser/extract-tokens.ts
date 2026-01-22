@@ -649,6 +649,8 @@ async function extractTokens(): Promise<void> {
 
     // Don't close the browser - it's shared with lumo-bridge
     logger.debug('Browser connection closed, browser continues running');
+
+    process.exit(0);
 }
 
 extractTokens().catch(error => {
