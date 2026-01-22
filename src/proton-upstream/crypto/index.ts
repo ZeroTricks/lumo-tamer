@@ -1,6 +1,27 @@
 /**
- * App-level crypto shim
- * This re-exports from our proton-shims with the API expected by upstream files
+ * Crypto Shim
+ *
+ * Replaces: applications/lumo/src/app/crypto/index.ts
+ *
+ * Bridges @proton/* shim imports to the API expected by upstream files.
+ * Uses Buffer.from() for base64 conversion instead of Uint8Array.fromBase64().
+ *
+ * Key exports (shim line → original line):
+ * - generateMasterKeyBytes(): 33 → 19
+ * - generateSpaceKeyBytes(): 34 → 20
+ * - encryptString(): 40 → 26
+ * - encryptUint8Array(): 51 → 37
+ * - cryptoKeyToBase64(): 61 → 47
+ * - bytesToAesGcmCryptoKey(): 66 → 52
+ * - base64ToSpaceKey(): 85 → 71
+ * - bytesToAesWrapKey(): 87 → 73
+ * - base64ToMasterKey(): 100 → 86
+ * - decryptUint8Array(): 103 → 89
+ * - decryptString(): 134 → 134
+ * - deriveDataEncryptionKey(): 150 → 150
+ * - wrapAesKey(): 162 → 166
+ * - unwrapAesKey(): 170 → 174
+ * - computeSha256AsBase64(): 187 → 194
  */
 
 import {

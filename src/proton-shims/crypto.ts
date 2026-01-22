@@ -1,6 +1,16 @@
 /**
  * Shim for @proton/crypto (CryptoProxy)
- * Provides PGP operations using openpgp package
+ *
+ * Replaces: packages/crypto/lib/proxy/index.ts (CryptoProxy class)
+ *
+ * Original uses pmcrypto (Proton's OpenPGP fork) with worker-based architecture.
+ * This shim uses the standard openpgp package directly.
+ *
+ * Implements only the methods used by lumo-bridge:
+ * - importPublicKey() - original lines 87-89
+ * - importPrivateKey() - original lines 91-106
+ * - encryptMessage() - original lines 108-147
+ * - decryptMessage() - original lines 149-191
  */
 
 import * as openpgp from 'openpgp';

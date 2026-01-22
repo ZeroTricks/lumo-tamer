@@ -1,6 +1,21 @@
 /**
  * Shim for @proton/crypto/lib/subtle/aesGcm
- * Provides compatible API using Node.js WebCrypto
+ *
+ * Replaces: packages/crypto/lib/subtle/aesGcm.ts
+ *
+ * Function mapping (shim line → original line):
+ * - generateKey(): 57 → 30
+ * - generateWrappingKey(): 62 → 179-180
+ * - importKey(): 70 → 19-24
+ * - importWrappingKey(): 88 → 168-173
+ * - exportKey(): 102 → 50-53
+ * - encryptData(): 111 → 91-104
+ * - decryptData(): 134 → 113-129
+ * - deriveKey(): 158 → 62-83
+ * - wrapKey(): 187 → 186-190
+ * - unwrapKey(): 203 → 196-212
+ *
+ * Key difference: Shim adds .toBase64() method to Uint8Array results.
  */
 
 const KEY_LENGTH_BYTES = 32;

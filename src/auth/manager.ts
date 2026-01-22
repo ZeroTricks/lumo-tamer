@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { logger } from '../logger.js';
 import { runProtonAuth } from './go-proton-api/proton-auth-cli.js';
 import type { AuthConfig, SRPAuthResult, SRPAuthTokens } from './go-proton-api/types.js';
-import type { AuthTokens, Api, ApiOptions } from '../lumo-client/types.js';
+import type { AuthTokens, ProtonApi, ProtonApiOptions } from '../lumo-client/types.js';
 import { protonConfig } from '../config.js';
 
 export class AuthManager {
@@ -156,6 +156,16 @@ export class AuthManager {
     }
 
     /**
+     * Get the user ID (UID)
+     */
+    getUid(): string {
+        if (!this.tokens) {
+            throw new Error('Not authenticated - no UID available');
+        }
+        return this.tokens.uid;
+    }
+
+    /**
      * Get tokens in the format expected by createApiAdapter
      */
     getAuthTokens(): AuthTokens {
@@ -185,7 +195,7 @@ export class AuthManager {
     /**
      * Create an API adapter function for use with SimpleLumoClient
      */
-    createApi(): Api {
+    createApi(): ProtonApi {
         if (!this.tokens) {
             throw new Error('Not authenticated');
         }
@@ -194,7 +204,7 @@ export class AuthManager {
         const baseUrl = protonConfig.baseUrl;
         const appVersion = protonConfig.appVersion;
 
-        return async (options: ApiOptions): Promise<ReadableStream<Uint8Array> | unknown> => {
+        return async (options: ProtonApiOptions): Promise<ReadableStream<Uint8Array> | unknown> => {
             const url = `${baseUrl}/${options.url}`;
 
             const headers: Record<string, string> = {

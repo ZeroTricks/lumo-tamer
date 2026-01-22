@@ -14,12 +14,11 @@ import {
   loadAuthTokens,
   getTokenAgeHours,
   areTokensExpired,
-  type Api,
+  type ProtonApi,
 } from '../lumo-client/index.js';
 import { AuthManager, parseRcloneConfig } from '../auth/index.js';
 import { getConversationStore } from 'persistence/conversation-store.js';
 import {
-  LumoPersistenceClient,
   getSyncService,
   getKeyManager,
   decryptPersistedSession,
@@ -31,8 +30,8 @@ export class APIServer {
   private lumoClient!: SimpleLumoClient;
   private queue: RequestQueue;
   private authManager?: AuthManager;
-  private lumoPersistenceClient!: LumoPersistenceClient;
-  private api!: Api;
+  private protonApi!: ProtonApi;
+  private uid!: string;  // User ID for LumoApi
   private syncInitialized = false;
   private browserKeyPassword?: string;
   private browserUserKeys?: Array<{ ID: string; PrivateKey: string; Primary: number; Active: number }>;
@@ -71,9 +70,9 @@ export class APIServer {
       });
       await this.authManager.initialize();
 
-      this.api = this.authManager.createApi();
-      this.lumoClient = new SimpleLumoClient(this.api);
-      this.lumoPersistenceClient = new LumoPersistenceClient(this.api);
+      this.protonApi = this.authManager.createApi();
+      this.uid = this.authManager.getUid();
+      this.lumoClient = new SimpleLumoClient(this.protonApi);
 
       logger.info('SRP authentication initialized');
 
@@ -96,9 +95,9 @@ export class APIServer {
 
       // Create API adapter using the SRP-style tokens
       // Reuse the same API creation logic as AuthManager
-      this.api = this.createApiFromTokens(tokens);
-      this.lumoClient = new SimpleLumoClient(this.api);
-      this.lumoPersistenceClient = new LumoPersistenceClient(this.api);
+      this.protonApi = this.createApiFromTokens(tokens);
+      this.uid = tokens.uid;
+      this.lumoClient = new SimpleLumoClient(this.protonApi);
 
     } else {
       // Legacy browser-based token loading
@@ -115,9 +114,17 @@ export class APIServer {
         logger.warn('Some cookies have expired. Re-run extract-tokens if you get auth errors.');
       }
 
-      this.api = createApiAdapter(tokens);
-      this.lumoClient = new SimpleLumoClient(this.api);
-      this.lumoPersistenceClient = new LumoPersistenceClient(this.api);
+      this.protonApi = createApiAdapter(tokens);
+      // Extract UID from AUTH cookie (format: AUTH-{uid})
+      const persistedSessionUid = tokens.persistedSession?.UID;
+      const lumoAuthCookie = persistedSessionUid
+        ? tokens.cookies.find(c => c.name === `AUTH-${persistedSessionUid}` && c.domain.includes('lumo.proton.me'))
+        : tokens.cookies.find(c => c.name.startsWith('AUTH-') && c.domain.includes('lumo.proton.me'));
+      if (!lumoAuthCookie) {
+        throw new Error('No AUTH cookie found for lumo.proton.me');
+      }
+      this.uid = lumoAuthCookie.name.replace('AUTH-', '');
+      this.lumoClient = new SimpleLumoClient(this.protonApi);
 
       // Try to extract keyPassword from persisted session
       if (tokens.persistedSession?.blob && tokens.persistedSession?.clientKey) {
@@ -191,7 +198,7 @@ export class APIServer {
 
       // Initialize KeyManager (pass cached keys if available to bypass scope issues)
       const keyManager = getKeyManager({
-        api: this.api,
+        protonApi: this.protonApi,
         cachedUserKeys: this.browserUserKeys,
         cachedMasterKeys: this.browserMasterKeys,
       });
@@ -200,7 +207,8 @@ export class APIServer {
 
       // Initialize SyncService
       const syncService = getSyncService({
-        api: this.lumoPersistenceClient,
+        protonApi: this.protonApi,
+        uid: this.uid,
         keyManager,
         defaultSpaceName: persistenceConfig.defaultSpaceName,
         spaceId: persistenceConfig.spaceId,

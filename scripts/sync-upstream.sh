@@ -37,6 +37,17 @@ declare -A UPSTREAM_FILES=(
     ["lib/lumo-api-client/core/types.ts"]="lib/lumo-api-client/core/types.ts"
     ["keys.ts"]="keys.ts"
     ["crypto/types.ts"]="crypto/types.ts"
+
+    ["remote/api.ts"]="remote/api.ts"
+    ["remote/types.ts"]="remote/types.ts"
+    ["remote/conversion.ts"]="remote/conversion.ts"
+    ["remote/scheduler.ts"]="remote/scheduler.ts"
+    ["remote/util.ts"]="remote/util.ts"
+
+    ["util/collections.ts"]="util/collections.ts"
+    ["util/date.ts"]="util/date.ts"
+    ["util/objects.ts"]="util/objects.ts"
+    ["util/sorting.ts"]="util/sorting.ts"
 )
 
 echo -e "${BLUE}=== Proton WebClients Upstream Sync ===${NC}\n"

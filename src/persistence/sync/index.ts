@@ -2,25 +2,9 @@
  * Sync module for conversation persistence
  *
  * Provides:
- * - LumoPersistenceClient for API communication
+ * - LumoApi via adapter for API communication (from upstream WebClient)
  * - SyncService for on-demand synchronization
  */
-
-export {
-    LumoPersistenceClient,
-    RoleToInt,
-    IntToRole,
-    StatusToInt,
-    type CreateSpaceRequest,
-    type CreateConversationRequest,
-    type UpdateConversationRequest,
-    type CreateMessageRequest,
-    type SpaceFromApi,
-    type ConversationFromApi,
-    type MessageFromApi,
-    type GetSpaceResponse,
-    type GetConversationResponse,
-} from './server-client.js';
 
 export {
     SyncService,
@@ -28,3 +12,19 @@ export {
     resetSyncService,
     type SyncServiceConfig,
 } from './sync-service.js';
+
+// Re-export LumoApi adapter and types
+export {
+    LumoApi,
+    createLumoApi,
+    cleanupLumoApi,
+    RoleInt,
+    StatusInt,
+    type Priority,
+    type ListSpacesRemote,
+    type GetSpaceRemote,
+    type GetConversationRemote,
+    type RemoteMessage,
+    type RemoteSpace,
+    type RemoteConversation,
+} from './lumo-api-adapter.js';

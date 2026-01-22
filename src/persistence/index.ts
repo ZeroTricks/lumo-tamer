@@ -62,22 +62,19 @@ export {
     type KeyManagerConfig,
 } from './encryption/index.js';
 
-// Server sync
+// Sync service
 export {
-    LumoPersistenceClient,
-    RoleToInt,
-    IntToRole,
-    StatusToInt,
-    type CreateSpaceRequest,
-    type CreateConversationRequest,
-    type UpdateConversationRequest,
-    type CreateMessageRequest,
-    type SpaceFromApi,
-    type ConversationFromApi,
-    type MessageFromApi,
-    // Sync service
     SyncService,
     getSyncService,
     resetSyncService,
     type SyncServiceConfig,
 } from './sync/index.js';
+
+// Re-export LumoApi types for consumers
+export {
+    LumoApi,
+    createLumoApi,
+    cleanupLumoApi,
+    RoleInt,
+    StatusInt,
+} from './sync/lumo-api-adapter.js';

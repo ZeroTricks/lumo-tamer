@@ -4,7 +4,7 @@
  */
 
 import { readFileSync } from 'fs';
-import type { AuthTokens, Api, ApiOptions } from './types.js';
+import type { AuthTokens, ProtonApi, ProtonApiOptions } from './types.js';
 import { protonConfig, authConfig } from '../config.js';
 
 /**
@@ -22,7 +22,7 @@ export function loadAuthTokens(path: string = authConfig.tokenCachePath): AuthTo
 export function createApiAdapter(
     tokens: AuthTokens,
     baseUrl: string = protonConfig.baseUrl
-): Api {
+): ProtonApi {
     // Build Cookie header from tokens
     const cookieHeader = tokens.cookies
         .map((c) => `${c.name}=${c.value}`)
@@ -53,7 +53,7 @@ export function createApiAdapter(
     const uid = lumoAuthCookie.name.replace('AUTH-', '');
     const accessToken = lumoAuthCookie.value;
 
-    return async function api(options: ApiOptions): Promise<ReadableStream<Uint8Array> | unknown> {
+    return async function api(options: ProtonApiOptions): Promise<ReadableStream<Uint8Array> | unknown> {
         const { url, method, data, signal, output = 'json' } = options;
 
         const headers: Record<string, string> = {
