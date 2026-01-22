@@ -27,12 +27,20 @@ type AuthResult struct {
 	ErrorCode    int    `json:"errorCode,omitempty"`
 }
 
+// Default values for headers (can be overridden via CLI flags)
+const (
+	defaultAppVersion = "macos-drive@1.0.0-alpha.1+rclone"
+	defaultUserAgent  = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
 func main() {
 	// Parse command line flags
 	outputPath := flag.String("o", "", "Output file path (if not specified, outputs to stdout)")
+	appVersion := flag.String("app-version", defaultAppVersion, "X-PM-AppVersion header value")
+	userAgent := flag.String("user-agent", defaultUserAgent, "User-Agent header value")
 	flag.Parse()
 
-	result := authenticate()
+	result := authenticate(*appVersion, *userAgent)
 
 	// Output JSON
 	output, _ := json.MarshalIndent(result, "", "  ")
@@ -53,7 +61,7 @@ func main() {
 	}
 }
 
-func authenticate() AuthResult {
+func authenticate(appVersion, userAgent string) AuthResult {
 	reader := bufio.NewReader(os.Stdin)
 
 	// Prompt for username
@@ -75,9 +83,11 @@ func authenticate() AuthResult {
 
 	// Create Proton API manager
 	// Use default host URL (https://mail.proton.me/api) - don't override it
+	// Note: SRP auth often triggers CAPTCHA. Browser auth is the preferred method.
 	ctx := context.Background()
 	manager := proton.New(
-		proton.WithAppVersion("web-lumo@5.0.0"),
+		proton.WithAppVersion(appVersion),
+		proton.WithUserAgent(userAgent),
 	)
 	defer manager.Close()
 

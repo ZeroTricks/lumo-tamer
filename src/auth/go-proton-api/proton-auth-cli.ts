@@ -4,6 +4,7 @@
 
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
+import { protonConfig } from '../../config.js';
 import type { SRPAuthResult } from './types.js';
 
 /**
@@ -27,7 +28,19 @@ export async function runProtonAuth(
     }
 
     return new Promise((resolve, reject) => {
-        const args = outputPath ? ['-o', outputPath] : [];
+        const args: string[] = [];
+
+        if (outputPath) {
+            args.push('-o', outputPath);
+        }
+
+        // Pass config values to the Go binary
+        if (protonConfig.appVersion) {
+            args.push('--app-version', protonConfig.appVersion);
+        }
+        if (protonConfig.userAgent) {
+            args.push('--user-agent', protonConfig.userAgent);
+        }
 
         // Spawn the process with stdio inherited for interactive prompts
         // but capture stdout for JSON output

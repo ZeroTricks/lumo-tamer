@@ -14,6 +14,7 @@ const serverConfigSchema = z.object({
 const protonConfigSchema = z.object({
   baseUrl: z.string().min(1, 'proton.baseUrl is required'),
   appVersion: z.string().min(1, 'proton.appVersion is required'),
+  userAgent: z.string().optional(),
 });
 
 // Instructions configuration

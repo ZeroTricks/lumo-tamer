@@ -7,10 +7,11 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { logger } from '../../logger.js';
-import { protonConfig, authConfig } from '../../config.js';
+import { protonConfig, authConfig, persistenceConfig } from '../../config.js';
 import { runProtonAuth } from '../go-proton-api/proton-auth-cli.js';
 import { createProtonApi } from '../api-factory.js';
-import type { AuthProvider, AuthProviderStatus, StoredTokens, ProtonApi } from '../types.js';
+import { fetchKeys } from '../fetch-keys.js';
+import type { AuthProvider, AuthProviderStatus, StoredTokens, ProtonApi, CachedUserKey, CachedMasterKey } from '../types.js';
 
 export class SRPAuthProvider implements AuthProvider {
     readonly method = 'srp' as const;
@@ -29,15 +30,20 @@ export class SRPAuthProvider implements AuthProvider {
         if (existsSync(this.tokenCachePath)) {
             try {
                 const cached = this.loadCachedTokens();
-                if (cached && cached.method === 'srp' && !this.isExpired(cached)) {
-                    this.tokens = cached;
+                // Accept tokens without method field (created by Go binary) or with method: 'srp'
+                const isSrpTokens = cached && (!cached.method || cached.method === 'srp');
+                if (isSrpTokens && !this.isExpired(cached)) {
+                    // Ensure method is set for consistency
+                    this.tokens = { ...cached, method: 'srp' };
                     logger.info(
                         { expiresAt: cached.expiresAt },
                         'Loaded cached SRP auth tokens'
                     );
+                    // Fetch keys if not already cached
+                    await this.fetchAndCacheKeys();
                     return;
                 }
-                if (cached && cached.method === 'srp') {
+                if (cached && isSrpTokens) {
                     logger.info('Cached SRP tokens expired, need to re-authenticate');
                 }
             } catch (err) {
@@ -47,6 +53,29 @@ export class SRPAuthProvider implements AuthProvider {
 
         // Need fresh authentication
         await this.authenticate();
+
+        // Fetch keys for persistence if enabled and not already cached
+        await this.fetchAndCacheKeys();
+    }
+
+    private async fetchAndCacheKeys(): Promise<void> {
+        if (!persistenceConfig?.enabled) return;
+        if (!this.tokens) return;
+        if (this.tokens.userKeys && this.tokens.masterKeys) {
+            logger.debug('Keys already cached, skipping fetch');
+            return;
+        }
+
+        logger.info('Fetching keys for persistence...');
+        try {
+            const keys = await fetchKeys(this.createApi());
+            if (keys.userKeys) this.tokens.userKeys = keys.userKeys;
+            if (keys.masterKeys) this.tokens.masterKeys = keys.masterKeys;
+            this.saveTokens();
+            logger.info('Keys cached successfully');
+        } catch (err) {
+            logger.warn({ err }, 'Failed to fetch keys - persistence may not work');
+        }
     }
 
     private async authenticate(): Promise<void> {
@@ -127,6 +156,14 @@ export class SRPAuthProvider implements AuthProvider {
 
     getKeyPassword(): string | undefined {
         return this.tokens?.keyPassword;
+    }
+
+    getCachedUserKeys(): CachedUserKey[] | undefined {
+        return this.tokens?.userKeys;
+    }
+
+    getCachedMasterKeys(): CachedMasterKey[] | undefined {
+        return this.tokens?.masterKeys;
     }
 
     createApi(): ProtonApi {
