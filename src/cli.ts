@@ -6,15 +6,8 @@
  */
 
 import * as readline from 'readline';
-import {
-    createApiAdapter,
-    loadAuthTokens,
-    getTokenAgeHours,
-    areTokensExpired,
-    SimpleLumoClient,
-    type Turn,
-} from './lumo-client/index.js';
-import { authConfig } from './config.js';
+import { SimpleLumoClient, type Turn } from './lumo-client/index.js';
+import { createAuthProvider } from './auth/index.js';
 import logger from './logger.js';
 
 const BUSY_INDICATOR = '...';
@@ -24,30 +17,14 @@ function clearBusyIndicator(): void {
     process.stdout.write('\b\b\b   \b\b\b');
 }
 
-function initClient(): SimpleLumoClient {
-    logger.info({ tokenCachePath: authConfig.tokenCachePath }, 'Loading auth tokens');
-    let tokens;
-    try {
-        tokens = loadAuthTokens();
-    } catch (error) {
-        logger.error({ error, tokenCachePath: authConfig.tokenCachePath }, 'Failed to load auth tokens');
-        logger.error('Run "npm run extract-tokens" first to extract tokens from browser.');
-        process.exit(1);
+async function initClient(): Promise<SimpleLumoClient> {
+    const provider = await createAuthProvider();
+
+    if (!provider.isValid()) {
+        logger.warn('Tokens may be expired. Re-run extraction if you get auth errors.');
     }
 
-    const tokenAge = getTokenAgeHours(tokens);
-    logger.info({
-        extractedAt: tokens.extractedAt,
-        ageHours: tokenAge.toFixed(1),
-        cookieCount: tokens.cookies.length,
-    }, 'Tokens loaded');
-
-    if (areTokensExpired(tokens)) {
-        logger.warn('Some cookies have expired. Re-run extract-tokens if you get auth errors.');
-    }
-
-    const api = createApiAdapter(tokens);
-    return new SimpleLumoClient(api);
+    return new SimpleLumoClient(provider.createApi());
 }
 
 async function singleQuery(client: SimpleLumoClient, query: string): Promise<void> {
@@ -147,7 +124,7 @@ async function interactiveMode(client: SimpleLumoClient): Promise<void> {
 function handleError(error: unknown): void {
     if (error instanceof Error) {
         if (error.message.includes('401')) {
-            logger.error('Hint: Auth tokens may be invalid or expired. Run "npm run extract-tokens" to refresh.');
+            logger.error('Hint: Auth tokens may be invalid or expired. Run extraction script to refresh.');
         } else if (error.message.includes('403')) {
             logger.error('Hint: Access forbidden. Check if account has Lumo access.');
         } else if (error.message.includes('404')) {
@@ -157,7 +134,7 @@ function handleError(error: unknown): void {
 }
 
 async function main(): Promise<void> {
-    const client = initClient();
+    const client = await initClient();
 
     // Check if query provided as argument
     const query = process.argv[2];

@@ -2,7 +2,7 @@
 
 lumo-bridge supports three authentication methods for connecting to Proton Lumo's API.
 
-## rclone Config Extraction (Recommended)
+## rclone Config Extraction
 
 Extracts authentication credentials from an existing [rclone](https://rclone.org/) protondrive configuration.
 
@@ -276,14 +276,25 @@ If keys were cached but server still gets scope errors, the AUTH cookie used may
 - rclone auth method: No automatic refresh. You need to run rclone lsd remote: externally to trigger rclone's token refresh, then restart the server.
 - Browser extraction: No automatic refresh. Requires manual re-extraction when tokens expire.
 
-### Would It Be Hard to Add?
-For browser method, yes - it would be complex because:
+### Why Browser Auth Cannot Have Automatic Refresh
 
-- Browser tokens are session cookies with limited lifetime
-- The refresh endpoint likely requires the same scopes we're bypassing
-- We'd need to maintain Proton's refresh token flow, which involves cryptographic challenges
+Proton stores refresh tokens as **HTTP-only cookies** - a security feature that prevents JavaScript access (XSS protection). This means:
 
-For rclone method, moderate - we could detect 401 errors and shell out to rclone lsd to trigger refresh, then reload config.
+- The `AUTH-{uid}` cookie (access token) is extractable
+- The refresh token cookie is **not accessible** to JavaScript or Playwright
+- The browser automatically includes HTTP-only cookies in requests, but their values cannot be read
+
+This is intentional security design, not a limitation we can work around.
+
+**Workarounds** (all require browser to be running):
+1. **Manual re-extraction**: Run `npm run extract-tokens` when tokens expire (~5 seconds)
+2. **Browser-assisted refresh**: Use Playwright to trigger navigation, forcing Proton's client to refresh, then re-extract
+3. **Intercept during login**: Capture refresh token from API response during active login (only works at login time)
+
+For automated/production use cases, use **SRP authentication** which has full automatic refresh support.
+
+### Adding Refresh to rclone Method
+Moderate complexity - we could detect 401 errors and shell out to `rclone lsd remote:` to trigger refresh, then reload config.
 
 ### Would Cached Keys Still Work After Refresh?
 Yes - the cached userKeys and masterKeys remain valid after token refresh because:

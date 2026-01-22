@@ -1,0 +1,120 @@
+/**
+ * Rclone Auth Provider
+ *
+ * Uses tokens extracted from rclone config via npm run extract-rclone.
+ * No automatic refresh - rclone manages tokens externally.
+ */
+
+import { readFileSync, existsSync } from 'fs';
+import { logger } from '../../logger.js';
+import { authConfig } from '../../config.js';
+import { createProtonApi } from '../api-factory.js';
+import type { AuthProvider, AuthProviderStatus, StoredTokens, ProtonApi } from '../types.js';
+
+export class RcloneAuthProvider implements AuthProvider {
+    readonly method = 'rclone' as const;
+
+    private tokens: StoredTokens | null = null;
+    private tokenCachePath: string;
+
+    constructor() {
+        this.tokenCachePath = authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json';
+    }
+
+    async initialize(): Promise<void> {
+        if (!existsSync(this.tokenCachePath)) {
+            throw new Error(
+                `Token file not found: ${this.tokenCachePath}\n` +
+                'Run: npm run extract-rclone'
+            );
+        }
+
+        const data = readFileSync(this.tokenCachePath, 'utf-8');
+        this.tokens = JSON.parse(data) as StoredTokens;
+
+        // Validate we have rclone tokens
+        if (this.tokens.method !== 'rclone') {
+            throw new Error(
+                `Token file is not from rclone extraction (method: ${this.tokens.method}).\n` +
+                'Run: npm run extract-rclone'
+            );
+        }
+
+        logger.info({
+            uid: this.tokens.uid.slice(0, 12) + '...',
+            hasKeyPassword: !!this.tokens.keyPassword,
+            extractedAt: this.tokens.extractedAt,
+        }, 'Rclone tokens loaded');
+
+        if (!this.tokens.keyPassword) {
+            logger.warn('keyPassword missing from rclone tokens - conversation persistence disabled');
+        }
+    }
+
+    getUid(): string {
+        if (!this.tokens) {
+            throw new Error('Not authenticated - no UID available');
+        }
+        return this.tokens.uid;
+    }
+
+    getKeyPassword(): string | undefined {
+        return this.tokens?.keyPassword;
+    }
+
+    createApi(): ProtonApi {
+        if (!this.tokens) {
+            throw new Error('Not authenticated');
+        }
+
+        return createProtonApi({
+            uid: this.tokens.uid,
+            accessToken: this.tokens.accessToken,
+        });
+    }
+
+    isValid(): boolean {
+        // Rclone doesn't track expiry - tokens are managed externally
+        // We assume valid if we have tokens
+        return !!this.tokens?.accessToken;
+    }
+
+    isNearExpiry(): boolean {
+        // Rclone doesn't track expiry
+        return false;
+    }
+
+    getStatus(): AuthProviderStatus {
+        const status: AuthProviderStatus = {
+            method: 'rclone',
+            source: this.tokenCachePath,
+            valid: false,
+            details: {},
+            warnings: [],
+        };
+
+        if (!this.tokens) {
+            status.warnings.push(`Token file not found: ${this.tokenCachePath}`);
+            status.warnings.push('Run: npm run extract-rclone');
+            return status;
+        }
+
+        status.details.uid = this.tokens.uid?.slice(0, 12) + '...';
+        status.details.hasKeyPassword = !!this.tokens.keyPassword;
+        status.details.extractedAt = this.tokens.extractedAt;
+        status.details.expiresAt = 'not tracked (managed by rclone)';
+
+        if (!this.tokens.keyPassword) {
+            status.warnings.push('keyPassword missing - conversation persistence disabled');
+        }
+
+        if (!this.tokens.accessToken) {
+            status.warnings.push('Missing access token');
+            status.warnings.push('Run: npm run extract-rclone');
+        } else {
+            status.valid = true;
+        }
+
+        return status;
+    }
+}
