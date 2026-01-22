@@ -16,7 +16,7 @@ export type {
 // Local-only types
 
 // API adapter interface
-export interface ApiOptions {
+export interface ProtonApiOptions {
     url: string;
     method: 'get' | 'post' | 'put' | 'delete';
     data?: unknown;
@@ -25,7 +25,7 @@ export interface ApiOptions {
     silence?: boolean;
 }
 
-export type Api = (options: ApiOptions) => Promise<ReadableStream<Uint8Array> | unknown>;
+export type ProtonApi = (options: ProtonApiOptions) => Promise<ReadableStream<Uint8Array> | unknown>;
 
 // Cached user keys structure (for persistence without core/v4/users scope)
 export interface CachedUserKey {

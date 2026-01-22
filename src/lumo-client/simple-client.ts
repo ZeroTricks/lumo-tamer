@@ -15,7 +15,7 @@ import { StreamProcessor } from '../proton-upstream/lib/lumo-api-client/core/str
 import { logger } from '../logger.js';
 import type {
     AesGcmCryptoKey,
-    Api,
+    ProtonApi,
     GenerationToFrontendMessage,
     LumoApiGenerationRequest,
     RequestId,
@@ -36,7 +36,7 @@ const DEFAULT_EXTERNAL_TOOLS: ToolName[] = ['web_search', 'weather', 'stock', 'c
 const DEFAULT_ENDPOINT = 'ai/v1/chat';
 
 export class SimpleLumoClient {
-    constructor(private api: Api) { }
+    constructor(private protonApi: ProtonApi) { }
 
     /**
      * Send a message and stream the response
@@ -196,7 +196,7 @@ export class SimpleLumoClient {
 
         const payload = { Prompt: request };
 
-        const stream = (await this.api({
+        const stream = (await this.protonApi({
             url: endpoint,
             method: 'post',
             data: payload,

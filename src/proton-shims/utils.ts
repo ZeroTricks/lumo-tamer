@@ -1,6 +1,15 @@
 /**
  * Shim for @proton/crypto/lib/utils
- * Provides string/Uint8Array conversion utilities
+ *
+ * Replaces: packages/crypto/lib/utils.ts
+ *
+ * Function mapping:
+ * - utf8StringToUint8Array(): lines 9-11 → original lines 53-57
+ * - uint8ArrayToUtf8String(): lines 13-15 → original lines 66-70
+ *
+ * Not shimmed (not used by lumo-bridge):
+ * - uint8ArrayToBinaryString() - original lines 16-26
+ * - binaryStringToUint8Array() - original lines 35-45
  */
 
 const textEncoder = new TextEncoder();

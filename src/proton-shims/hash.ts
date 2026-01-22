@@ -1,6 +1,12 @@
 /**
  * Shim for @proton/crypto/lib/subtle/hash
- * Provides SHA-256 hashing using Node.js WebCrypto
+ *
+ * Replaces: packages/crypto/lib/subtle/hash.ts
+ *
+ * Function mapping:
+ * - computeSHA256(): lines 22-28 → original lines 9-12
+ *
+ * Key difference: Shim adds .toBase64() method to result.
  */
 
 // Extend Uint8Array with toBase64 method

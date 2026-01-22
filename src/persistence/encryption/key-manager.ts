@@ -21,7 +21,7 @@ import {
 } from '../../proton-shims/aesGcm.js';
 import { logger } from '../../logger.js';
 import type { SpaceId } from '../types.js';
-import type { Api } from '../../lumo-client/types.js';
+import type { ProtonApi } from '../../lumo-client/types.js';
 
 // Constants for key derivation
 const SPACE_KEY_SALT = new Uint8Array([0x6c, 0x75, 0x6d, 0x6f, 0x2d, 0x73, 0x70, 0x61, 0x63, 0x65]); // 'lumo-space'
@@ -91,7 +91,7 @@ export interface CachedMasterKey {
 }
 
 export interface KeyManagerConfig {
-    api: Api;
+    protonApi: ProtonApi;
     // Cached user keys from token extraction (bypasses core/v4/users scope issue)
     cachedUserKeys?: CachedUserKey[];
     // Cached master keys from token extraction (bypasses lumo/v1/masterkeys scope issue)
@@ -102,7 +102,7 @@ export interface KeyManagerConfig {
  * Key Manager class
  */
 export class KeyManager {
-    private api: Api;
+    private protonApi: ProtonApi;
     private cachedUserKeys?: CachedUserKey[];
     private cachedMasterKeys?: CachedMasterKey[];
     private masterKey?: CryptoKey;
@@ -110,7 +110,7 @@ export class KeyManager {
     private initialized = false;
 
     constructor(config: KeyManagerConfig) {
-        this.api = config.api;
+        this.protonApi = config.protonApi;
         this.cachedUserKeys = config.cachedUserKeys;
         this.cachedMasterKeys = config.cachedMasterKeys;
     }
@@ -136,7 +136,7 @@ export class KeyManager {
             } else {
                 // Fetch from API (requires user/settings scopes)
                 logger.info('Fetching user info from API...');
-                const userResponse = await this.api({
+                const userResponse = await this.protonApi({
                     url: 'core/v4/users',
                     method: 'get',
                 }) as UserResponse;
@@ -186,7 +186,7 @@ export class KeyManager {
             } else {
                 // Fetch from API (requires lumo scope)
                 logger.info('Fetching master key from API...');
-                const masterKeyResponse = await this.api({
+                const masterKeyResponse = await this.protonApi({
                     url: 'lumo/v1/masterkeys',
                     method: 'get',
                 }) as MasterKeyResponse;

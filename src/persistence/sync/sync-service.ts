@@ -19,7 +19,13 @@ import {
     decryptData,
     deriveKey,
 } from '../../proton-shims/aesGcm.js';
-import { LumoPersistenceClient, RoleToInt, StatusToInt } from './server-client.js';
+import {
+    createLumoApi,
+    type LumoApi,
+    RoleInt,
+    StatusInt,
+} from './lumo-api-adapter.js';
+import type { ProtonApi } from '../../lumo-client/types.js';
 import { getConversationStore } from '../conversation-store.js';
 import type { KeyManager } from '../encryption/key-manager.js';
 import type { ConversationState, Message, SpaceId, RemoteId, MessageRole, MessageStatus } from '../types.js';
@@ -66,8 +72,10 @@ interface IdMapping {
 }
 
 export interface SyncServiceConfig {
-    api: LumoPersistenceClient;
+    protonApi: ProtonApi;
     keyManager: KeyManager;
+    /** User ID for LumoApi authentication */
+    uid: string;
     defaultSpaceName?: string;
     /** Optional: specify a space UUID directly to bypass name-matching logic */
     spaceId?: string;
@@ -80,8 +88,25 @@ export interface SyncServiceConfig {
  *
  * Manages server-side persistence for conversations.
  */
+// Role mapping: our internal roles to API integer values
+const RoleToInt: Record<MessageRole, number> = {
+    user: RoleInt.User,
+    assistant: RoleInt.Assistant,
+    system: RoleInt.User,  // Treat system as user for storage
+    tool_call: RoleInt.Assistant,
+    tool_result: RoleInt.User,
+};
+
+// Status mapping: our internal status to API integer values
+const StatusToInt: Record<MessageStatus, number | undefined> = {
+    failed: StatusInt.Failed,
+    completed: StatusInt.Succeeded,
+    pending: undefined,
+    streaming: undefined,
+};
+
 export class SyncService {
-    private api: LumoPersistenceClient;
+    private lumoApi: LumoApi;
     private keyManager: KeyManager;
     private defaultSpaceName: string;
     private configuredSpaceId?: string;
@@ -101,7 +126,7 @@ export class SyncService {
     };
 
     constructor(config: SyncServiceConfig) {
-        this.api = config.api;
+        this.lumoApi = createLumoApi(config.protonApi, config.uid);
         this.keyManager = config.keyManager;
         this.defaultSpaceName = config.defaultSpaceName ?? 'lumo-bridge';
         this.configuredSpaceId = config.spaceId;
@@ -128,33 +153,36 @@ export class SyncService {
             ? { spaceId: this.configuredSpaceId }
             : { spaceName: this.defaultSpaceName };
         logger.info(searchCriteria, 'Checking for existing space...');
-        const existingSpaces = await this.api.listSpaces();
+        const listResult = await this.lumoApi.listSpaces();
+
+        // Convert spaces record to array for iteration
+        const existingSpaces = Object.values(listResult.spaces);
 
         // Log available spaces
-        const spacesWithData = existingSpaces.filter(s => s.Encrypted);
+        const spacesWithData = existingSpaces.filter(s => s.encrypted);
         logger.info({
             totalSpaces: existingSpaces.length,
             spacesWithEncryptedData: spacesWithData.length,
-            spaceTags: existingSpaces.map(s => s.SpaceTag),
+            spaceTags: existingSpaces.map(s => s.id),
         }, 'Available spaces');
 
         // If spaceId is configured, find that specific space by UUID
         if (this.configuredSpaceId) {
-            const space = existingSpaces.find(s => s.SpaceTag === this.configuredSpaceId);
+            const space = existingSpaces.find(s => s.id === this.configuredSpaceId);
             if (space) {
                 try {
-                    const spaceKey = await this.keyManager.getSpaceKey(space.SpaceTag, space.SpaceKey);
+                    const spaceKey = await this.keyManager.getSpaceKey(space.id, space.wrappedSpaceKey);
                     const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
 
-                    this.spaceId = space.SpaceTag;
-                    this.spaceRemoteId = space.ID;
+                    this.spaceId = space.id;
+                    this.spaceRemoteId = space.remoteId;
                     this.spaceKey = spaceKey;
                     this.dataEncryptionKey = dataEncryptionKey;
-                    this.idMap.spaces.set(space.SpaceTag, space.ID);
+                    this.idMap.spaces.set(space.id, space.remoteId);
 
                     logger.info({
-                        spaceId: space.SpaceTag,
-                        remoteId: space.ID,
+                        spaceId: space.id,
+                        remoteId: space.remoteId,
                     }, 'Using configured space by UUID');
 
                     await this.loadExistingConversations();
@@ -172,40 +200,41 @@ export class SyncService {
         // First pass: look for a space with matching project name
         logger.info({ totalSpaces: existingSpaces.length, lookingFor: this.defaultSpaceName }, 'Starting first pass - looking for project name match');
         for (const space of existingSpaces) {
-            if (!space.SpaceTag) continue;
+            if (!space.id) continue;
 
             try {
-                const spaceKey = await this.keyManager.getSpaceKey(space.SpaceTag, space.SpaceKey);
+                const spaceKey = await this.keyManager.getSpaceKey(space.id, space.wrappedSpaceKey);
                 const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
 
+                const encryptedData = typeof space.encrypted === 'string' ? space.encrypted : undefined;
                 logger.debug({
-                    spaceTag: space.SpaceTag,
-                    hasEncrypted: !!space.Encrypted,
-                    encryptedLength: space.Encrypted?.length ?? 0,
+                    spaceTag: space.id,
+                    hasEncrypted: !!encryptedData,
+                    encryptedLength: encryptedData?.length ?? 0,
                 }, 'First pass: checking space');
 
                 // Try to decrypt and check project name
-                if (space.Encrypted) {
-                    const spacePrivate = await this.decryptSpacePrivate(space.Encrypted, space.SpaceTag, dataEncryptionKey);
+                if (encryptedData) {
+                    const spacePrivate = await this.decryptSpacePrivate(encryptedData, space.id, dataEncryptionKey);
 
                     logger.debug({
-                        spaceTag: space.SpaceTag,
+                        spaceTag: space.id,
                         projectName: spacePrivate?.projectName,
                         lookingFor: this.defaultSpaceName,
-                        hasEncrypted: !!space.Encrypted,
+                        hasEncrypted: !!encryptedData,
                         decryptedOk: !!spacePrivate,
                     }, 'Checking space for project name match');
 
                     if (spacePrivate?.projectName === this.defaultSpaceName) {
-                        this.spaceId = space.SpaceTag;
-                        this.spaceRemoteId = space.ID;
+                        this.spaceId = space.id;
+                        this.spaceRemoteId = space.remoteId;
                         this.spaceKey = spaceKey;
                         this.dataEncryptionKey = dataEncryptionKey;
-                        this.idMap.spaces.set(space.SpaceTag, space.ID);
+                        this.idMap.spaces.set(space.id, space.remoteId);
 
                         logger.info({
-                            spaceId: space.SpaceTag,
-                            remoteId: space.ID,
+                            spaceId: space.id,
+                            remoteId: space.remoteId,
                             projectName: spacePrivate.projectName,
                         }, 'Found existing space with matching project name');
 
@@ -215,30 +244,31 @@ export class SyncService {
                 }
             } catch (error) {
                 // Can't decrypt this space, try next
-                logger.debug({ spaceTag: space.SpaceTag, error }, 'Could not decrypt space');
+                logger.debug({ spaceTag: space.id, error }, 'Could not decrypt space');
                 continue;
             }
         }
 
         // Second pass: fall back to first decryptable space (for backwards compatibility)
         for (const space of existingSpaces) {
-            if (!space.SpaceTag) continue;
+            if (!space.id) continue;
 
             try {
-                const spaceKey = await this.keyManager.getSpaceKey(space.SpaceTag, space.SpaceKey);
+                const spaceKey = await this.keyManager.getSpaceKey(space.id, space.wrappedSpaceKey);
                 const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
 
-                this.spaceId = space.SpaceTag;
-                this.spaceRemoteId = space.ID;
+                this.spaceId = space.id;
+                this.spaceRemoteId = space.remoteId;
                 this.spaceKey = spaceKey;
                 this.dataEncryptionKey = dataEncryptionKey;
-                this.idMap.spaces.set(space.SpaceTag, space.ID);
+                this.idMap.spaces.set(space.id, space.remoteId);
 
                 // Try to get project name for logging
                 let projectName = '(unknown)';
-                if (space.Encrypted) {
+                const encryptedData = typeof space.encrypted === 'string' ? space.encrypted : undefined;
+                if (encryptedData) {
                     try {
-                        const spacePrivate = await this.decryptSpacePrivate(space.Encrypted, space.SpaceTag, dataEncryptionKey);
+                        const spacePrivate = await this.decryptSpacePrivate(encryptedData, space.id, dataEncryptionKey);
                         projectName = spacePrivate?.projectName ?? '(no name)';
                     } catch {
                         // Ignore decryption errors for logging
@@ -246,8 +276,8 @@ export class SyncService {
                 }
 
                 logger.info({
-                    spaceId: space.SpaceTag,
-                    remoteId: space.ID,
+                    spaceId: space.id,
+                    remoteId: space.remoteId,
                     projectName,
                     note: 'No exact match found, using first available space',
                 }, 'Using existing space (fallback)');
@@ -288,11 +318,15 @@ export class SyncService {
         };
         const encryptedPrivate = await this.encryptSpacePrivate(spacePrivate, localId, dataEncryptionKey);
 
-        const remoteId = await this.api.createSpace({
+        const remoteId = await this.lumoApi.postSpace({
             SpaceKey: wrappedSpaceKey,
             SpaceTag: localId,
             Encrypted: encryptedPrivate,
-        });
+        }, 'background');
+
+        if (!remoteId) {
+            throw new Error('Failed to create space - no remote ID returned');
+        }
 
         // Cache everything locally
         this.spaceId = localId;
@@ -323,23 +357,29 @@ export class SyncService {
      * Prevents 409 errors when conversations already exist from previous sessions
      */
     private async loadExistingConversations(): Promise<void> {
-        if (!this.spaceRemoteId) return;
+        if (!this.spaceRemoteId || !this.spaceId) return;
 
         try {
-            const spaceData = await this.api.getSpace(this.spaceRemoteId);
+            const spaceData = await this.lumoApi.getSpace(this.spaceRemoteId);
+            if (!spaceData) {
+                logger.warn({ spaceRemoteId: this.spaceRemoteId }, 'Space not found on server');
+                return;
+            }
 
-            for (const conv of spaceData.Conversations ?? []) {
-                // ConversationTag is our local conversationId
-                this.idMap.conversations.set(conv.ConversationTag, conv.ID);
+            for (const conv of spaceData.conversations ?? []) {
+                // id is our local conversationId (was ConversationTag in old API)
+                this.idMap.conversations.set(conv.id, conv.remoteId);
 
                 // Load messages for this conversation
                 try {
-                    const convData = await this.api.getConversation(conv.ID);
-                    for (const msg of convData.Messages ?? []) {
-                        this.idMap.messages.set(msg.MessageTag, msg.ID);
+                    const convData = await this.lumoApi.getConversation(conv.remoteId, this.spaceId);
+                    if (convData) {
+                        for (const msg of convData.messages ?? []) {
+                            this.idMap.messages.set(msg.id, msg.remoteId);
+                        }
                     }
                 } catch (error) {
-                    logger.warn({ conversationId: conv.ConversationTag, error }, 'Failed to load messages for conversation');
+                    logger.warn({ conversationId: conv.id, error }, 'Failed to load messages for conversation');
                 }
             }
 
@@ -413,11 +453,17 @@ export class SyncService {
                 title: conversation.title,
             }, conversationId, this.spaceId!);
 
-            conversationRemoteId = await this.api.createConversation(spaceRemoteId, {
+            const newRemoteId = await this.lumoApi.postConversation({
+                SpaceID: spaceRemoteId,
                 IsStarred: conversation.metadata.starred,
                 ConversationTag: conversationId,
                 Encrypted: encryptedPrivate,
-            });
+            }, 'background');
+
+            if (!newRemoteId) {
+                throw new Error(`Failed to create conversation ${conversationId}`);
+            }
+            conversationRemoteId = newRemoteId;
 
             this.idMap.conversations.set(conversationId, conversationRemoteId);
             logger.debug({ conversationId, remoteId: conversationRemoteId }, 'Created conversation on server');
@@ -427,13 +473,13 @@ export class SyncService {
                 title: conversation.title,
             }, conversationId, this.spaceId!);
 
-            await this.api.updateConversation({
+            await this.lumoApi.putConversation({
                 ID: conversationRemoteId,
                 SpaceID: spaceRemoteId,
                 IsStarred: conversation.metadata.starred,
                 ConversationTag: conversationId,
                 Encrypted: encryptedPrivate,
-            });
+            }, 'background');
             logger.debug({ conversationId, remoteId: conversationRemoteId }, 'Updated conversation on server');
         }
 
@@ -496,14 +542,19 @@ export class SyncService {
             toolResult: message.toolResult,
         }, message, effectiveParentId);
 
-        const remoteId = await this.api.createMessage(conversationRemoteId, {
-            Role: RoleToInt[message.role as keyof typeof RoleToInt] ?? 1,
+        const remoteId = await this.lumoApi.postMessage({
+            ConversationID: conversationRemoteId,
+            Role: RoleToInt[message.role] ?? RoleInt.User,
             ParentID: parentRemoteId,
             ParentId: parentRemoteId,  // Duplicate for buggy backend (lowercase 'd')
-            Status: StatusToInt[message.status as keyof typeof StatusToInt],
+            Status: StatusToInt[message.status],
             MessageTag: message.id,
             Encrypted: encryptedPrivate,
-        });
+        }, 'background');
+
+        if (!remoteId) {
+            throw new Error(`Failed to create message ${message.id}`);
+        }
 
         this.idMap.messages.set(message.id, remoteId);
         logger.debug({ messageId: message.id, remoteId }, 'Created message on server');
@@ -670,17 +721,18 @@ export class SyncService {
      * WARNING: This is destructive and cannot be undone!
      */
     async deleteAllSpaces(): Promise<number> {
-        const spaces = await this.api.listSpaces();
+        const listResult = await this.lumoApi.listSpaces();
+        const spaces = Object.values(listResult.spaces);
         logger.warn({ count: spaces.length }, 'Deleting ALL spaces...');
 
         let deleted = 0;
         for (const space of spaces) {
             try {
-                await this.api.deleteSpace(space.ID);
+                await this.lumoApi.deleteSpace(space.remoteId, 'background');
                 deleted++;
-                logger.info({ SpaceTag: space.SpaceTag, ID: space.ID }, 'Deleted space');
+                logger.info({ spaceId: space.id, remoteId: space.remoteId }, 'Deleted space');
             } catch (error) {
-                logger.error({ SpaceTag: space.SpaceTag, error }, 'Failed to delete space');
+                logger.error({ spaceId: space.id, error }, 'Failed to delete space');
             }
         }
 

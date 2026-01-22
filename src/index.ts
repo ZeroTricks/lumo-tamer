@@ -1,3 +1,7 @@
+// Install console shim early, before importing upstream modules
+import { installConsoleShim } from './proton-shims/console.js';
+installConsoleShim();
+
 import { APIServer } from './api/server.js';
 import { logger } from './logger.js';
 
