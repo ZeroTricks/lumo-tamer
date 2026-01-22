@@ -198,6 +198,28 @@ If the browser has multiple Proton sessions (different accounts), extraction pri
 | CAPTCHA handling | Interactive (rclone) | Fails | Interactive |
 | Setup complexity | Low | Medium | Low |
 
+### Keys and Tokens
+
+| Key/Token | rclone | SRP | Browser | Purpose |
+|-----------|--------|-----|---------|---------|
+| `uid` | Yes | Yes | Yes | User identifier for API requests |
+| `accessToken` | Yes | Yes | Yes | Authentication for API calls |
+| `refreshToken` | Yes | Yes | No* | Get new access tokens without re-auth |
+| `keyPassword` | Yes | Yes | Yes | Decrypt user's PGP private keys |
+| `userKeys` | No | No | Yes | Encrypted PGP keys for signing/decryption |
+| `masterKeys` | No | No | Yes | Lumo-specific keys for conversation encryption |
+
+*Browser auth cannot extract refreshToken (HTTP-only cookie).
+
+**Why these matter:**
+- **accessToken**: Required for all API calls. Expires in ~24h.
+- **refreshToken**: Allows automatic token refresh without user interaction. Only SRP and rclone have this.
+- **keyPassword**: Derived from your account password + salt. Needed to decrypt your PGP private keys for end-to-end encryption.
+- **userKeys**: Your encrypted PGP private keys. Fetched from `/core/v4/users`. May require specific API scope.
+- **masterKeys**: Lumo-specific encryption keys. Fetched from `/lumo/v1/masterkeys`. May require specific API scope.
+
+**Scope considerations:** Browser extraction caches `userKeys` and `masterKeys` because the browser context has full scope. SRP and rclone tokens may face scope restrictions when fetching these keys via API - this is untested until SRP auth works reliably.
+
 ### Extraction Steps
 
 | Method | Before Starting Server | On Token Expiry |
