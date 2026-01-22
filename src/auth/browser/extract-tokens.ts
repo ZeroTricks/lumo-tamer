@@ -447,7 +447,6 @@ async function extractTokens(): Promise<void> {
             localStorage[item.name] = item.value;
         }
         logger.info({ count: Object.keys(localStorage).length, origin: 'lumo.proton.me' }, 'Found localStorage items');
-        logger.debug({ keys: Object.keys(localStorage) }, 'Lumo localStorage keys');
     } else {
         logger.warn('No lumo.proton.me origin found in storage state');
     }
@@ -459,7 +458,6 @@ async function extractTokens(): Promise<void> {
             accountLocalStorage[item.name] = item.value;
         }
         logger.info({ count: Object.keys(accountLocalStorage).length, origin: 'account.proton.me' }, 'Found localStorage items');
-        logger.debug({ keys: Object.keys(accountLocalStorage) }, 'Account localStorage keys');
     } else {
         logger.warn('No account.proton.me origin found in storage state');
     }
@@ -483,7 +481,6 @@ async function extractTokens(): Promise<void> {
         directLocalStorage = result.localStorage;
         activeSessionUid = result.activeUid;
         logger.info({ count: Object.keys(directLocalStorage).length }, 'Direct localStorage extraction');
-        logger.debug({ keys: Object.keys(directLocalStorage) }, 'Direct localStorage keys');
         if (activeSessionUid) {
             logger.info({ activeSessionUid: activeSessionUid.slice(0, 12) + '...' }, 'Found active session UID');
         }
