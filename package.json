@@ -11,6 +11,7 @@
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
     "extract-tokens": "tsx src/auth/browser/extract-tokens.ts",
+    "extract-rclone": "tsx src/auth/rclone/extract.ts",
     "auth-status": "tsx src/auth/status.ts",
     "lumo": "tsx src/cli.ts",
     "sync-upstream": "./scripts/sync-upstream.sh"
