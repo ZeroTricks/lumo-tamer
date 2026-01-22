@@ -25,6 +25,14 @@ server:
 persistence:
   enabled: true
   defaultSpaceName: lumo-bridge
+  # Sync all message types (system, tool_call, tool_result) to Proton server
+  # Default: false (only sync user/assistant messages)
+  saveSystemMessages: false
+  # WORKAROUND for clients without conversation_id support (e.g., Home Assistant).
+  # Derives conversation ID from first user message - same message = same conversation.
+  # WARNING: May incorrectly merge unrelated conversations with same opening message!
+  # Default: false (each request without conversation_id creates a new conversation)
+  deriveIdFromFirstMessage: false
 
 
 # Tools Configuration
