@@ -204,6 +204,7 @@ export class APIServer {
         keyManager,
         defaultSpaceName: persistenceConfig.defaultSpaceName,
         spaceId: persistenceConfig.spaceId,
+        saveSystemMessages: persistenceConfig.saveSystemMessages,
       });
 
       // Mark as initialized now - commands like deleteAllSpaces should work

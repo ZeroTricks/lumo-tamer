@@ -6,17 +6,24 @@ import { handleStreamingRequest, handleNonStreamingRequest } from './handlers.js
 import { createEmptyResponse } from './response-factory.js';
 import { convertResponseInputToTurns } from '../../message-converter.js';
 import { isCommand, executeCommand } from '../../commands.js';
+import { persistenceConfig } from '../../../config.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../persistence/index.js';
+
+// Session ID generated once at module load - makes deterministic IDs unique per server session
+// This prevents 409 conflicts with deleted conversations from previous sessions
+const SESSION_ID = randomUUID();
 
 /**
  * Generate a deterministic UUID v5-like ID from the first user message.
  * This ensures that conversations with the same starting message get the same ID,
  * which is important for clients like Home Assistant that send full history
  * without a conversation_id.
+ *
+ * Includes SESSION_ID so IDs are deterministic within a session but unique across sessions.
  */
 function generateDeterministicConversationId(firstUserMessage: string): ConversationId {
-  const hash = createHash('sha256').update(`lumo-bridge:${firstUserMessage}`).digest('hex');
+  const hash = createHash('sha256').update(`lumo-bridge:${SESSION_ID}:${firstUserMessage}`).digest('hex');
   // Format as UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
   // Use version 4 format but with deterministic bytes
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
@@ -106,10 +113,10 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
         conversationId = request.conversation_id;
       } else if (request.previous_response_id) {
         conversationId = request.previous_response_id;
-      } else {
-        // Generate deterministic ID from first USER message so conversations with same start get same ID
-        // This is important for clients like Home Assistant that send full history without conversation_id
-        // Note: We use first user message, not first message (which might be assistant greeting)
+      } else if (persistenceConfig?.deriveIdFromFirstMessage) {
+        // WORKAROUND for clients that don't provide conversation_id (e.g., Home Assistant).
+        // Generate deterministic ID from first USER message so conversations with same start get same ID.
+        // WARNING: This may incorrectly merge unrelated conversations with the same opening message!
         const firstUserMessage = Array.isArray(request.input)
           ? request.input.find((m): m is { role: string; content: string } =>
               typeof m === 'object' && 'role' in m && m.role === 'user' && 'content' in m
@@ -120,21 +127,41 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
           ? generateDeterministicConversationId(firstUserMessage)
           : randomUUID();
 
-        logger.debug({ conversationId, firstUserMessage: firstUserMessage?.slice(0, 50) }, 'Generated deterministic conversation ID');
+        logger.debug({ conversationId, firstUserMessage: firstUserMessage?.slice(0, 50) }, 'Generated deterministic conversation ID from first message');
+      } else {
+        // Default: generate random UUID for each new conversation
+        conversationId = randomUUID();
+        logger.debug({ conversationId }, 'Generated random conversation ID');
       }
 
       // Persist all messages from input to conversation store
       // The deduplication logic in appendMessages will filter out already-stored messages
       if (deps.conversationStore && Array.isArray(request.input)) {
-        // Extract all user and assistant messages from input (not function outputs)
-        const allMessages = request.input
-          .filter((item): item is { role: string; content: string } => {
-            if (typeof item !== 'object') return false;
-            if ('type' in item && item.type === 'function_call_output') return false;
-            return 'role' in item && 'content' in item &&
-              (item.role === 'user' || item.role === 'assistant');
-          })
-          .map(m => ({ role: m.role, content: m.content }));
+        // Extract all messages (including system, tool calls, etc.)
+        // Function calls and outputs are converted to a storable format
+        const allMessages: Array<{ role: string; content: string }> = [];
+        for (const item of request.input) {
+          // Use type assertion to access 'type' property safely
+          const itemType = 'type' in item ? (item as { type: string }).type : undefined;
+
+          if (itemType === 'function_call') {
+            // Convert function_call to a message format
+            const fc = item as unknown as { type: string; name: string; arguments: string; call_id: string };
+            allMessages.push({
+              role: 'tool_call',
+              content: JSON.stringify({ call_id: fc.call_id, name: fc.name, arguments: fc.arguments })
+            });
+          } else if (itemType === 'function_call_output') {
+            // Convert function_call_output to a message format
+            const fco = item as FunctionCallOutput;
+            allMessages.push({
+              role: 'tool_result',
+              content: JSON.stringify({ call_id: fco.call_id, output: fco.output })
+            });
+          } else if ('role' in item && 'content' in item) {
+            allMessages.push({ role: item.role, content: item.content });
+          }
+        }
 
         if (allMessages.length > 0) {
           deps.conversationStore.appendMessages(conversationId, allMessages);

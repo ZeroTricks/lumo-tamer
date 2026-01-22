@@ -46,6 +46,15 @@ const persistenceConfigSchema = z.object({
   // Optional: specify a space UUID directly to bypass name-matching logic
   // Can be found in the WebClient URL when viewing a space
   spaceId: z.string().uuid().optional(),
+  // If true, sync all message types (system, tool_call, tool_result) to Proton server
+  // If false (default), only sync user/assistant messages
+  saveSystemMessages: z.boolean().default(false),
+  // WORKAROUND for clients that don't provide conversation_id (e.g., Home Assistant).
+  // When true: derives conversation ID from first user message hash, so same opening
+  // message = same conversation. WARNING: This may incorrectly merge unrelated
+  // conversations that happen to start with the same message!
+  // When false (default): each request without conversation_id creates a new conversation.
+  deriveIdFromFirstMessage: z.boolean().default(false),
 }).optional();
 
 // Auth configuration for SRP-based authentication

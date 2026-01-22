@@ -71,6 +71,8 @@ export interface SyncServiceConfig {
     defaultSpaceName?: string;
     /** Optional: specify a space UUID directly to bypass name-matching logic */
     spaceId?: string;
+    /** If true, sync all message types to server; if false, only user/assistant */
+    saveSystemMessages?: boolean;
 }
 
 /**
@@ -83,6 +85,7 @@ export class SyncService {
     private keyManager: KeyManager;
     private defaultSpaceName: string;
     private configuredSpaceId?: string;
+    private saveSystemMessages: boolean;
 
     // Current space info
     private spaceId?: SpaceId;
@@ -102,6 +105,7 @@ export class SyncService {
         this.keyManager = config.keyManager;
         this.defaultSpaceName = config.defaultSpaceName ?? 'lumo-bridge';
         this.configuredSpaceId = config.spaceId;
+        this.saveSystemMessages = config.saveSystemMessages ?? false;
     }
 
     /**
@@ -153,6 +157,7 @@ export class SyncService {
                         remoteId: space.ID,
                     }, 'Using configured space by UUID');
 
+                    await this.loadExistingConversations();
                     return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
                 } catch (error) {
                     logger.error({ spaceId: this.configuredSpaceId, error }, 'Failed to decrypt configured space');
@@ -204,6 +209,7 @@ export class SyncService {
                             projectName: spacePrivate.projectName,
                         }, 'Found existing space with matching project name');
 
+                        await this.loadExistingConversations();
                         return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
                     }
                 }
@@ -246,6 +252,7 @@ export class SyncService {
                     note: 'No exact match found, using first available space',
                 }, 'Using existing space (fallback)');
 
+                await this.loadExistingConversations();
                 return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
             } catch {
                 // Can't unwrap this key, try next space
@@ -309,6 +316,41 @@ export class SyncService {
     private async deriveDataEncryptionKey(spaceKey: CryptoKey): Promise<CryptoKey> {
         const keyBytes = await exportKey(spaceKey);
         return deriveKey(keyBytes, new Uint8Array(SPACE_KEY_DERIVATION_SALT), SPACE_DEK_CONTEXT);
+    }
+
+    /**
+     * Load existing conversations from server to populate idMap
+     * Prevents 409 errors when conversations already exist from previous sessions
+     */
+    private async loadExistingConversations(): Promise<void> {
+        if (!this.spaceRemoteId) return;
+
+        try {
+            const spaceData = await this.api.getSpace(this.spaceRemoteId);
+
+            for (const conv of spaceData.Conversations ?? []) {
+                // ConversationTag is our local conversationId
+                this.idMap.conversations.set(conv.ConversationTag, conv.ID);
+
+                // Load messages for this conversation
+                try {
+                    const convData = await this.api.getConversation(conv.ID);
+                    for (const msg of convData.Messages ?? []) {
+                        this.idMap.messages.set(msg.MessageTag, msg.ID);
+                    }
+                } catch (error) {
+                    logger.warn({ conversationId: conv.ConversationTag, error }, 'Failed to load messages for conversation');
+                }
+            }
+
+            logger.info({
+                conversations: this.idMap.conversations.size,
+                messages: this.idMap.messages.size,
+            }, 'Loaded existing conversations from server');
+        } catch (error) {
+            logger.error({ error }, 'Failed to load existing conversations');
+            // Don't throw - idMap will just be empty and we'll get 409 errors as before
+        }
     }
 
     /**
@@ -395,9 +437,16 @@ export class SyncService {
             logger.debug({ conversationId, remoteId: conversationRemoteId }, 'Updated conversation on server');
         }
 
-        // Sync messages
-        for (const message of conversation.messages) {
-            await this.syncMessage(message, conversationRemoteId);
+        // Sync messages (filter based on saveSystemMessages config)
+        const messagesToSync = this.saveSystemMessages
+            ? conversation.messages
+            : conversation.messages.filter(m => m.role === 'user' || m.role === 'assistant');
+
+        // Create a map for quick lookup of messages by ID (for parent chain walking)
+        const messageMap = new Map(conversation.messages.map(m => [m.id, m]));
+
+        for (const message of messagesToSync) {
+            await this.syncMessage(message, conversationRemoteId, messageMap);
         }
     }
 
@@ -406,7 +455,8 @@ export class SyncService {
      */
     private async syncMessage(
         message: Message,
-        conversationRemoteId: RemoteId
+        conversationRemoteId: RemoteId,
+        messageMap: Map<string, Message>
     ): Promise<void> {
         // Check if message already exists on server
         if (this.idMap.messages.has(message.id)) {
@@ -414,16 +464,37 @@ export class SyncService {
             return;
         }
 
+        // For non-user/assistant roles, prefix content with role type for clarity in Proton UI
+        let contentToStore = message.content;
+        if (message.role !== 'user' && message.role !== 'assistant') {
+            contentToStore = `[${message.role}]\n${message.content}`;
+        }
+
+        // Find the parent message that was actually synced to the server
+        // Walk up the parent chain until we find one that exists in idMap
+        let effectiveParentId: string | undefined = message.parentId;
+        let parentRemoteId: string | undefined;
+        while (effectiveParentId) {
+            parentRemoteId = this.idMap.messages.get(effectiveParentId);
+            if (parentRemoteId) {
+                break; // Found a synced parent
+            }
+            // Parent not synced, look for its parent (it was filtered out)
+            const parentMessage = messageMap.get(effectiveParentId);
+            if (parentMessage) {
+                effectiveParentId = parentMessage.parentId;
+            } else {
+                // Parent not found at all, give up
+                effectiveParentId = undefined;
+            }
+        }
+
         const encryptedPrivate = await this.encryptMessagePrivate({
-            content: message.content,
+            content: contentToStore,
             context: message.context,
             toolCall: message.toolCall,
             toolResult: message.toolResult,
-        }, message);
-
-        const parentRemoteId = message.parentId
-            ? this.idMap.messages.get(message.parentId)
-            : undefined;
+        }, message, effectiveParentId);
 
         const remoteId = await this.api.createMessage(conversationRemoteId, {
             Role: RoleToInt[message.role as keyof typeof RoleToInt] ?? 1,
@@ -474,24 +545,35 @@ export class SyncService {
      *
      * AD format must match Lumo WebClient (json-stable-stringify with alphabetically sorted keys):
      * {"app":"lumo","conversationId":"...","id":"...","parentId":"...","role":"...","type":"message"}
+     *
+     * IMPORTANT: The role in AD must be the mapped role (user/assistant) that matches what
+     * the WebClient will reconstruct from the Role integer field, NOT our internal role names.
      */
     private async encryptMessagePrivate(
         data: MessagePrivate,
-        message: Message
+        message: Message,
+        effectiveParentId?: string
     ): Promise<string> {
         if (!this.dataEncryptionKey) {
             throw new Error('Data encryption key not initialized');
         }
 
+        // Map our internal role to the role the WebClient will use for AD reconstruction
+        // WebClient uses IntToRole[Role] where Role is what we send to the API
+        const roleInt = RoleToInt[message.role as keyof typeof RoleToInt] ?? 1;
+        const adRole = roleInt === 2 ? 'assistant' : 'user';
+
         const json = JSON.stringify(data);
         const plaintext = new TextEncoder().encode(json);
         // AD must be alphabetically sorted JSON (matching json-stable-stringify)
+        // Use effectiveParentId (the parent that was actually synced) for AD
+        // Use adRole (mapped to user/assistant) to match WebClient's AD reconstruction
         const adString = stableStringify({
             app: 'lumo',
             type: 'message',
             id: message.id,
-            role: message.role,
-            parentId: message.parentId,
+            role: adRole,
+            parentId: effectiveParentId,
             conversationId: message.conversationId,
         });
         logger.debug({ adString, messageId: message.id }, 'Encrypting message with AD');
