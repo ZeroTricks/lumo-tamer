@@ -43,6 +43,9 @@ const persistenceConfigSchema = z.object({
   syncInterval: z.number().default(30000),          // ms between sync attempts
   maxConversationsInMemory: z.number().default(100),
   defaultSpaceName: z.string().default('lumo-bridge'),
+  // Optional: specify a space UUID directly to bypass name-matching logic
+  // Can be found in the WebClient URL when viewing a space
+  spaceId: z.string().uuid().optional(),
 }).optional();
 
 // Auth configuration for SRP-based authentication
@@ -51,8 +54,8 @@ const authConfigSchema = z.object({
   binaryPath: z.string().default('./bin/proton-auth'),
   tokenCachePath: z.string().default('sessions/auth-tokens.json'),
   // rclone-specific options
-  rclonePath: z.string().optional(),   // Path to rclone.conf (default: ~/.config/rclone/rclone.conf)
-  rcloneRemote: z.string().optional(), // Section name in rclone config (e.g., "proton-test")
+  rclonePath: z.string().optional(),   // Path to rclone.conf
+  rcloneRemote: z.string().optional(), // Section name in rclone config
 });
 
 

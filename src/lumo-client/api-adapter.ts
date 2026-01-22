@@ -30,9 +30,20 @@ export function createApiAdapter(
 
     // Find the AUTH cookie for lumo.proton.me domain
     // Cookie name format: AUTH-{uid}, value is the access token
-    const lumoAuthCookie = tokens.cookies.find(
-        (c) => c.name.startsWith('AUTH-') && c.domain.includes('lumo.proton.me')
-    );
+    // Prefer the cookie matching the persisted session UID (that's the active session)
+    const persistedSessionUid = tokens.persistedSession?.UID;
+    let lumoAuthCookie = persistedSessionUid
+        ? tokens.cookies.find(
+            (c) => c.name === `AUTH-${persistedSessionUid}` && c.domain.includes('lumo.proton.me')
+        )
+        : undefined;
+
+    // Fallback to any lumo AUTH cookie
+    if (!lumoAuthCookie) {
+        lumoAuthCookie = tokens.cookies.find(
+            (c) => c.name.startsWith('AUTH-') && c.domain.includes('lumo.proton.me')
+        );
+    }
 
     if (!lumoAuthCookie) {
         throw new Error('No AUTH cookie found for lumo.proton.me. Re-run extract-tokens.');

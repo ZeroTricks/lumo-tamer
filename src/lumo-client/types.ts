@@ -27,6 +27,22 @@ export interface ApiOptions {
 
 export type Api = (options: ApiOptions) => Promise<ReadableStream<Uint8Array> | unknown>;
 
+// Cached user keys structure (for persistence without core/v4/users scope)
+export interface CachedUserKey {
+    ID: string;
+    PrivateKey: string;     // Armored PGP private key
+    Primary: number;        // 1 = primary
+    Active: number;         // 1 = active
+}
+
+// Cached master key structure (for persistence without lumo/v1/masterkeys scope)
+export interface CachedMasterKey {
+    ID: string;
+    MasterKey: string;      // PGP-encrypted master key (base64)
+    IsLatest: boolean;
+    Version: number;
+}
+
 // Auth tokens structure for storage
 export interface AuthTokens {
     cookies: Array<{
@@ -43,6 +59,10 @@ export interface AuthTokens {
     extractedAt: string;
     // Extended auth data for conversation persistence
     persistedSession?: PersistedSessionData;
+    // Cached user keys (fetched via browser to bypass scope limitation)
+    userKeys?: CachedUserKey[];
+    // Cached master keys (fetched via browser to bypass scope limitation)
+    masterKeys?: CachedMasterKey[];
 }
 
 // Persisted session structure (from Proton localStorage ps-{localID})

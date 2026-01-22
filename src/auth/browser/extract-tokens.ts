@@ -12,9 +12,12 @@ import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { promises as dns, ADDRCONFIG } from 'dns';
 import type { AuthTokens, PersistedSessionData } from '../../lumo-client/types.js';
-import { browserConfig, authConfig, protonConfig } from '../../config.js';
+import { browserConfig, authConfig, protonConfig, persistenceConfig } from '../../config.js';
 import { logger } from '../../logger.js';
 import { decryptPersistedSession } from '../../persistence/session-keys.js';
+
+// Check if persistence is enabled (determines whether to fetch extra keys)
+const persistenceEnabled = persistenceConfig?.enabled ?? false;
 
 // Validate required config
 if (!browserConfig?.cdpEndpoint) {
@@ -49,20 +52,35 @@ async function resolveCdpEndpoint(endpoint: string): Promise<string> {
 }
 
 /**
- * Extract persisted session from localStorage that matches a specific UID
- * If targetUid is provided, only return session if it matches
+ * Extract persisted session from localStorage
+ * Sessions are stored with key format: ps-{localID}
+ * If targetUid is provided, only return session if it matches that UID
  */
-function extractPersistedSessionForUid(
+function extractPersistedSession(
     localStorage: Record<string, string>,
     targetUid?: string
 ): PersistedSessionData | undefined {
     const sessionKeys = Object.keys(localStorage).filter(k => k.startsWith('ps-'));
 
     if (sessionKeys.length === 0) {
+        if (!targetUid) {
+            logger.warn('No persisted sessions found in localStorage');
+        }
         return undefined;
     }
 
-    for (const key of sessionKeys) {
+    if (!targetUid) {
+        logger.info({ count: sessionKeys.length }, 'Found persisted session keys');
+    }
+
+    // Sort by localID to get the primary session first
+    const sortedKeys = sessionKeys.sort((a, b) => {
+        const idA = parseInt(a.replace('ps-', ''));
+        const idB = parseInt(b.replace('ps-', ''));
+        return idA - idB;
+    });
+
+    for (const key of sortedKeys) {
         try {
             const session = JSON.parse(localStorage[key]);
             if (!session.UID || !session.UserID) continue;
@@ -85,7 +103,7 @@ function extractPersistedSessionForUid(
                 hasBlob: !!persistedSession.blob,
                 payloadVersion: persistedSession.payloadVersion,
                 matchedTarget: !!targetUid,
-            }, 'Found matching persisted session');
+            }, 'Found persisted session');
 
             return persistedSession;
         } catch {
@@ -94,64 +112,6 @@ function extractPersistedSessionForUid(
     }
 
     return undefined;
-}
-
-/**
- * Extract persisted session from localStorage
- * Sessions are stored with key format: ps-{localID}
- */
-function extractPersistedSession(localStorage: Record<string, string>): PersistedSessionData | undefined {
-    // Find persisted session keys (format: ps-0, ps-1, etc.)
-    const sessionKeys = Object.keys(localStorage).filter(k => k.startsWith('ps-'));
-
-    if (sessionKeys.length === 0) {
-        logger.warn('No persisted sessions found in localStorage');
-        return undefined;
-    }
-
-    logger.info({ count: sessionKeys.length }, 'Found persisted session keys');
-
-    // Get the most recent session (usually ps-0 for single account)
-    // Sort by localID to get the primary session
-    const sortedKeys = sessionKeys.sort((a, b) => {
-        const idA = parseInt(a.replace('ps-', ''));
-        const idB = parseInt(b.replace('ps-', ''));
-        return idA - idB;
-    });
-
-    const primaryKey = sortedKeys[0];
-    const sessionJson = localStorage[primaryKey];
-
-    try {
-        const session = JSON.parse(sessionJson);
-
-        // Validate expected fields
-        if (!session.UID || !session.UserID) {
-            logger.warn('Persisted session missing UID or UserID');
-            return undefined;
-        }
-
-        const persistedSession: PersistedSessionData = {
-            localID: session.localID ?? 0,
-            UserID: session.UserID,
-            UID: session.UID,
-            blob: session.blob,
-            payloadVersion: session.payloadVersion ?? 1,
-            persistedAt: session.persistedAt ?? Date.now(),
-        };
-
-        logger.info({
-            localID: persistedSession.localID,
-            UserID: persistedSession.UserID.slice(0, 8) + '...',
-            hasBlob: !!persistedSession.blob,
-            payloadVersion: persistedSession.payloadVersion
-        }, 'Extracted persisted session');
-
-        return persistedSession;
-    } catch (error) {
-        logger.error({ error, key: primaryKey }, 'Failed to parse persisted session');
-        return undefined;
-    }
 }
 
 /**
@@ -249,6 +209,137 @@ async function fetchClientKey(
         return result.clientKey;
     } catch (error) {
         logger.warn({ error }, 'Failed to fetch ClientKey');
+        return undefined;
+    }
+}
+
+/**
+ * Fetch user info (including keys) from Proton API via browser
+ * This bypasses the scope limitation since the browser has full access
+ */
+async function fetchUserInfo(
+    page: Page,
+    uid: string,
+    accessToken: string,
+    appVersion: string
+): Promise<{ User: { Keys: Array<{ ID: string; PrivateKey: string; Primary: number; Active: number }> } } | undefined> {
+    try {
+        logger.info('Fetching user info via browser...');
+
+        // Navigate to account.proton.me for API access
+        const currentUrl = page.url();
+        if (!currentUrl.includes('account.proton.me')) {
+            await page.goto('https://account.proton.me/', { waitUntil: 'domcontentloaded' });
+            await page.waitForTimeout(500);
+        }
+
+        const result = await page.evaluate(async ({ uid, accessToken, appVersion }) => {
+            try {
+                const response = await fetch('/api/core/v4/users', {
+                    method: 'GET',
+                    headers: {
+                        'x-pm-uid': uid,
+                        'x-pm-appversion': appVersion,
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                    credentials: 'include',
+                });
+
+                if (!response.ok) {
+                    const text = await response.text().catch(() => '');
+                    return { error: `HTTP ${response.status}`, body: text };
+                }
+
+                const data = await response.json();
+                return { user: data };
+            } catch (err) {
+                return { error: String(err) };
+            }
+        }, { uid, accessToken, appVersion });
+
+        // Navigate back to Lumo
+        if (!currentUrl.includes('account.proton.me')) {
+            await page.goto(currentUrl, { waitUntil: 'domcontentloaded' });
+        }
+
+        if ('error' in result) {
+            logger.warn({ error: result.error }, 'Failed to fetch user info');
+            return undefined;
+        }
+
+        const keyCount = result.user?.User?.Keys?.length ?? 0;
+        logger.info({ keyCount }, 'Successfully fetched user info');
+        return result.user;
+    } catch (error) {
+        logger.warn({ error }, 'Failed to fetch user info');
+        return undefined;
+    }
+}
+
+/**
+ * Fetch master keys from Lumo API via browser
+ * This bypasses the scope limitation since the browser has full access
+ */
+async function fetchMasterKeys(
+    page: Page,
+    uid: string,
+    accessToken: string,
+    appVersion: string
+): Promise<Array<{ ID: string; MasterKey: string; IsLatest: boolean; Version: number }> | undefined> {
+    try {
+        logger.info('Fetching master keys via browser...');
+
+        // Navigate to lumo.proton.me for API access (lumo endpoint needs lumo domain)
+        const currentUrl = page.url();
+        if (!currentUrl.includes('lumo.proton.me')) {
+            await page.goto('https://lumo.proton.me/', { waitUntil: 'domcontentloaded' });
+            await page.waitForTimeout(500);
+        }
+
+        const result = await page.evaluate(async ({ uid, accessToken, appVersion }) => {
+            try {
+                const response = await fetch('/api/lumo/v1/masterkeys', {
+                    method: 'GET',
+                    headers: {
+                        'x-pm-uid': uid,
+                        'x-pm-appversion': appVersion,
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                    credentials: 'include',
+                });
+
+                if (!response.ok) {
+                    const text = await response.text().catch(() => '');
+                    return { error: `HTTP ${response.status}`, body: text };
+                }
+
+                const data = await response.json();
+                return { masterKeys: data };
+            } catch (err) {
+                return { error: String(err) };
+            }
+        }, { uid, accessToken, appVersion });
+
+        // Navigate back if needed
+        if (!currentUrl.includes('lumo.proton.me')) {
+            await page.goto(currentUrl, { waitUntil: 'domcontentloaded' });
+        }
+
+        if ('error' in result) {
+            logger.warn({ error: result.error }, 'Failed to fetch master keys');
+            return undefined;
+        }
+
+        const masterKeys = result.masterKeys?.MasterKeys ?? [];
+        logger.info({ count: masterKeys.length }, 'Successfully fetched master keys');
+        return masterKeys.map((k: { ID: string; MasterKey: string; IsLatest: boolean; Version: number }) => ({
+            ID: k.ID,
+            MasterKey: k.MasterKey,
+            IsLatest: k.IsLatest,
+            Version: k.Version,
+        }));
+    } catch (error) {
+        logger.warn({ error }, 'Failed to fetch master keys');
         return undefined;
     }
 }
@@ -406,12 +497,12 @@ async function extractTokens(): Promise<void> {
 
     if (activeSessionUid) {
         // First try to find a session matching the active UID
-        persistedSession = extractPersistedSessionForUid(directLocalStorage, activeSessionUid);
+        persistedSession = extractPersistedSession(directLocalStorage, activeSessionUid);
         if (!persistedSession) {
-            persistedSession = extractPersistedSessionForUid(localStorage, activeSessionUid);
+            persistedSession = extractPersistedSession(localStorage, activeSessionUid);
         }
         if (!persistedSession) {
-            persistedSession = extractPersistedSessionForUid(accountLocalStorage, activeSessionUid);
+            persistedSession = extractPersistedSession(accountLocalStorage, activeSessionUid);
         }
     }
 
@@ -426,44 +517,107 @@ async function extractTokens(): Promise<void> {
         persistedSession = extractPersistedSession(accountLocalStorage);
     }
 
-    // Fetch ClientKey if we have a persisted session with a blob
-    if (persistedSession?.blob) {
-        // Find the AUTH cookie matching the persisted session's UID
-        // Try account.proton.me first, then lumo.proton.me
-        const matchingAuthCookie = relevantCookies.find(
-            c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('account.proton.me')
-        ) || relevantCookies.find(
-            c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
-        );
+    // Fetch persistence keys only if persistence is enabled
+    let userKeys: AuthTokens['userKeys'];
+    let masterKeys: AuthTokens['masterKeys'];
 
-        if (!matchingAuthCookie) {
-            logger.debug({ sessionUid: persistedSession.UID.slice(0, 8) + '...' }, 'No AUTH cookie matching session UID, trying fallback');
+    if (persistenceEnabled) {
+        logger.info('Persistence enabled - fetching encryption keys...');
+
+        // Fetch ClientKey if we have a persisted session with a blob
+        if (persistedSession?.blob) {
+            // Find the AUTH cookie matching the persisted session's UID
+            // Try account.proton.me first, then lumo.proton.me
+            const matchingAuthCookie = relevantCookies.find(
+                c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('account.proton.me')
+            ) || relevantCookies.find(
+                c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
+            );
+
+            if (!matchingAuthCookie) {
+                logger.debug({ sessionUid: persistedSession.UID.slice(0, 8) + '...' }, 'No AUTH cookie matching session UID, trying fallback');
+            }
+
+            const authCookie = matchingAuthCookie || accountAuthCookie || lumoAuthCookie;
+            if (authCookie) {
+                const uid = authCookie.name.replace('AUTH-', '');
+                const accessToken = authCookie.value;
+
+                logger.info({ uid: uid.slice(0, 8) + '...', sessionUid: persistedSession.UID.slice(0, 8) + '...' }, 'Fetching ClientKey from API...');
+                const clientKey = await fetchClientKey(page, uid, accessToken, protonConfig.appVersion);
+
+                if (clientKey) {
+                    persistedSession.clientKey = clientKey;
+
+                    // Verify decryption works before saving
+                    try {
+                        const decrypted = await decryptPersistedSession(persistedSession);
+                        logger.info({ type: decrypted.type }, 'Successfully verified keyPassword extraction');
+                    } catch (err) {
+                        logger.error({ err }, 'ClientKey fetch succeeded but decryption failed');
+                        // Clear clientKey if decryption fails - don't save broken data
+                        persistedSession.clientKey = undefined;
+                    }
+                }
+            } else {
+                logger.warn('No AUTH cookie found for ClientKey fetch');
+            }
         }
 
-        const authCookie = matchingAuthCookie || accountAuthCookie || lumoAuthCookie;
-        if (authCookie) {
-            const uid = authCookie.name.replace('AUTH-', '');
-            const accessToken = authCookie.value;
+        // Fetch user info (including keys) via browser to bypass scope limitation
+        // Use the SAME auth cookie that worked for ClientKey (the matching session)
+        if (persistedSession?.clientKey) {
+            // Find the same auth cookie we used for ClientKey
+            const matchingAuthCookie = relevantCookies.find(
+                c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('account.proton.me')
+            ) || relevantCookies.find(
+                c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
+            );
+            const authCookieForUserInfo = matchingAuthCookie || accountAuthCookie || lumoAuthCookie;
 
-            logger.info({ uid: uid.slice(0, 8) + '...', sessionUid: persistedSession.UID.slice(0, 8) + '...' }, 'Fetching ClientKey from API...');
-            const clientKey = await fetchClientKey(page, uid, accessToken, protonConfig.appVersion);
-
-            if (clientKey) {
-                persistedSession.clientKey = clientKey;
-
-                // Verify decryption works before saving
-                try {
-                    const decrypted = await decryptPersistedSession(persistedSession);
-                    logger.info({ type: decrypted.type }, 'Successfully verified keyPassword extraction');
-                } catch (err) {
-                    logger.error({ err }, 'ClientKey fetch succeeded but decryption failed');
-                    // Clear clientKey if decryption fails - don't save broken data
-                    persistedSession.clientKey = undefined;
+            if (authCookieForUserInfo) {
+                const uid = authCookieForUserInfo.name.replace('AUTH-', '');
+                const accessToken = authCookieForUserInfo.value;
+                logger.info({ uid: uid.slice(0, 8) + '...', domain: authCookieForUserInfo.domain }, 'Fetching user info...');
+                const userInfo = await fetchUserInfo(page, uid, accessToken, protonConfig.appVersion);
+                if (userInfo?.User?.Keys) {
+                    userKeys = userInfo.User.Keys.map(k => ({
+                        ID: k.ID,
+                        PrivateKey: k.PrivateKey,
+                        Primary: k.Primary,
+                        Active: k.Active,
+                    }));
+                    logger.info({ keyCount: userKeys.length }, 'Cached user keys for persistence');
                 }
+            } else {
+                logger.warn('No AUTH cookie found for user info fetch');
             }
         } else {
-            logger.warn('No AUTH cookie found for ClientKey fetch');
+            logger.warn('No clientKey available - skipping user info fetch');
         }
+
+        // Fetch master keys via browser to bypass scope limitation
+        if (persistedSession?.clientKey) {
+            // Use the Lumo auth cookie for master keys (it's a lumo endpoint)
+            const lumoAuthForMasterKeys = relevantCookies.find(
+                c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
+            ) || lumoAuthCookie;
+
+            if (lumoAuthForMasterKeys) {
+                const uid = lumoAuthForMasterKeys.name.replace('AUTH-', '');
+                const accessToken = lumoAuthForMasterKeys.value;
+                logger.info({ uid: uid.slice(0, 8) + '...', domain: lumoAuthForMasterKeys.domain }, 'Fetching master keys...');
+                const fetchedMasterKeys = await fetchMasterKeys(page, uid, accessToken, protonConfig.appVersion);
+                if (fetchedMasterKeys && fetchedMasterKeys.length > 0) {
+                    masterKeys = fetchedMasterKeys;
+                    logger.info({ keyCount: masterKeys.length }, 'Cached master keys for persistence');
+                }
+            } else {
+                logger.warn('No Lumo AUTH cookie found for master keys fetch');
+            }
+        }
+    } else {
+        logger.info('Persistence disabled - skipping encryption key extraction');
     }
 
     // Build output
@@ -472,6 +626,8 @@ async function extractTokens(): Promise<void> {
         localStorage: Object.keys(localStorage).length > 0 ? localStorage : undefined,
         extractedAt: new Date().toISOString(),
         persistedSession,
+        userKeys,
+        masterKeys,
     };
 
     // Ensure output directory exists

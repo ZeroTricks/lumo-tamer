@@ -35,6 +35,8 @@ export class APIServer {
   private api!: Api;
   private syncInitialized = false;
   private browserKeyPassword?: string;
+  private browserUserKeys?: Array<{ ID: string; PrivateKey: string; Primary: number; Active: number }>;
+  private browserMasterKeys?: Array<{ ID: string; MasterKey: string; IsLatest: boolean; Version: number }>;
 
   private constructor() {
     this.app = express();
@@ -132,6 +134,18 @@ export class APIServer {
           hasClientKey: !!tokens.persistedSession?.clientKey,
         }, 'Browser session missing blob or clientKey - keyPassword unavailable');
       }
+
+      // Store cached user keys if available (bypasses core/v4/users scope issue)
+      if (tokens.userKeys && tokens.userKeys.length > 0) {
+        this.browserUserKeys = tokens.userKeys;
+        logger.info({ keyCount: tokens.userKeys.length }, 'Loaded cached user keys from tokens');
+      }
+
+      // Store cached master keys if available (bypasses lumo/v1/masterkeys scope issue)
+      if (tokens.masterKeys && tokens.masterKeys.length > 0) {
+        this.browserMasterKeys = tokens.masterKeys;
+        logger.info({ keyCount: tokens.masterKeys.length }, 'Loaded cached master keys from tokens');
+      }
     }
   }
 
@@ -173,24 +187,37 @@ export class APIServer {
     }
 
     try {
-      logger.info({ source }, 'Initializing KeyManager with keyPassword...');
+      logger.info({ source, hasCachedUserKeys: !!this.browserUserKeys, hasCachedMasterKeys: !!this.browserMasterKeys }, 'Initializing KeyManager with keyPassword...');
 
-      // Initialize KeyManager
+      // Initialize KeyManager (pass cached keys if available to bypass scope issues)
       const keyManager = getKeyManager({
         api: this.api,
+        cachedUserKeys: this.browserUserKeys,
+        cachedMasterKeys: this.browserMasterKeys,
       });
 
       await keyManager.initialize(keyPassword);
 
       // Initialize SyncService
-      getSyncService({
+      const syncService = getSyncService({
         api: this.lumoPersistenceClient,
         keyManager,
         defaultSpaceName: persistenceConfig.defaultSpaceName,
+        spaceId: persistenceConfig.spaceId,
       });
 
+      // Mark as initialized now - commands like deleteAllSpaces should work
+      // even if ensureSpace fails
       this.syncInitialized = true;
-      logger.info({ source }, 'Sync service initialized successfully');
+
+      // Eagerly fetch/create space so we see available spaces at startup
+      try {
+        await syncService.ensureSpace();
+        logger.info({ source }, 'Sync service initialized successfully');
+      } catch (spaceError) {
+        const msg = spaceError instanceof Error ? spaceError.message : String(spaceError);
+        logger.warn({ error: msg }, 'ensureSpace failed, but sync service is still available for commands');
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;

@@ -74,8 +74,28 @@ interface UserResponse {
     };
 }
 
+// Cached user key structure (from token extraction)
+export interface CachedUserKey {
+    ID: string;
+    PrivateKey: string;
+    Primary: number;
+    Active: number;
+}
+
+// Cached master key structure (from token extraction)
+export interface CachedMasterKey {
+    ID: string;
+    MasterKey: string;      // PGP-encrypted master key (base64)
+    IsLatest: boolean;
+    Version: number;
+}
+
 export interface KeyManagerConfig {
     api: Api;
+    // Cached user keys from token extraction (bypasses core/v4/users scope issue)
+    cachedUserKeys?: CachedUserKey[];
+    // Cached master keys from token extraction (bypasses lumo/v1/masterkeys scope issue)
+    cachedMasterKeys?: CachedMasterKey[];
 }
 
 /**
@@ -83,12 +103,16 @@ export interface KeyManagerConfig {
  */
 export class KeyManager {
     private api: Api;
+    private cachedUserKeys?: CachedUserKey[];
+    private cachedMasterKeys?: CachedMasterKey[];
     private masterKey?: CryptoKey;
     private spaceKeys = new Map<SpaceId, CryptoKey>();
     private initialized = false;
 
     constructor(config: KeyManagerConfig) {
         this.api = config.api;
+        this.cachedUserKeys = config.cachedUserKeys;
+        this.cachedMasterKeys = config.cachedMasterKeys;
     }
 
     /**
@@ -103,19 +127,26 @@ export class KeyManager {
         }
 
         try {
-            // 1. Fetch user info (includes encrypted private keys)
-            logger.info('Fetching user info...');
-            const userResponse = await this.api({
-                url: 'core/v4/users',
-                method: 'get',
-            }) as UserResponse;
+            // 1. Get user keys (from cache or API)
+            let userKeys: Array<{ ID: string; PrivateKey: string; Primary: number; Active: number }>;
 
-            const userKeys = userResponse.User?.Keys ?? [];
-            if (userKeys.length === 0) {
-                throw new Error('No user keys found');
+            if (this.cachedUserKeys && this.cachedUserKeys.length > 0) {
+                logger.info({ count: this.cachedUserKeys.length }, 'Using cached user keys');
+                userKeys = this.cachedUserKeys;
+            } else {
+                // Fetch from API (requires user/settings scopes)
+                logger.info('Fetching user info from API...');
+                const userResponse = await this.api({
+                    url: 'core/v4/users',
+                    method: 'get',
+                }) as UserResponse;
+
+                userKeys = userResponse.User?.Keys ?? [];
+                if (userKeys.length === 0) {
+                    throw new Error('No user keys found');
+                }
+                logger.info({ count: userKeys.length }, 'Found user keys from API');
             }
-
-            logger.info({ count: userKeys.length }, 'Found user keys');
 
             // 2. Decrypt PGP private keys
             const decryptedKeys: PrivateKey[] = [];
@@ -140,24 +171,38 @@ export class KeyManager {
 
             logger.info({ count: decryptedKeys.length }, 'Decrypted user keys');
 
-            // 3. Fetch master key
-            logger.info('Fetching master key...');
-            const masterKeyResponse = await this.api({
-                url: 'lumo/v1/masterkeys',
-                method: 'get',
-            }) as MasterKeyResponse;
+            // 3. Get master key (from cache or API)
+            let masterKeyEntry: { ID: string; MasterKey: string; IsLatest: boolean; Version: number };
 
-            if (!masterKeyResponse.MasterKeys?.length) {
-                throw new Error('No master keys found');
+            if (this.cachedMasterKeys && this.cachedMasterKeys.length > 0) {
+                logger.info({ count: this.cachedMasterKeys.length }, 'Using cached master keys');
+                // Find the latest/best master key from cache
+                masterKeyEntry = this.cachedMasterKeys.reduce((best, current) => {
+                    if (!best) return current;
+                    if (current.IsLatest && !best.IsLatest) return current;
+                    if (current.Version > best.Version) return current;
+                    return best;
+                });
+            } else {
+                // Fetch from API (requires lumo scope)
+                logger.info('Fetching master key from API...');
+                const masterKeyResponse = await this.api({
+                    url: 'lumo/v1/masterkeys',
+                    method: 'get',
+                }) as MasterKeyResponse;
+
+                if (!masterKeyResponse.MasterKeys?.length) {
+                    throw new Error('No master keys found');
+                }
+
+                // Find the latest/best master key
+                masterKeyEntry = masterKeyResponse.MasterKeys.reduce((best, current) => {
+                    if (!best) return current;
+                    if (current.IsLatest && !best.IsLatest) return current;
+                    if (current.Version > best.Version) return current;
+                    return best;
+                });
             }
-
-            // Find the latest/best master key
-            const masterKeyEntry = masterKeyResponse.MasterKeys.reduce((best, current) => {
-                if (!best) return current;
-                if (current.IsLatest && !best.IsLatest) return current;
-                if (current.Version > best.Version) return current;
-                return best;
-            });
 
             logger.info({
                 keyId: masterKeyEntry.ID,
