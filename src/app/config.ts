@@ -49,11 +49,18 @@ const browserConfigSchema = z.object({
   privateByDefault: z.boolean().optional(),
 }).optional();
 
+// Auto-sync configuration
+const autoSyncConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  debounceMs: z.number().min(1000).default(5000),      // Min 1s - prevents sync spam
+  minIntervalMs: z.number().min(5000).default(30000),  // Min 5s - respects rate limits
+  maxDelayMs: z.number().min(10000).default(60000),    // Min 10s - ensures debounce works
+}).optional();
+
 // Persistence configuration for conversation storage
-// TODO: should defaults be here?
 const persistenceConfigSchema = z.object({
   enabled: z.boolean().default(false),
-  syncInterval: z.number().default(30000),          // ms between sync attempts
+  syncInterval: z.number().default(30000),          // Deprecated: use autoSync instead
   maxConversationsInMemory: z.number().default(100),
   defaultSpaceName: z.string().default('lumo-bridge'),
   // Optional: specify a space UUID directly to bypass name-matching logic
@@ -68,6 +75,8 @@ const persistenceConfigSchema = z.object({
   // conversations that happen to start with the same message!
   // When false (default): each request without conversation_id creates a new conversation.
   deriveIdFromFirstMessage: z.boolean().default(false),
+  // Auto-sync configuration
+  autoSync: autoSyncConfigSchema,
 }).optional();
 
 // Auth configuration for SRP-based authentication
@@ -151,6 +160,7 @@ export type ToolsConfig = z.infer<typeof toolsConfigSchema>;
 export type BrowserConfig = z.infer<typeof browserConfigSchema>;
 export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;
 export type PersistenceConfig = z.infer<typeof persistenceConfigSchema>;
+export type AutoSyncConfig = z.infer<typeof autoSyncConfigSchema>;
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 export type CliConfig = z.infer<typeof cliConfigSchema>;
 export type LogConfig = z.infer<typeof logConfigSchema>;

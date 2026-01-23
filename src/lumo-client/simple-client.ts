@@ -150,7 +150,7 @@ export class SimpleLumoClient {
         } = options;
 
         const turn = turns[turns.length - 1];
-        logger.info(`${turn.role}: ${turn.content && turn.content.length > 200
+        logger.info(`[${turn.role}] ${turn.content && turn.content.length > 200
             ? turn.content.substring(0, 200) + '...'
             : turn.content
         } `);
@@ -213,10 +213,8 @@ export class SimpleLumoClient {
         const responsePreview = response.length > 200
             ? response.substring(0, 200) + '...'
             : response;
-        logger.info({
-            responseLength: response.length,
-        }, '[LumoClient] Response received');
-        logger.debug({ content: responsePreview }, '[LumoClient] Response content');
+
+        logger.info(`[Lumo] ${responsePreview}`);
 
         return response;
     }

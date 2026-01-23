@@ -41,11 +41,20 @@ export class ConversationStore {
     private accessOrder: ConversationId[] = [];  // LRU tracking
     private config: PersistenceConfig;
     private defaultSpaceId: SpaceId;
+    private onDirtyCallback?: () => void;
 
     constructor(config: Partial<PersistenceConfig> = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
         this.defaultSpaceId = randomUUID();
         logger.info({ spaceId: this.defaultSpaceId }, 'ConversationStore initialized');
+    }
+
+    /**
+     * Set callback to be called when a conversation becomes dirty
+     * Used by AutoSyncService to trigger sync scheduling
+     */
+    setOnDirtyCallback(callback: () => void): void {
+        this.onDirtyCallback = callback;
     }
 
     /**
@@ -144,7 +153,7 @@ export class ConversationStore {
         }
 
         // Mark as dirty
-        state.dirty = true;
+        this.markDirty(state);
         state.metadata.updatedAt = now;
 
         logger.debug({
@@ -189,7 +198,7 @@ export class ConversationStore {
         };
 
         state.messages.push(message);
-        state.dirty = true;
+        this.markDirty(state);
         state.metadata.updatedAt = now;
         state.status = 'completed';
 
@@ -219,7 +228,7 @@ export class ConversationStore {
         const state = this.get(id);
         if (state) {
             state.title = title;
-            state.dirty = true;
+            this.markDirty(state);
             state.metadata.updatedAt = Date.now();
         }
     }
@@ -363,6 +372,14 @@ export class ConversationStore {
     }
 
     // Private methods
+
+    /**
+     * Mark a conversation as dirty and notify callback
+     */
+    private markDirty(state: ConversationState): void {
+        state.dirty = true;
+        this.onDirtyCallback?.();
+    }
 
     private createEmptyState(id: ConversationId): ConversationState {
         const now = Date.now();

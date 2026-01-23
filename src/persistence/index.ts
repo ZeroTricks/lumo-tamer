@@ -70,6 +70,14 @@ export {
     type SyncServiceConfig,
 } from './sync/index.js';
 
+// Auto-sync service
+export {
+    AutoSyncService,
+    getAutoSyncService,
+    resetAutoSyncService,
+    type AutoSyncConfig,
+} from './sync/index.js';
+
 // Re-export LumoApi types for consumers
 export {
     LumoApi,
