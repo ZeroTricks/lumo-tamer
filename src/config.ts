@@ -5,11 +5,23 @@ import { z } from 'zod';
 
 // Zod schemas for validation
 const serverConfigSchema = z.object({
+  enabled: z.boolean().default(true),
   port: z.number().int().positive(),
   apiKey: z.string().min(1, 'server.apiKey is required'),
   apiModelName: z.string().min(1, 'server.apiModelName is required'),
-  logLevel: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']),
 });
+
+// CLI configuration
+const cliConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+}).optional();
+
+// Logging configuration
+const logConfigSchema = z.object({
+  level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
+  target: z.enum(['stdout', 'file']).default('stdout'),
+  filePath: z.string().default('logs/lumo-bridge.log'),
+}).optional();
 
 const protonConfigSchema = z.object({
   baseUrl: z.string().min(1, 'proton.baseUrl is required'),
@@ -80,6 +92,8 @@ const configSchema = z.object({
   instructions: instructionsConfigSchema,
   persistence: persistenceConfigSchema,
   auth: authConfigSchema,
+  cli: cliConfigSchema,
+  log: logConfigSchema,
 });
 
 // Load and validate configuration
@@ -124,6 +138,12 @@ export const persistenceConfig = config.persistence;
 // Auth config
 export const authConfig = config.auth;
 
+// CLI config
+export const cliConfig = config.cli;
+
+// Log config
+export const logConfig = config.log;
+
 // Export types inferred from Zod schemas
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 export type ProtonConfig = z.infer<typeof protonConfigSchema>;
@@ -132,3 +152,5 @@ export type BrowserConfig = z.infer<typeof browserConfigSchema>;
 export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;
 export type PersistenceConfig = z.infer<typeof persistenceConfigSchema>;
 export type AuthConfig = z.infer<typeof authConfigSchema>;
+export type CliConfig = z.infer<typeof cliConfigSchema>;
+export type LogConfig = z.infer<typeof logConfigSchema>;

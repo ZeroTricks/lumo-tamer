@@ -1,7 +1,10 @@
 # Proton API configuration (for direct API integration)
 proton:
   baseUrl: "https://lumo.proton.me/api"
-  appVersion: "web-lumo@5.0.0"
+  # Headers for SRP auth (proton-auth binary). Different values may help avoid CAPTCHA.
+  # See docs/authentication.md for alternatives to try.
+  appVersion: "macos-drive@1.0.0-alpha.1+rclone"
+  userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # Authentication configuration
 # - srp: direct SRP auth via go-proton-api
@@ -9,7 +12,7 @@ proton:
 # - rclone: read auth details from rclone config file
 # See docs/authentication.md
 auth:
-  method: "rclone"
+  method: "browser"
   binaryPath: "./bin/proton-auth"
   tokenCachePath: "sessions/auth-tokens.json"
   rclonePath: "./rclone.conf"
@@ -17,10 +20,20 @@ auth:
 
 # Server Configuration
 server:
+  enabled: true  # Enable API server (default: true)
   port: 3003
   apiKey: "your-secret-api-key-here"
   apiModelName: "lumo"
-  logLevel: "debug"  # Levels: trace, debug, info, warn, error, fatal
+
+# CLI Configuration
+cli:
+  enabled: false  # Enable CLI mode (default: false)
+
+# Logging Configuration
+log:
+  level: "debug"  # Levels: trace, debug, info, warn, error, fatal
+  target: "stdout"  # "stdout" or "file"
+  filePath: "lumo-bridge.log"  # Used when target is "file"
 
 persistence:
   enabled: true

@@ -1,10 +1,10 @@
 /**
- * Command handler for API mode.
+ * Command handler for CLI and API modes.
  * Supports commands like /save for syncing conversations.
  */
 
-import { logger } from '../logger.js';
-import { getSyncService } from '../persistence/index.js';
+import { logger } from './logger.js';
+import { getSyncService } from './persistence/index.js';
 
 /**
  * Check if a message is a command (starts with /)
@@ -44,6 +44,9 @@ export async function executeCommand(
     logger.info(`Executing command: /${lowerCommand}${params ? ` with params: ${params}` : ''}`);
 
     switch (lowerCommand) {
+      case 'help':
+        return getHelpText();
+
       case 'save':
       case 'sync':
         return await handleSaveCommand(context);
@@ -60,12 +63,23 @@ export async function executeCommand(
       case 'reset':
       case 'private':
       case 'open':
-        return `Command /${lowerCommand} is not available in API mode.`;
+        return `Command /${lowerCommand} is not available.`;
 
       default:
         logger.warn(`Unknown command: /${commandName}`);
         throw new Error(`Unknown command: /${commandName}`);
     }
+}
+
+/**
+ * Get help text for available commands
+ */
+function getHelpText(): string {
+  return `Available commands:
+  /help              - Show this help message
+  /save, /sync       - Sync conversations to Proton server
+  /deleteallspaces   - Delete ALL spaces from server (destructive!)
+  /quit              - Exit CLI (CLI mode only)`;
 }
 
 /**

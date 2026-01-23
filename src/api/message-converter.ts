@@ -5,6 +5,7 @@
 import type { ChatMessage, ResponseInputItem, OpenAITool } from './types.js';
 import type { Turn } from '../lumo-client/index.js';
 import { instructionsConfig } from '../config.js';
+import { isCommand } from '../commands.js';
 
 /**
  * Build tool instructions to append to message.
@@ -85,8 +86,8 @@ function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: stri
 
     let content = msg.content;
 
-    // Inject instructions into first user message
-    if (msg.role === 'user' && instructions && !instructionsInjected) {
+    // Inject instructions into first user message (but not if it's a command)
+    if (msg.role === 'user' && instructions && !instructionsInjected && !isCommand(content)) {
       content = `${content}\n\n[Personal context: ${instructions}]`;
       instructionsInjected = true;
     }
@@ -128,6 +129,11 @@ export function convertResponseInputToTurns(
 
   // Simple string input
   if (typeof input === 'string') {
+    // Don't append instructions to commands (e.g., /help, /save)
+    if (isCommand(input)) {
+      return [{ role: 'user', content: input }];
+    }
+
     const toolsInstruction = tools && tools.length > 0 ? buildToolsInstruction(tools) : undefined;
     const instructions = getEffectiveInstructions(requestInstructions, toolsInstruction);
     let content = input;
