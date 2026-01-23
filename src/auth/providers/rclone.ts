@@ -84,6 +84,10 @@ export class RcloneAuthProvider implements AuthProvider {
         return false;
     }
 
+    supportsPersistence(): boolean {
+        return false;  // Rclone tokens lack lumo scope for spaces API
+    }
+
     getStatus(): AuthProviderStatus {
         const status: AuthProviderStatus = {
             method: 'rclone',
