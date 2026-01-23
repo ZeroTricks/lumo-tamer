@@ -1,15 +1,26 @@
 import { Router, Request, Response } from 'express';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse, OpenAIToolCall } from '../types.js';
-import { serverConfig, toolsConfig } from '../../config.js';
+import { serverConfig, toolsConfig, persistenceConfig } from '../../config.js';
 import { logger } from '../../logger.js';
 import { convertMessagesToTurns } from '../message-converter.js';
 import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../tool-parser.js';
 import { StreamingToolDetector } from '../streaming-tool-detector.js';
 import type { Turn } from '../../lumo-client/index.js';
 import type { CommandContext } from '../commands.js';
+import type { ConversationId } from '../../persistence/index.js';
 
-// TODO: add conversation persistence, like /responses
+// Session ID generated once at module load - makes deterministic IDs unique per server session
+const SESSION_ID = randomUUID();
+
+/**
+ * Generate a deterministic conversation ID from the first user message.
+ * Used when deriveIdFromFirstMessage is enabled (e.g., for clients that re-send full history).
+ */
+function generateDeterministicConversationId(firstUserMessage: string): ConversationId {
+  const hash = createHash('sha256').update(`lumo-bridge:${SESSION_ID}:${firstUserMessage}`).digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
 
 export function createChatCompletionsRouter(deps: EndpointDependencies): Router {
   const router = Router();
@@ -29,15 +40,41 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
         return res.status(400).json({ error: 'No user message found' });
       }
 
+      // ===== Generate conversation ID for persistence =====
+      // Chat Completions has no conversation parameter per OpenAI spec.
+      // We use deriveIdFromFirstMessage to track conversations for Proton sync.
+      let conversationId: ConversationId;
+      if (persistenceConfig?.deriveIdFromFirstMessage) {
+        // Generate deterministic ID from first user message
+        const firstUserMessage = request.messages.find(m => m.role === 'user');
+        conversationId = firstUserMessage
+          ? generateDeterministicConversationId(firstUserMessage.content)
+          : randomUUID();
+        logger.debug({ conversationId, firstUserMessage: firstUserMessage?.content.slice(0, 50) }, 'Generated deterministic conversation ID');
+      } else {
+        // Random UUID per request (creates separate conversations)
+        conversationId = randomUUID();
+      }
+
+      // ===== Persist incoming messages (with deduplication) =====
+      if (deps.conversationStore) {
+        const allMessages = request.messages.map(m => ({
+          role: m.role,
+          content: m.content
+        }));
+        deps.conversationStore.appendMessages(conversationId, allMessages);
+        logger.debug({ conversationId, messageCount: allMessages.length }, 'Persisted conversation messages');
+      }
+
       // Convert messages to Lumo turns (includes system message injection)
       // Pass tools to enable legacy tool instruction injection
       const turns = convertMessagesToTurns(request.messages, request.tools);
 
       // Add to queue and process
       if (request.stream) {
-        await handleStreamingRequest(res, deps, request, turns);
+        await handleStreamingRequest(res, deps, request, turns, conversationId);
       } else {
-        await handleNonStreamingRequest(res, deps, request, turns);
+        await handleNonStreamingRequest(res, deps, request, turns, conversationId);
       }
     } catch (error) {
       logger.error('Error processing chat completion:');
@@ -124,7 +161,8 @@ async function handleStreamingRequest(
   res: Response,
   deps: EndpointDependencies,
   request: OpenAIChatRequest,
-  turns: Turn[]
+  turns: Turn[],
+  conversationId: ConversationId
 ): Promise<void> {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -145,10 +183,12 @@ async function handleStreamingRequest(
     const detector = hasCustomTools ? new StreamingToolDetector() : null;
     const toolCallsEmitted: OpenAIToolCall[] = [];
     let toolCallIndex = 0;
+    let accumulatedText = '';  // Track full response for persistence
 
     // Helper to emit content delta chunk
     const emitContentDelta = (content: string) => {
       if (!content) return;
+      accumulatedText += content;  // Accumulate for persistence
       const sseChunk: OpenAIStreamChunk = {
         id,
         object: 'chat.completion.chunk',
@@ -254,6 +294,12 @@ async function handleStreamingRequest(
         }
       }
 
+      // Persist assistant response
+      if (deps.conversationStore) {
+        deps.conversationStore.appendAssistantResponse(conversationId, accumulatedText);
+        logger.debug({ conversationId }, 'Persisted assistant response');
+      }
+
       // Send final chunk with finish_reason
       const finalChunk: OpenAIStreamChunk = {
         id,
@@ -288,7 +334,8 @@ async function handleNonStreamingRequest(
   res: Response,
   deps: EndpointDependencies,
   request: OpenAIChatRequest,
-  turns: Turn[]
+  turns: Turn[],
+  conversationId: ConversationId
 ): Promise<void> {
   // Determine if external tools (web_search, etc.) should be enabled
   const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
@@ -332,6 +379,12 @@ async function handleNonStreamingRequest(
       // Strip tool call JSON from content
       content = stripToolCallsFromResponse(result, parsedToolCalls);
     }
+  }
+
+  // Persist assistant response
+  if (deps.conversationStore) {
+    deps.conversationStore.appendAssistantResponse(conversationId, content);
+    logger.debug({ conversationId }, 'Persisted assistant response');
   }
 
   const response: OpenAIChatResponse = {

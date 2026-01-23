@@ -310,6 +310,58 @@ export class ConversationStore {
         };
     }
 
+    // ===== Request Deduplication Methods =====
+    // These methods help detect and skip duplicate requests (e.g., from clients
+    // that re-send full conversation history like Home Assistant)
+
+    /**
+     * Check if a user message is a duplicate of the last processed message
+     */
+    isDuplicateUserMessage(id: ConversationId, message: string): boolean {
+        const state = this.conversations.get(id);
+        return state?.lastProcessedUserMessage === message;
+    }
+
+    /**
+     * Record the last processed user message for deduplication
+     */
+    setLastProcessedUserMessage(id: ConversationId, message: string): void {
+        const state = this.getOrCreate(id);
+        state.lastProcessedUserMessage = message;
+    }
+
+    /**
+     * Check if a function output call_id is a duplicate of the last processed one
+     */
+    isDuplicateFunctionOutput(id: ConversationId, callId: string): boolean {
+        const state = this.conversations.get(id);
+        return state?.lastProcessedFunctionOutputCallId === callId;
+    }
+
+    /**
+     * Record the last processed function output call_id for deduplication
+     */
+    setLastProcessedFunctionOutput(id: ConversationId, callId: string): void {
+        const state = this.getOrCreate(id);
+        state.lastProcessedFunctionOutputCallId = callId;
+    }
+
+    /**
+     * Check if a call_id was created by this conversation (for function output filtering)
+     */
+    hasCreatedCallId(id: ConversationId, callId: string): boolean {
+        const state = this.conversations.get(id);
+        return state?.createdCallIds.has(callId) ?? false;
+    }
+
+    /**
+     * Record a call_id that was created by this conversation
+     */
+    addCreatedCallId(id: ConversationId, callId: string): void {
+        const state = this.getOrCreate(id);
+        state.createdCallIds.add(callId);
+    }
+
     // Private methods
 
     private createEmptyState(id: ConversationId): ConversationState {
@@ -326,6 +378,7 @@ export class ConversationStore {
             status: 'completed',
             messages: [],
             dirty: true,  // New conversations need sync
+            createdCallIds: new Set<string>(),  // Per-conversation tool call tracking
         };
     }
 

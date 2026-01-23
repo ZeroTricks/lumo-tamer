@@ -17,8 +17,7 @@ export async function handleStreamingRequest(
   deps: EndpointDependencies,
   request: OpenAIResponseRequest,
   turns: Turn[],
-  createdCallIds: Set<string>,
-  conversationId?: ConversationId
+  conversationId: ConversationId
 ): Promise<void> {
   // Streaming response with event-based format
   res.setHeader('Content-Type', 'text/event-stream');
@@ -91,7 +90,8 @@ export async function handleStreamingRequest(
             // Emit tool call deltas for completed tools
             for (const tc of completedToolCalls) {
               const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
-              createdCallIds.add(callId);
+              // Track call ID per-conversation for function output deduplication
+              deps.conversationStore?.addCreatedCallId(conversationId, callId);
               toolCallsEmitted.push({
                 id: callId,
                 type: 'function',
@@ -130,11 +130,10 @@ export async function handleStreamingRequest(
       const output = buildOutputItems({
         text: accumulatedText,
         itemId,
-        createdCallIds,
       });
 
       // Persist assistant response if conversation store is available
-      if (conversationId && deps.conversationStore) {
+      if (deps.conversationStore) {
         deps.conversationStore.appendAssistantResponse(conversationId, accumulatedText);
         logger.debug({ conversationId }, 'Persisted assistant response');
       }
@@ -157,8 +156,7 @@ export async function handleNonStreamingRequest(
   deps: EndpointDependencies,
   request: OpenAIResponseRequest,
   turns: Turn[],
-  createdCallIds: Set<string>,
-  conversationId?: ConversationId
+  conversationId: ConversationId
 ): Promise<void> {
   // Determine if external tools (web_search, etc.) should be enabled
   const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
@@ -188,11 +186,10 @@ export async function handleNonStreamingRequest(
   const output = buildOutputItems({
     text: responseText,
     itemId,
-    createdCallIds,
   });
 
   // Persist assistant response if conversation store is available
-  if (conversationId && deps.conversationStore) {
+  if (deps.conversationStore) {
     deps.conversationStore.appendAssistantResponse(conversationId, responseText);
     logger.debug({ conversationId }, 'Persisted assistant response');
   }
