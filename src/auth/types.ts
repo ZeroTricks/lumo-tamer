@@ -91,6 +91,12 @@ export interface AuthProvider {
      * Get cached master keys (browser-specific, for scope bypass)
      */
     getCachedMasterKeys?(): CachedMasterKey[] | undefined;
+
+    /**
+     * Whether this auth method supports Proton conversation persistence.
+     * Only browser auth has the lumo scope needed for spaces API.
+     */
+    supportsPersistence(): boolean;
 }
 
 // Re-export types that providers need

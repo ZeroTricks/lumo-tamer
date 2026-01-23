@@ -60,6 +60,7 @@ export class SRPAuthProvider implements AuthProvider {
 
     private async fetchAndCacheKeys(): Promise<void> {
         if (!persistenceConfig?.enabled) return;
+        if (!this.supportsPersistence()) return;  // SRP can't use persistence anyway
         if (!this.tokens) return;
         if (this.tokens.userKeys && this.tokens.masterKeys) {
             logger.debug('Keys already cached, skipping fetch');
@@ -164,6 +165,10 @@ export class SRPAuthProvider implements AuthProvider {
 
     getCachedMasterKeys(): CachedMasterKey[] | undefined {
         return this.tokens?.masterKeys;
+    }
+
+    supportsPersistence(): boolean {
+        return false;  // SRP tokens lack lumo scope for spaces API
     }
 
     createApi(): ProtonApi {

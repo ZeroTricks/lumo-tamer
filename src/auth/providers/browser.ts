@@ -177,6 +177,10 @@ export class BrowserAuthProvider implements AuthProvider {
         return this.tokens?.masterKeys;
     }
 
+    supportsPersistence(): boolean {
+        return true;
+    }
+
     private getTokenAgeHours(): number {
         if (!this.tokens?.extractedAt) return 0;
         const extractedAt = new Date(this.tokens.extractedAt).getTime();

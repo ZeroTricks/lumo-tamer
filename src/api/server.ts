@@ -60,6 +60,14 @@ export class APIServer {
       return;
     }
 
+    if (!this.authProvider.supportsPersistence()) {
+      logger.warn(
+        { method: this.authProvider.method },
+        'Persistence requires browser auth (SRP/rclone tokens lack lumo scope for spaces API)'
+      );
+      return;
+    }
+
     const keyPassword = this.authProvider.getKeyPassword();
     if (!keyPassword) {
       logger.info({ method: this.authProvider.method }, 'No keyPassword available - sync will not be initialized');
