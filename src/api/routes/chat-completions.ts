@@ -9,6 +9,7 @@ import { StreamingToolDetector } from '../streaming-tool-detector.js';
 import type { Turn } from '../../lumo-client/index.js';
 import type { CommandContext } from '../../app/commands.js';
 import type { ConversationId } from '../../persistence/index.js';
+import { postProcessTitle } from '../../proton-shims/lumo-api-client-utils.js';
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session
 const SESSION_ID = randomUUID();
@@ -239,9 +240,14 @@ async function handleStreamingRequest(
       // Build command context for /save and other commands
       const commandContext: CommandContext = {
         syncInitialized: deps.syncInitialized ?? false,
+        conversationId,
       };
 
-      await client.chatWithHistory(
+      // Request title for new conversations (title still has default value)
+      const existingConv = deps.conversationStore?.get(conversationId);
+      const requestTitle = existingConv?.title === 'New Conversation';
+
+      const result = await client.chatWithHistory(
         turns,
         (chunk: string) => {
           if (detector) {
@@ -271,7 +277,7 @@ async function handleStreamingRequest(
             emitContentDelta(chunk);
           }
         },
-        { enableEncryption: true, enableExternalTools, commandContext }
+        { enableEncryption: true, enableExternalTools, commandContext, requestTitle }
       );
       logger.debug('[Server] Stream completed');
 
@@ -294,9 +300,16 @@ async function handleStreamingRequest(
         }
       }
 
+      // Save generated title if present
+      if (result.title && deps.conversationStore) {
+        const processedTitle = postProcessTitle(result.title);
+        deps.conversationStore.setTitle(conversationId, processedTitle);
+        logger.debug({ conversationId, title: processedTitle }, 'Set generated title');
+      }
+
       // Persist assistant response
       if (deps.conversationStore) {
-        deps.conversationStore.appendAssistantResponse(conversationId, accumulatedText);
+        deps.conversationStore.appendAssistantResponse(conversationId, result.response);
         logger.debug({ conversationId }, 'Persisted assistant response');
       }
 
@@ -346,23 +359,35 @@ async function handleNonStreamingRequest(
   // Build command context for /save and other commands
   const commandContext: CommandContext = {
     syncInitialized: deps.syncInitialized ?? false,
+    conversationId,
   };
 
-  const result = await deps.queue.add(async () => {
+  // Request title for new conversations (title still has default value)
+  const existingConv = deps.conversationStore?.get(conversationId);
+  const requestTitle = existingConv?.title === 'New Conversation';
+
+  const chatResult = await deps.queue.add(async () => {
     const client = deps.getLumoClient();
     return await client.chatWithHistory(
       turns,
       undefined,
-      { enableEncryption: true, enableExternalTools, commandContext }
+      { enableEncryption: true, enableExternalTools, commandContext, requestTitle }
     );
   });
 
+  // Save generated title if present
+  if (chatResult.title && deps.conversationStore) {
+    const processedTitle = postProcessTitle(chatResult.title);
+    deps.conversationStore.setTitle(conversationId, processedTitle);
+    logger.debug({ conversationId, title: processedTitle }, 'Set generated title');
+  }
+
   // Parse tool calls from response if custom tools were provided
-  let content = result;
+  let content = chatResult.response;
   let toolCalls: OpenAIToolCall[] | undefined;
 
   if (hasCustomTools) {
-    const parsedToolCalls = extractToolCallsFromResponse(result);
+    const parsedToolCalls = extractToolCallsFromResponse(chatResult.response);
     if (parsedToolCalls) {
       logger.debug({ count: parsedToolCalls.length }, '[Server] Tool calls detected');
 
@@ -377,7 +402,7 @@ async function handleNonStreamingRequest(
       }));
 
       // Strip tool call JSON from content
-      content = stripToolCallsFromResponse(result, parsedToolCalls);
+      content = stripToolCallsFromResponse(chatResult.response, parsedToolCalls);
     }
   }
 

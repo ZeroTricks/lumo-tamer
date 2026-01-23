@@ -10,6 +10,7 @@ import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../persistence/index.js';
 import { StreamingToolDetector } from 'api/streaming-tool-detector.js';
 import type { CommandContext } from '../../../app/commands.js';
+import { postProcessTitle } from '../../../proton-shims/lumo-api-client-utils.js';
 
 export async function handleStreamingRequest(
   req: Request,
@@ -70,10 +71,15 @@ export async function handleStreamingRequest(
       // Build command context for /save and other commands
       const commandContext: CommandContext = {
         syncInitialized: deps.syncInitialized ?? false,
+        conversationId,
       };
 
+      // Request title for new conversations (title still has default value)
+      const existingConv = deps.conversationStore?.get(conversationId);
+      const requestTitle = existingConv?.title === 'New Conversation';
+
       // Get response using LumoClient
-      const responseText = await client.chatWithHistory(
+      const result = await client.chatWithHistory(
         turns,
         (chunk: string) => {
           if (detector) {
@@ -111,7 +117,7 @@ export async function handleStreamingRequest(
           }
         },
 
-        { enableEncryption: true, enableExternalTools, commandContext }
+        { enableEncryption: true, enableExternalTools, commandContext, requestTitle }
       );
 
       logger.debug('[Server] Stream completed');
@@ -120,8 +126,15 @@ export async function handleStreamingRequest(
         emitter.emitOutputTextDelta(itemId, 0, 0, detector.getPendingText());
       }
 
+      // Save generated title if present
+      if (result.title && deps.conversationStore) {
+        const processedTitle = postProcessTitle(result.title);
+        deps.conversationStore.setTitle(conversationId, processedTitle);
+        logger.debug({ conversationId, title: processedTitle }, 'Set generated title');
+      }
+
       // Update accumulated text from result (in case of discrepancy)
-      accumulatedText = responseText;
+      accumulatedText = result.response;
 
       // Event N-4: response.output_text.done
       emitter.emitOutputTextDone(itemId, 0, 0, accumulatedText);
@@ -164,15 +177,20 @@ export async function handleNonStreamingRequest(
   // Build command context for /save and other commands
   const commandContext: CommandContext = {
     syncInitialized: deps.syncInitialized ?? false,
+    conversationId,
   };
 
+  // Request title for new conversations (title still has default value)
+  const existingConv = deps.conversationStore?.get(conversationId);
+  const requestTitle = existingConv?.title === 'New Conversation';
+
   // Non-streaming response
-  const responseText = await deps.queue.add(async () => {
+  const result = await deps.queue.add(async () => {
     const client = deps.getLumoClient();
     return await client.chatWithHistory(
       turns,
       undefined,
-      { enableEncryption: true, enableExternalTools, commandContext }
+      { enableEncryption: true, enableExternalTools, commandContext, requestTitle }
     );
   });
 
@@ -180,17 +198,24 @@ export async function handleNonStreamingRequest(
   const itemId = `item-${randomUUID()}`;
   const createdAt = Math.floor(Date.now() / 1000);
 
+  // Save generated title if present
+  if (result.title && deps.conversationStore) {
+    const processedTitle = postProcessTitle(result.title);
+    deps.conversationStore.setTitle(conversationId, processedTitle);
+    logger.debug({ conversationId, title: processedTitle }, 'Set generated title');
+  }
+
   // TODO: call tools
 
   // Build output array with message item only (no tool calls)
   const output = buildOutputItems({
-    text: responseText,
+    text: result.response,
     itemId,
   });
 
   // Persist assistant response if conversation store is available
   if (deps.conversationStore) {
-    deps.conversationStore.appendAssistantResponse(conversationId, responseText);
+    deps.conversationStore.appendAssistantResponse(conversationId, result.response);
     logger.debug({ conversationId }, 'Persisted assistant response');
   }
 

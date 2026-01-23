@@ -177,6 +177,18 @@ persistence:
     maxDelayMs: 60000           # Force sync after (min: 10s)
 ```
 
+## Title Generation
+
+Conversation titles are auto-generated on the first message, following Proton's WebClient pattern.
+
+### How It Works
+
+1. When a new conversation is created (title = `'New Conversation'`), `requestTitle: true` is passed to the LLM
+2. The API streams title chunks alongside the message (targets: `['title', 'message']`)
+3. Title is post-processed: quotes removed, trimmed, max 100 chars
+4. Title is saved to `ConversationStore` and synced with the conversation
+
+
 ## Synchronization
 
 ### Manual Sync (`/save`)
@@ -221,7 +233,8 @@ src/persistence/
 | [src/persistence/sync/sync-service.ts](../src/persistence/sync/sync-service.ts) | Server sync |
 | [src/persistence/sync/auto-sync.ts](../src/persistence/sync/auto-sync.ts) | Auto-sync scheduling |
 | [src/persistence/encryption/key-manager.ts](../src/persistence/encryption/key-manager.ts) | Key management |
-| [src/app/commands.ts](../src/app/commands.ts) | `/save` command |
+| [src/app/commands.ts](../src/app/commands.ts) | `/save`, `/title` commands |
+| [src/proton-shims/lumo-api-client-utils.ts](../src/proton-shims/lumo-api-client-utils.ts) | `postProcessTitle()` |
 
 ## Verification
 

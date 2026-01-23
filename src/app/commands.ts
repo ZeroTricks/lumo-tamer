@@ -4,7 +4,7 @@
  */
 
 import { logger } from './logger.js';
-import { getSyncService } from '../persistence/index.js';
+import { getSyncService, getConversationStore } from '../persistence/index.js';
 
 /**
  * Check if a message is a command (starts with /)
@@ -18,6 +18,7 @@ export function isCommand(message: string): boolean {
  */
 export interface CommandContext {
   syncInitialized: boolean;
+  conversationId?: string;
 }
 
 /**
@@ -51,6 +52,9 @@ export async function executeCommand(
       case 'sync':
         return await handleSaveCommand(context);
 
+      case 'title':
+        return handleTitleCommand(params, context);
+
       case 'deleteallspaces':
         return await handleDeleteAllSpacesCommand(context);
 
@@ -77,9 +81,33 @@ export async function executeCommand(
 function getHelpText(): string {
   return `Available commands:
   /help              - Show this help message
+  /title <text>      - Set conversation title
   /save, /sync       - Sync conversations to Proton server
   /deleteallspaces   - Delete ALL spaces from server (destructive!)
   /quit              - Exit CLI (CLI mode only)`;
+}
+
+/**
+ * Handle /title command - set conversation title manually
+ *
+ * Inspired by WebClients ConversationHeader.tsx title editing
+ */
+function handleTitleCommand(params: string, context?: CommandContext): string {
+  if (!params.trim()) {
+    return 'Usage: /title <new title>';
+  }
+  if (!context?.conversationId) {
+    return 'No active conversation to rename.';
+  }
+  const store = getConversationStore();
+  if (!store) {
+    return 'Conversation store not available.';
+  }
+  // Enforce max length (same as postProcessTitle)
+  const title = params.trim().substring(0, 100);
+  store.setTitle(context.conversationId, title);
+  logger.info({ conversationId: context.conversationId, title }, 'Title set via /title command');
+  return `Title set to: ${title}`;
 }
 
 /**
