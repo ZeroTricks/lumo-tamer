@@ -5,7 +5,6 @@ import { logger } from '../../../logger.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './handlers.js';
 import { createEmptyResponse } from './response-factory.js';
 import { convertResponseInputToTurns } from '../../message-converter.js';
-import { isCommand, executeCommand } from '../../commands.js';
 import { persistenceConfig } from '../../../config.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../persistence/index.js';

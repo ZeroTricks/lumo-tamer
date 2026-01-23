@@ -9,7 +9,7 @@ import { createCompletedResponse } from './response-factory.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../persistence/index.js';
 import { StreamingToolDetector } from 'api/streaming-tool-detector.js';
-import type { CommandContext } from '../../commands.js';
+import type { CommandContext } from '../../../commands.js';
 
 export async function handleStreamingRequest(
   req: Request,

@@ -7,7 +7,7 @@ import { convertMessagesToTurns } from '../message-converter.js';
 import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../tool-parser.js';
 import { StreamingToolDetector } from '../streaming-tool-detector.js';
 import type { Turn } from '../../lumo-client/index.js';
-import type { CommandContext } from '../commands.js';
+import type { CommandContext } from '../../commands.js';
 import type { ConversationId } from '../../persistence/index.js';
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session

@@ -22,7 +22,7 @@ import type {
     ToolName,
     Turn,
 } from './types.js';
-import { executeCommand, isCommand, type CommandContext } from '../api/commands.js';
+import { executeCommand, isCommand, type CommandContext } from '../commands.js';
 
 export interface SimpleLumoClientOptions {
     enableExternalTools?: boolean;
