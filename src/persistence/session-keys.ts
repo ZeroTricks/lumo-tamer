@@ -6,7 +6,7 @@
  */
 
 import { importKey, decryptData } from '../proton-shims/aesGcm.js';
-import { logger } from '../logger.js';
+import { logger } from '../app/logger.js';
 import type { PersistedSessionData, DecryptedSessionBlob } from '../lumo-client/types.js';
 
 /**

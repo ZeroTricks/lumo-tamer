@@ -4,7 +4,7 @@
  */
 
 import type { ProtonApi, ProtonApiOptions } from '../lumo-client/types.js';
-import { protonConfig } from '../config.js';
+import { protonConfig } from '../app/config.js';
 
 interface ApiFactoryOptions {
     uid: string;

@@ -6,8 +6,8 @@
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { logger } from '../../logger.js';
-import { protonConfig, authConfig, persistenceConfig } from '../../config.js';
+import { logger } from '../../app/logger.js';
+import { protonConfig, authConfig, persistenceConfig } from '../../app/config.js';
 import { runProtonAuth } from '../go-proton-api/proton-auth-cli.js';
 import { createProtonApi } from '../api-factory.js';
 import { fetchKeys } from '../fetch-keys.js';

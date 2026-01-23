@@ -1,15 +1,15 @@
 import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest, OpenAIToolCall } from '../../types.js';
-import { serverConfig, toolsConfig } from '../../../config.js';
-import { logger } from '../../../logger.js';
+import { serverConfig, toolsConfig } from '../../../app/config.js';
+import { logger } from '../../../app/logger.js';
 import { ResponseEventEmitter } from './events.js';
 import { buildOutputItems } from './output-builder.js';
 import { createCompletedResponse } from './response-factory.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../persistence/index.js';
 import { StreamingToolDetector } from 'api/streaming-tool-detector.js';
-import type { CommandContext } from '../../../commands.js';
+import type { CommandContext } from '../../../app/commands.js';
 
 export async function handleStreamingRequest(
   req: Request,

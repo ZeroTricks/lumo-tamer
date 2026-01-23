@@ -5,7 +5,7 @@
  * Install early in application startup before importing upstream modules.
  */
 
-import { logger } from '../logger.js';
+import { logger } from '../app/logger.js';
 
 const originalConsole = { ...console };
 

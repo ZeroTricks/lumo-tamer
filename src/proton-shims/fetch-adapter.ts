@@ -18,7 +18,7 @@
  */
 
 import type { ProtonApi } from '../lumo-client/types.js';
-import { logger } from '../logger.js';
+import { logger } from '../app/logger.js';
 
 // Store the original fetch before any modifications
 const originalFetch = globalThis.fetch;

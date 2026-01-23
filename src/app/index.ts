@@ -6,8 +6,8 @@
  */
 
 import { RequestQueue } from '../queue/manager.js';
-import { persistenceConfig } from '../config.js';
-import { logger } from '../logger.js';
+import { persistenceConfig } from './config.js';
+import { logger } from './logger.js';
 import { SimpleLumoClient } from '../lumo-client/index.js';
 import { createAuthProvider, type AuthProvider, type ProtonApi } from '../auth/index.js';
 import { getConversationStore, type ConversationStore } from '../persistence/conversation-store.js';

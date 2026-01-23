@@ -10,8 +10,8 @@
 import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { parseRcloneConfig } from './parser.js';
-import { authConfig } from '../../config.js';
-import { logger } from '../../logger.js';
+import { authConfig } from '../../app/config.js';
+import { logger } from '../../app/logger.js';
 import type { StoredTokens } from '../types.js';
 
 // Get rclone config from auth config

@@ -19,7 +19,7 @@ import {
     exportKey,
     deriveKey,
 } from '../../proton-shims/aesGcm.js';
-import { logger } from '../../logger.js';
+import { logger } from '../../app/logger.js';
 import type { SpaceId } from '../types.js';
 import type { ProtonApi } from '../../lumo-client/types.js';
 

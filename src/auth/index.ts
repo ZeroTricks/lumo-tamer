@@ -2,8 +2,8 @@
  * Auth module - Unified authentication for all methods
  */
 
-import { authConfig } from '../config.js';
-import { logger } from '../logger.js';
+import { authConfig } from '../app/config.js';
+import { logger } from '../app/logger.js';
 import { SRPAuthProvider, BrowserAuthProvider, RcloneAuthProvider } from './providers/index.js';
 import type { AuthProvider, AuthMethod, AuthProviderStatus, StoredTokens } from './types.js';
 

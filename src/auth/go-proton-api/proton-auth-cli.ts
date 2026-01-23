@@ -4,7 +4,7 @@
 
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
-import { protonConfig } from '../../config.js';
+import { protonConfig } from '../../app/config.js';
 import type { SRPAuthResult } from './types.js';
 
 /**

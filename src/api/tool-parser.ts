@@ -7,7 +7,7 @@
  * - Legacy <pre> tags: <pre>...</pre>
  */
 
-import { logger } from '../logger.js';
+import { logger } from '../app/logger.js';
 
 export interface ParsedToolCall {
   name: string;

@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { OpenAIResponseRequest, OpenAIResponse, OutputItem } from '../../types.js';
-import { serverConfig } from '../../../config.js';
+import { serverConfig } from '../../../app/config.js';
 
 export function createEmptyResponse(request: OpenAIResponseRequest): OpenAIResponse {
   const id = `resp-${randomUUID()}`;

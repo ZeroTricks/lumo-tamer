@@ -10,9 +10,9 @@
 
 import * as readline from 'readline';
 import { randomUUID } from 'crypto';
-import { logger } from '../logger.js';
-import { serverConfig } from '../config.js';
-import { isCommand, executeCommand, type CommandContext } from '../commands.js';
+import { logger } from '../app/logger.js';
+import { serverConfig } from '../app/config.js';
+import { isCommand, executeCommand, type CommandContext } from '../app/commands.js';
 import type { AppContext } from '../app/index.js';
 
 const BUSY_INDICATOR = '...';

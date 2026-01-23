@@ -9,7 +9,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { logger } from '../logger.js';
+import { logger } from '../app/logger.js';
 import type { Turn } from '../lumo-client/types.js';
 import {
     findNewMessages,

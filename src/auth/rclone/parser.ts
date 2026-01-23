@@ -7,7 +7,7 @@
 
 import { readFileSync } from 'fs';
 import { homedir } from 'os';
-import { logger } from '../../logger.js';
+import { logger } from '../../app/logger.js';
 import type { SRPAuthTokens } from '../go-proton-api/types.js';
 import type { RcloneProtonConfig } from './types.js';
 import { REQUIRED_RCLONE_FIELDS } from './types.js';
