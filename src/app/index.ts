@@ -5,7 +5,7 @@
  * providing a unified context for both CLI and API modes.
  */
 
-import { RequestQueue } from '../queue/manager.js';
+import { RequestQueue } from './queue.js';
 import { persistenceConfig } from './config.js';
 import { logger } from './logger.js';
 import { SimpleLumoClient } from '../lumo-client/index.js';
