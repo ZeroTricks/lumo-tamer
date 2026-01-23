@@ -11,7 +11,7 @@ import { logger } from './logger.js';
 import { SimpleLumoClient } from '../lumo-client/index.js';
 import { createAuthProvider, type AuthProvider, type ProtonApi } from '../auth/index.js';
 import { getConversationStore, type ConversationStore } from '../persistence/conversation-store.js';
-import { getSyncService, getKeyManager } from '../persistence/index.js';
+import { getSyncService, getKeyManager, getAutoSyncService } from '../persistence/index.js';
 import type { AppContext } from './types.js';
 
 export class Application implements AppContext {
@@ -110,6 +110,23 @@ export class Application implements AppContext {
       } catch (spaceError) {
         const msg = spaceError instanceof Error ? spaceError.message : String(spaceError);
         logger.warn({ error: msg }, 'ensureSpace failed, but sync service is still available for commands');
+      }
+
+      // Initialize auto-sync if enabled
+      const autoSyncConfig = persistenceConfig.autoSync;
+      if (autoSyncConfig?.enabled) {
+        const autoSync = getAutoSyncService(syncService, {
+          enabled: true,
+          debounceMs: autoSyncConfig.debounceMs,
+          minIntervalMs: autoSyncConfig.minIntervalMs,
+          maxDelayMs: autoSyncConfig.maxDelayMs,
+        });
+
+        // Connect to conversation store
+        const store = getConversationStore();
+        store.setOnDirtyCallback(() => autoSync.notifyDirty());
+
+        logger.info('Auto-sync enabled and connected to conversation store');
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
