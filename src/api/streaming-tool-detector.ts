@@ -10,7 +10,7 @@
  */
 
 import { isToolCallJson, type ParsedToolCall } from './tool-parser.js';
-import { logger } from '../logger.js';
+import { logger } from '../app/logger.js';
 
 type DetectorState = 'normal' | 'in_code_fence' | 'in_raw_json';
 

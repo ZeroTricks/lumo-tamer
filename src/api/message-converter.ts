@@ -4,8 +4,8 @@
 
 import type { ChatMessage, ResponseInputItem, OpenAITool } from './types.js';
 import type { Turn } from '../lumo-client/index.js';
-import { instructionsConfig } from '../config.js';
-import { isCommand } from '../commands.js';
+import { instructionsConfig } from '../app/config.js';
+import { isCommand } from '../app/commands.js';
 
 /**
  * Build tool instructions to append to message.

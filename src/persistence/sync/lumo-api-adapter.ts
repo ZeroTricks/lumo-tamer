@@ -11,7 +11,7 @@
 import { LumoApi } from '../../proton-upstream/remote/api.js';
 import { installFetchAdapter } from '../../proton-shims/fetch-adapter.js';
 import type { ProtonApi } from '../../lumo-client/types.js';
-import { logger } from '../../logger.js';
+import { logger } from '../../app/logger.js';
 
 // Track if fetch adapter is installed
 let fetchAdapterInstalled = false;

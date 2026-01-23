@@ -9,7 +9,7 @@
 
 import { randomUUID } from 'crypto';
 import stableStringify from 'json-stable-stringify';
-import { logger } from '../../logger.js';
+import { logger } from '../../app/logger.js';
 import {
     generateKey,
     importKey,

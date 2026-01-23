@@ -6,8 +6,8 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { logger } from '../../logger.js';
-import { authConfig } from '../../config.js';
+import { logger } from '../../app/logger.js';
+import { authConfig } from '../../app/config.js';
 import { decryptPersistedSession } from '../../persistence/session-keys.js';
 import { createProtonApi } from '../api-factory.js';
 import type {

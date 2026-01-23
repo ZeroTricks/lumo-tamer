@@ -1,6 +1,6 @@
 import express from 'express';
-import { serverConfig } from '../config.js';
-import { logger } from '../logger.js';
+import { serverConfig } from '../app/config.js';
+import { logger } from '../app/logger.js';
 import { setupAuthMiddleware, setupLoggingMiddleware } from './middleware.js';
 import { createHealthRouter } from './routes/health.js';
 import { createModelsRouter } from './routes/models.js';

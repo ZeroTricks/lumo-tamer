@@ -5,7 +5,7 @@
  * - SRP and Rclone providers cannot use this due to scope limitations
  *   (no scope 'lumo' for lumo/v1/masterkeys)
  */
-import { logger } from '../logger.js';
+import { logger } from '../app/logger.js';
 import type { ProtonApi, CachedUserKey, CachedMasterKey } from './types.js';
 
 export interface FetchedKeys {

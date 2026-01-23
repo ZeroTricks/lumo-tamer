@@ -12,7 +12,7 @@ import {
     prepareEncryptedRequestKey,
 } from '../proton-upstream/lib/lumo-api-client/core/encryption.js';
 import { StreamProcessor } from '../proton-upstream/lib/lumo-api-client/core/streaming.js';
-import { logger } from '../logger.js';
+import { logger } from '../app/logger.js';
 import type {
     AesGcmCryptoKey,
     ProtonApi,
@@ -22,7 +22,7 @@ import type {
     ToolName,
     Turn,
 } from './types.js';
-import { executeCommand, isCommand, type CommandContext } from '../commands.js';
+import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
 
 export interface SimpleLumoClientOptions {
     enableExternalTools?: boolean;

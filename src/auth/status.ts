@@ -5,7 +5,7 @@
  */
 
 import { createAuthProvider, type AuthProviderStatus } from './index.js';
-import { authConfig } from '../config.js';
+import { authConfig } from '../app/config.js';
 
 function printStatus(status: AuthProviderStatus): void {
     const statusIcon = status.valid ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';

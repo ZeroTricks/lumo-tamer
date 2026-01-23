@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { serverConfig } from '../../config.js';
+import { serverConfig } from '../../app/config.js';
 
 export function createModelsRouter(): Router {
   const router = Router();

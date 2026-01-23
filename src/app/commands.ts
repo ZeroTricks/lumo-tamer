@@ -4,7 +4,7 @@
  */
 
 import { logger } from './logger.js';
-import { getSyncService } from './persistence/index.js';
+import { getSyncService } from '../persistence/index.js';
 
 /**
  * Check if a message is a command (starts with /)

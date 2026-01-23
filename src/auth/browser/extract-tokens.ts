@@ -13,8 +13,8 @@ import { join } from 'path';
 import { promises as dns, ADDRCONFIG } from 'dns';
 import type { PersistedSessionData } from '../../lumo-client/types.js';
 import type { StoredTokens } from '../types.js';
-import { browserConfig, authConfig, protonConfig, persistenceConfig } from '../../config.js';
-import { logger } from '../../logger.js';
+import { browserConfig, authConfig, protonConfig, persistenceConfig } from '../../app/config.js';
+import { logger } from '../../app/logger.js';
 import { decryptPersistedSession } from '../../persistence/session-keys.js';
 
 // Check if persistence is enabled (determines whether to fetch extra keys)

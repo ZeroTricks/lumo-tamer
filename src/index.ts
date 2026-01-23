@@ -5,8 +5,8 @@ installConsoleShim();
 import { Application } from './app/index.js';
 import { APIServer } from './api/server.js';
 import { CLIClient } from './cli/client.js';
-import { serverConfig, cliConfig } from './config.js';
-import { logger } from './logger.js';
+import { serverConfig, cliConfig } from './app/config.js';
+import { logger } from './app/logger.js';
 
 async function main() {
   logger.info('Starting Lumo Bridge...');
