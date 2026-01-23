@@ -72,7 +72,7 @@ export async function handleStreamingRequest(
         syncInitialized: deps.syncInitialized ?? false,
       };
 
-      // Get response using SimpleLumoClient
+      // Get response using LumoClient
       const responseText = await client.chatWithHistory(
         turns,
         (chunk: string) => {
