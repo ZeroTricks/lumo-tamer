@@ -8,14 +8,14 @@
 import { RequestQueue } from './queue.js';
 import { persistenceConfig } from './config.js';
 import { logger } from './logger.js';
-import { SimpleLumoClient } from '../lumo-client/index.js';
+import { LumoClient } from '../lumo-client/index.js';
 import { createAuthProvider, type AuthProvider, type ProtonApi } from '../auth/index.js';
 import { getConversationStore, type ConversationStore } from '../persistence/conversation-store.js';
 import { getSyncService, getKeyManager, getAutoSyncService } from '../persistence/index.js';
 import type { AppContext } from './types.js';
 
 export class Application implements AppContext {
-  private lumoClient!: SimpleLumoClient;
+  private lumoClient!: LumoClient;
   private queue: RequestQueue;
   private authProvider!: AuthProvider;
   private protonApi!: ProtonApi;
@@ -43,7 +43,7 @@ export class Application implements AppContext {
     this.authProvider = await createAuthProvider();
     this.protonApi = this.authProvider.createApi();
     this.uid = this.authProvider.getUid();
-    this.lumoClient = new SimpleLumoClient(this.protonApi);
+    this.lumoClient = new LumoClient(this.protonApi);
 
     logger.info({ method: this.authProvider.method }, 'Authentication initialized');
   }
@@ -137,7 +137,7 @@ export class Application implements AppContext {
 
   // AppContext implementation
 
-  getLumoClient(): SimpleLumoClient {
+  getLumoClient(): LumoClient {
     return this.lumoClient;
   }
 

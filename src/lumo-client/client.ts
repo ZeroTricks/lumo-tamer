@@ -24,7 +24,7 @@ import type {
 } from './types.js';
 import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
 
-export interface SimpleLumoClientOptions {
+export interface LumoClientOptions {
     enableExternalTools?: boolean;
     enableEncryption?: boolean;
     endpoint?: string;
@@ -35,7 +35,7 @@ const DEFAULT_INTERNAL_TOOLS: ToolName[] = ['proton_info'];
 const DEFAULT_EXTERNAL_TOOLS: ToolName[] = ['web_search', 'weather', 'stock', 'cryptocurrency'];
 const DEFAULT_ENDPOINT = 'ai/v1/chat';
 
-export class SimpleLumoClient {
+export class LumoClient {
     constructor(private protonApi: ProtonApi) { }
 
     /**
@@ -48,7 +48,7 @@ export class SimpleLumoClient {
     async chat(
         message: string,
         onChunk?: (content: string) => void,
-        options: SimpleLumoClientOptions = {}
+        options: LumoClientOptions = {}
     ): Promise<string> {
 
         const turns: Turn[] = [{ role: 'user', content: message }];
@@ -140,7 +140,7 @@ export class SimpleLumoClient {
     async chatWithHistory(
         turns: Turn[],
         onChunk?: (content: string) => void,
-        options: SimpleLumoClientOptions = {}
+        options: LumoClientOptions = {}
     ): Promise<string> {
         const {
             enableExternalTools = false,

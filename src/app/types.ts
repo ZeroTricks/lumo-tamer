@@ -3,7 +3,7 @@
  */
 
 import type { RequestQueue } from './queue.js';
-import type { SimpleLumoClient } from '../lumo-client/index.js';
+import type { LumoClient } from '../lumo-client/index.js';
 import type { AuthProvider } from '../auth/index.js';
 import type { ConversationStore } from '../persistence/conversation-store.js';
 
@@ -11,7 +11,7 @@ import type { ConversationStore } from '../persistence/conversation-store.js';
  * Application context exposed to CLI and API
  */
 export interface AppContext {
-  getLumoClient(): SimpleLumoClient;
+  getLumoClient(): LumoClient;
   getQueue(): RequestQueue;
   getConversationStore(): ConversationStore;
   getAuthProvider(): AuthProvider;
