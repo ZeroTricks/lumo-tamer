@@ -119,10 +119,11 @@ export interface OpenAIResponseRequest {
   store?: boolean;
   metadata?: Record<string, string>;
   tools?: any[];
-  // Continuation from previous response
+  // Continuation from previous response (stateless mode)
   previous_response_id?: string;
-  // Custom extension for conversation persistence
-  conversation_id?: string;
+  // Conversation identifier (per OpenAI spec: string ID or object)
+  // Cannot be used with previous_response_id
+  conversation?: string | { id: string };
 }
 
 // Output item types for OpenAI Response

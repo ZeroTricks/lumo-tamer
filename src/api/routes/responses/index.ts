@@ -29,92 +29,41 @@ function generateDeterministicConversationId(firstUserMessage: string): Conversa
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
 }
 
+/**
+ * Extract conversation ID from request.conversation field (per OpenAI spec)
+ */
+function getConversationIdFromRequest(request: OpenAIResponseRequest): string | undefined {
+  if (!request.conversation) return undefined;
+  if (typeof request.conversation === 'string') return request.conversation;
+  if (typeof request.conversation === 'object' && 'id' in request.conversation) {
+    return request.conversation.id;
+  }
+  return undefined;
+}
+
 export function createResponsesRouter(deps: EndpointDependencies): Router {
   const router = Router();
 
-  // Track last processed user message to avoid duplicate processing
-  let lastProcessedUserMessage: string | null = null;
-
-  // Track function call outputs and call_ids we created
-  let lastProcessedFunctionOutputCallId: string | null = null;
-  const createdCallIds = new Set<string>();
+  // NOTE: Module-level state has been moved to ConversationStore (per-conversation)
+  // This fixes issues with server-global state shared across conversations
 
   router.post('/v1/responses', async (req: Request, res: Response) => {
     try {
       const request: OpenAIResponseRequest = req.body;
 
-      // Check for function_call_output in input array
-      // Note: Tool calls are not supported in API mode, but we keep the deduplication logic
-      // in case tool calls are added later
-      if (Array.isArray(request.input)) {
-        const functionOutputs = request.input
-          .filter((item): item is FunctionCallOutput =>
-            typeof item === 'object' && 'type' in item && item.type === 'function_call_output'
-          )
-          .filter((item) => createdCallIds.has(item.call_id));
-
-        // Get the last function output if any
-        const lastFunctionOutput = functionOutputs[functionOutputs.length - 1];
-
-        if (lastFunctionOutput) {
-          // Check if this call_id is different from last processed
-          if (lastFunctionOutput.call_id !== lastProcessedFunctionOutputCallId) {
-            lastProcessedFunctionOutputCallId = lastFunctionOutput.call_id;
-
-            logger.debug(`[Server] Processing function_call_output for call_id: ${lastFunctionOutput.call_id}`);
-
-            // Convert function output to a turn
-            const outputString = JSON.stringify(lastFunctionOutput);
-            const turns: Turn[] = [{ role: 'user', content: outputString }];
-
-            if (request.stream) {
-              await handleStreamingRequest(req, res, deps, request, turns, createdCallIds);
-            } else {
-              await handleNonStreamingRequest(req, res, deps, request, turns, createdCallIds);
-            }
-            return; // Early return after processing
-          }
-          // If duplicate function_call_output, continue to check user message
-          logger.debug('[Server] Skipping duplicate function_call_output, checking for user message');
-        }
-      }
-
-      // Extract input text for command checking and deduplication
-      let inputText: string;
-      if (typeof request.input === 'string') {
-        inputText = request.input;
-      } else if (Array.isArray(request.input)) {
-        // Get the last user message from array
-        const lastUserMessage = [...request.input].reverse().find((m): m is { role: string; content: string } =>
-          typeof m === 'object' && 'role' in m && m.role === 'user'
-        );
-        if (!lastUserMessage) {
-          return res.status(400).json({ error: 'No user message found in input array' });
-        }
-        inputText = lastUserMessage.content;
-      } else {
-        return res.status(400).json({ error: 'Input is required (string or message array)' });
-      }
-
-      // Check if this message has already been processed
-      if (inputText === lastProcessedUserMessage) {
-        logger.debug('[Server] Skipping duplicate user message');
-        return res.json(createEmptyResponse(request));
-      }
-
-      // Update last processed message
-      lastProcessedUserMessage = inputText;
-
-      // Extract or generate conversation ID for persistence
-      // For Responses API, use conversation_id, previous_response_id as continuation hint, or generate deterministic ID
-      // Note: Must be a valid UUID for Lumo server compatibility (no prefixes)
+      // ===== STEP 1: Determine conversation ID FIRST =====
+      // We need this before any deduplication checks since dedup is per-conversation
       let conversationId: ConversationId;
-      if (request.conversation_id) {
-        conversationId = request.conversation_id;
+      const conversationFromRequest = getConversationIdFromRequest(request);
+
+      if (conversationFromRequest) {
+        // Use conversation field (per OpenAI spec)
+        conversationId = conversationFromRequest;
       } else if (request.previous_response_id) {
+        // Use previous_response_id for stateless continuation
         conversationId = request.previous_response_id;
       } else if (persistenceConfig?.deriveIdFromFirstMessage) {
-        // WORKAROUND for clients that don't provide conversation_id (e.g., Home Assistant).
+        // WORKAROUND for clients that don't provide conversation (e.g., Home Assistant).
         // Generate deterministic ID from first USER message so conversations with same start get same ID.
         // WARNING: This may incorrectly merge unrelated conversations with the same opening message!
         const firstUserMessage = Array.isArray(request.input)
@@ -133,6 +82,69 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
         conversationId = randomUUID();
         logger.debug({ conversationId }, 'Generated random conversation ID');
       }
+
+      // ===== STEP 2: Check for function_call_output (with per-conversation dedup) =====
+      if (Array.isArray(request.input)) {
+        const functionOutputs = request.input
+          .filter((item): item is FunctionCallOutput =>
+            typeof item === 'object' && 'type' in item && item.type === 'function_call_output'
+          )
+          // Only process outputs for call_ids we created in THIS conversation
+          .filter((item) => deps.conversationStore?.hasCreatedCallId(conversationId, item.call_id) ?? false);
+
+        // Get the last function output if any
+        const lastFunctionOutput = functionOutputs[functionOutputs.length - 1];
+
+        if (lastFunctionOutput) {
+          // Check if this call_id is different from last processed (per-conversation)
+          const isDuplicate = deps.conversationStore?.isDuplicateFunctionOutput(conversationId, lastFunctionOutput.call_id) ?? false;
+
+          if (!isDuplicate) {
+            deps.conversationStore?.setLastProcessedFunctionOutput(conversationId, lastFunctionOutput.call_id);
+
+            logger.debug(`[Server] Processing function_call_output for call_id: ${lastFunctionOutput.call_id}`);
+
+            // Convert function output to a turn
+            const outputString = JSON.stringify(lastFunctionOutput);
+            const turns: Turn[] = [{ role: 'user', content: outputString }];
+
+            if (request.stream) {
+              await handleStreamingRequest(req, res, deps, request, turns, conversationId);
+            } else {
+              await handleNonStreamingRequest(req, res, deps, request, turns, conversationId);
+            }
+            return; // Early return after processing
+          }
+          // If duplicate function_call_output, continue to check user message
+          logger.debug('[Server] Skipping duplicate function_call_output, checking for user message');
+        }
+      }
+
+      // ===== STEP 3: Extract input text =====
+      let inputText: string;
+      if (typeof request.input === 'string') {
+        inputText = request.input;
+      } else if (Array.isArray(request.input)) {
+        // Get the last user message from array
+        const lastUserMessage = [...request.input].reverse().find((m): m is { role: string; content: string } =>
+          typeof m === 'object' && 'role' in m && m.role === 'user'
+        );
+        if (!lastUserMessage) {
+          return res.status(400).json({ error: 'No user message found in input array' });
+        }
+        inputText = lastUserMessage.content;
+      } else {
+        return res.status(400).json({ error: 'Input is required (string or message array)' });
+      }
+
+      // ===== STEP 4: Check for duplicate user message (per-conversation) =====
+      if (deps.conversationStore?.isDuplicateUserMessage(conversationId, inputText)) {
+        logger.debug('[Server] Skipping duplicate user message');
+        return res.json(createEmptyResponse(request));
+      }
+
+      // Update last processed message (per-conversation)
+      deps.conversationStore?.setLastProcessedUserMessage(conversationId, inputText);
 
       // Persist all messages from input to conversation store
       // The deduplication logic in appendMessages will filter out already-stored messages
@@ -180,9 +192,9 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
 
       // Add to queue and process
       if (request.stream) {
-        await handleStreamingRequest(req, res, deps, request, turns, createdCallIds, conversationId);
+        await handleStreamingRequest(req, res, deps, request, turns, conversationId);
       } else {
-        await handleNonStreamingRequest(req, res, deps, request, turns, createdCallIds, conversationId);
+        await handleNonStreamingRequest(req, res, deps, request, turns, conversationId);
       }
     } catch (error) {
       logger.error('Error processing response:');

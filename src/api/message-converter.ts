@@ -128,7 +128,8 @@ export function convertResponseInputToTurns(
 
   // Simple string input
   if (typeof input === 'string') {
-    const instructions = getEffectiveInstructions(requestInstructions);
+    const toolsInstruction = tools && tools.length > 0 ? buildToolsInstruction(tools) : undefined;
+    const instructions = getEffectiveInstructions(requestInstructions, toolsInstruction);
     let content = input;
     if (instructions) {
       content = `${content}\n\n[Personal context: ${instructions}]`;
