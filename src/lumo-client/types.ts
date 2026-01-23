@@ -43,28 +43,6 @@ export interface CachedMasterKey {
     Version: number;
 }
 
-// Auth tokens structure for storage
-export interface AuthTokens {
-    cookies: Array<{
-        name: string;
-        value: string;
-        domain: string;
-        path: string;
-        expires: number;
-        httpOnly: boolean;
-        secure: boolean;
-        sameSite: string;
-    }>;
-    localStorage?: Record<string, string>;
-    extractedAt: string;
-    // Extended auth data for conversation persistence
-    persistedSession?: PersistedSessionData;
-    // Cached user keys (fetched via browser to bypass scope limitation)
-    userKeys?: CachedUserKey[];
-    // Cached master keys (fetched via browser to bypass scope limitation)
-    masterKeys?: CachedMasterKey[];
-}
-
 // Persisted session structure (from Proton localStorage ps-{localID})
 export interface PersistedSessionData {
     localID: number;

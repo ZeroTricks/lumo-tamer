@@ -11,7 +11,8 @@ import { chromium, type Page } from 'playwright';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { promises as dns, ADDRCONFIG } from 'dns';
-import type { AuthTokens, PersistedSessionData } from '../../lumo-client/types.js';
+import type { PersistedSessionData } from '../../lumo-client/types.js';
+import type { StoredTokens } from '../types.js';
 import { browserConfig, authConfig, protonConfig, persistenceConfig } from '../../config.js';
 import { logger } from '../../logger.js';
 import { decryptPersistedSession } from '../../persistence/session-keys.js';
@@ -427,11 +428,11 @@ async function extractTokens(): Promise<void> {
     );
 
     if (!lumoAuthCookie) {
-        logger.warn('No AUTH-* cookie found for lumo.proton.me. Make sure you are logged in to Lumo.');
-    } else {
-        const uid = lumoAuthCookie.name.replace('AUTH-', '');
-        logger.info({ uid: uid.slice(0, 8) + '...' }, 'Found Lumo auth');
+        logger.error('No AUTH-* cookie found for lumo.proton.me. Make sure you are logged in to Lumo.');
+        process.exit(1);
     }
+    const lumoUid = lumoAuthCookie.name.replace('AUTH-', '');
+    logger.info({ uid: lumoUid.slice(0, 8) + '...' }, 'Found Lumo auth');
 
     // Extract localStorage from both origins
     const lumoOrigin = state.origins.find(o => o.origin.includes('lumo.proton.me'));
@@ -447,6 +448,7 @@ async function extractTokens(): Promise<void> {
             localStorage[item.name] = item.value;
         }
         logger.info({ count: Object.keys(localStorage).length, origin: 'lumo.proton.me' }, 'Found localStorage items');
+        logger.debug({ keys: Object.keys(localStorage) }, 'Lumo localStorage keys');
     } else {
         logger.warn('No lumo.proton.me origin found in storage state');
     }
@@ -458,6 +460,7 @@ async function extractTokens(): Promise<void> {
             accountLocalStorage[item.name] = item.value;
         }
         logger.info({ count: Object.keys(accountLocalStorage).length, origin: 'account.proton.me' }, 'Found localStorage items');
+        logger.debug({ keys: Object.keys(accountLocalStorage) }, 'Account localStorage keys');
     } else {
         logger.warn('No account.proton.me origin found in storage state');
     }
@@ -481,6 +484,7 @@ async function extractTokens(): Promise<void> {
         directLocalStorage = result.localStorage;
         activeSessionUid = result.activeUid;
         logger.info({ count: Object.keys(directLocalStorage).length }, 'Direct localStorage extraction');
+        logger.debug({ keys: Object.keys(directLocalStorage) }, 'Direct localStorage keys');
         if (activeSessionUid) {
             logger.info({ activeSessionUid: activeSessionUid.slice(0, 12) + '...' }, 'Found active session UID');
         }
@@ -515,8 +519,8 @@ async function extractTokens(): Promise<void> {
     }
 
     // Fetch persistence keys only if persistence is enabled
-    let userKeys: AuthTokens['userKeys'];
-    let masterKeys: AuthTokens['masterKeys'];
+    let userKeys: StoredTokens['userKeys'];
+    let masterKeys: StoredTokens['masterKeys'];
 
     if (persistenceEnabled) {
         logger.info('Persistence enabled - fetching encryption keys...');
@@ -617,10 +621,28 @@ async function extractTokens(): Promise<void> {
         logger.info('Persistence disabled - skipping encryption key extraction');
     }
 
-    // Build output
-    const tokens: AuthTokens = {
-        cookies: relevantCookies,
-        localStorage: Object.keys(localStorage).length > 0 ? localStorage : undefined,
+    // Determine which uid/accessToken to save
+    // Prefer the one matching persistedSession.UID if available (works for encrypted operations)
+    // Fall back to lumo.proton.me cookie (works for basic Lumo API)
+    let outputUid = lumoUid;
+    let outputAccessToken = lumoAuthCookie.value;
+
+    if (persistedSession) {
+        const matchingLumoAuth = relevantCookies.find(
+            c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
+        );
+        if (matchingLumoAuth) {
+            outputUid = matchingLumoAuth.name.replace('AUTH-', '');
+            outputAccessToken = matchingLumoAuth.value;
+            logger.info({ uid: outputUid.slice(0, 8) + '...' }, 'Using session-matching auth for output');
+        }
+    }
+
+    // Build output - only save uid/accessToken, not full cookies array
+    const tokens: StoredTokens = {
+        method: 'browser',
+        uid: outputUid,
+        accessToken: outputAccessToken,
         extractedAt: new Date().toISOString(),
         persistedSession,
         userKeys,
