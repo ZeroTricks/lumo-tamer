@@ -14,6 +14,7 @@ import { logger } from '../app/logger.js';
 import { serverConfig } from '../app/config.js';
 import { isCommand, executeCommand, type CommandContext } from '../app/commands.js';
 import type { AppContext } from '../app/index.js';
+import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
 
 const BUSY_INDICATOR = '...';
 
@@ -48,7 +49,7 @@ export class CLIClient {
     process.stdout.write(BUSY_INDICATOR);
 
     try {
-      const response = await this.app.getLumoClient().chat(
+      const result = await this.app.getLumoClient().chat(
         query,
         (chunk) => {
           if (chunkCount === 0) clearBusyIndicator();
@@ -61,7 +62,7 @@ export class CLIClient {
       if (chunkCount === 0) clearBusyIndicator();
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
       process.stdout.write('\n\n');
-      logger.info({ responseLength: response.length, chunkCount, elapsedSeconds: elapsed }, 'Done');
+      logger.info({ responseLength: result.response.length, chunkCount, elapsedSeconds: elapsed }, 'Done');
     } catch (error) {
       clearBusyIndicator();
       process.stdout.write('\n');
@@ -101,17 +102,18 @@ export class CLIClient {
         break;
       }
 
-      // Handle commands (e.g., /save, /sync, /deleteallspaces)
+      // Handle commands (e.g., /save, /sync, /deleteallspaces, /title)
       if (isCommand(input)) {
         const commandContext: CommandContext = {
           syncInitialized: this.app.isSyncInitialized(),
+          conversationId: this.conversationId,
         };
         try {
           const result = await executeCommand(input, commandContext);
           process.stdout.write(result + '\n\n');
         } catch (error) {
           // Unknown command - show help
-          process.stdout.write(`Unknown command. Available: /save, /quit\n\n`);
+          process.stdout.write(`Unknown command. Available: /save, /title, /quit\n\n`);
         }
         continue;
       }
@@ -131,21 +133,33 @@ export class CLIClient {
 
       try {
         const turns = store.toTurns(this.conversationId);
-        const response = await this.app.getLumoClient().chatWithHistory(
+
+        // Request title for new conversations (first message)
+        const existingConv = store.get(this.conversationId);
+        const requestTitle = existingConv?.title === 'New Conversation';
+
+        const result = await this.app.getLumoClient().chatWithHistory(
           turns,
           (chunk) => {
             if (chunkCount === 0) clearBusyIndicator();
             process.stdout.write(chunk);
             chunkCount++;
           },
-          { enableEncryption: true, enableExternalTools: false }
+          { enableEncryption: true, enableExternalTools: false, requestTitle }
         );
 
         if (chunkCount === 0) clearBusyIndicator();
         process.stdout.write('\n\n');
 
+        // Save generated title if present
+        if (result.title) {
+          const processedTitle = postProcessTitle(result.title);
+          store.setTitle(this.conversationId, processedTitle);
+          logger.debug({ title: processedTitle }, 'Set generated title');
+        }
+
         // Append assistant response to store
-        store.appendAssistantResponse(this.conversationId, response);
+        store.appendAssistantResponse(this.conversationId, result.response);
       } catch (error) {
         clearBusyIndicator();
         process.stdout.write('\n');

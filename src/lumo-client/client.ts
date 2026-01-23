@@ -29,6 +29,15 @@ export interface LumoClientOptions {
     enableEncryption?: boolean;
     endpoint?: string;
     commandContext?: CommandContext;
+    requestTitle?: boolean;
+}
+
+/**
+ * Result from a chat request, including optional generated title
+ */
+export interface ChatResult {
+    response: string;
+    title?: string;
 }
 
 const DEFAULT_INTERNAL_TOOLS: ToolName[] = ['proton_info'];
@@ -43,13 +52,13 @@ export class LumoClient {
      * @param message - User message
      * @param onChunk - Optional callback for each text chunk
      * @param options - Request options
-     * @returns Full response text
+     * @returns ChatResult with response text and optional title
      */
     async chat(
         message: string,
         onChunk?: (content: string) => void,
         options: LumoClientOptions = {}
-    ): Promise<string> {
+    ): Promise<ChatResult> {
 
         const turns: Turn[] = [{ role: 'user', content: message }];
         return this.chatWithHistory(turns, onChunk, options);
@@ -57,7 +66,9 @@ export class LumoClient {
     }
 
     /**
-     * Process SSE stream and extract response text
+     * Process SSE stream and extract response text and optional title
+     *
+     * Title generation inspired by WebClients redux.ts lines 49-110
      */
     private async processStream(
         stream: ReadableStream<Uint8Array>,
@@ -67,14 +78,15 @@ export class LumoClient {
             requestKey?: AesGcmCryptoKey;
             requestId?: RequestId;
         }
-    ): Promise<string> {
+    ): Promise<ChatResult> {
         const reader = stream.getReader();
         const decoder = new TextDecoder('utf-8');
         const processor = new StreamProcessor();
         let fullResponse = '';
+        let fullTitle = '';
 
         const processMessage = async (msg: GenerationToFrontendMessage) => {
-            if (msg.type === 'token_data' && msg.target === 'message') {
+            if (msg.type === 'token_data') {
                 let content = msg.content;
 
                 // Decrypt if needed
@@ -97,8 +109,13 @@ export class LumoClient {
                     }
                 }
 
-                fullResponse += content;
-                onChunk?.(content);
+                if (msg.target === 'message') {
+                    fullResponse += content;
+                    onChunk?.(content);
+                } else if (msg.target === 'title') {
+                    // Accumulate title chunks (title streams before message)
+                    fullTitle += content;
+                }
             } else if (
                 msg.type === 'error' ||
                 msg.type === 'rejected' ||
@@ -128,7 +145,10 @@ export class LumoClient {
                 await processMessage(msg);
             }
 
-            return fullResponse;
+            return {
+                response: fullResponse,
+                title: fullTitle || undefined,
+            };
         } finally {
             reader.releaseLock();
         }
@@ -136,17 +156,20 @@ export class LumoClient {
 
     /**
      * Multi-turn conversation support
+     *
+     * Title generation inspired by WebClients helper.ts:596 and client.ts:110
      */
     async chatWithHistory(
         turns: Turn[],
         onChunk?: (content: string) => void,
         options: LumoClientOptions = {}
-    ): Promise<string> {
+    ): Promise<ChatResult> {
         const {
             enableExternalTools = false,
             enableEncryption = true,
             endpoint = DEFAULT_ENDPOINT,
             commandContext,
+            requestTitle = false,
         } = options;
 
         const turn = turns[turns.length - 1];
@@ -162,7 +185,7 @@ export class LumoClient {
 
             if(onChunk)
                 onChunk(result);
-            return result;
+            return { response: result };
         }
 
         const tools: ToolName[] = enableExternalTools
@@ -181,11 +204,15 @@ export class LumoClient {
             processedTurns = await encryptTurns(turns, requestKey, requestId);
         }
 
+        // Request title alongside message for new conversations
+        // See WebClients client.ts:110: targets = requestTitle ? ['title', 'message'] : ['message']
+        const targets: Array<'title' | 'message'> = requestTitle ? ['title', 'message'] : ['message'];
+
         const request: LumoApiGenerationRequest = {
             type: 'generation_request',
             turns: processedTurns,
             options: { tools },
-            targets: ['message'],
+            targets,
             ...(enableEncryption && requestKeyEncB64 && requestId
                 ? {
                     request_key: requestKeyEncB64,
@@ -203,19 +230,22 @@ export class LumoClient {
             output: 'stream',
         })) as ReadableStream<Uint8Array>;
 
-        const response = await this.processStream(stream, onChunk, {
+        const result = await this.processStream(stream, onChunk, {
             enableEncryption,
             requestKey,
             requestId,
         });
 
         // Log response
-        const responsePreview = response.length > 200
-            ? response.substring(0, 200) + '...'
-            : response;
+        const responsePreview = result.response.length > 200
+            ? result.response.substring(0, 200) + '...'
+            : result.response;
 
         logger.info(`[Lumo] ${responsePreview}`);
+        if (result.title) {
+            logger.debug({ title: result.title }, 'Generated title');
+        }
 
-        return response;
+        return result;
     }
 }

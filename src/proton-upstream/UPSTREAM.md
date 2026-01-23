@@ -49,7 +49,7 @@ The upstream files use `@proton/*` imports which are mapped in `tsconfig.json`:
 | `@proton/crypto` | `src/proton-shims/crypto.ts` |
 | `@proton/crypto/lib/subtle/aesGcm` | `src/proton-shims/aesGcm.ts` |
 | `@proton/crypto/lib/subtle/hash` | `src/proton-shims/hash.ts` |
-| `@proton/crypto/lib/utils` | `src/proton-shims/utils.ts` |
+| `@proton/crypto/lib/utils` | `src/proton-shims/crypto-lib-utils.ts` |
 | `@proton/shared/lib/apps/helper` | `src/proton-shims/apps-helper.ts` |
 | `@proton/shared/lib/fetch/headers` | `src/proton-shims/fetch-headers.ts` |
 
@@ -93,7 +93,7 @@ APIs (`crypto.subtle`, standard `openpgp`), while keeping upstream files unchang
 | `crypto.ts` | `packages/crypto/lib/proxy/index.ts` | `openpgp` npm package |
 | `aesGcm.ts` | `packages/crypto/lib/subtle/aesGcm.ts` | Node.js `crypto.subtle` |
 | `hash.ts` | `packages/crypto/lib/subtle/hash.ts` | Node.js `crypto.subtle` |
-| `utils.ts` | `packages/crypto/lib/utils.ts` | `TextEncoder`/`TextDecoder` |
+| `crypto-lib-utils.ts` | `packages/crypto/lib/utils.ts` | `TextEncoder`/`TextDecoder` |
 | `apps-helper.ts` | `packages/shared/lib/apps/helper.ts` | Hardcoded client IDs |
 | `fetch-headers.ts` | `packages/shared/lib/fetch/headers.ts` | Simple header builder |
 | `fetch-adapter.ts` | (none - integration shim) | Bridges LumoApi's fetch to our ProtonApi |
