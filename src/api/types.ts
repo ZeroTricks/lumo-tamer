@@ -1,4 +1,4 @@
-import { RequestQueue } from '../queue/manager.js';
+import { RequestQueue } from '../app/queue.js';
 import { SimpleLumoClient } from '../lumo-client/index.js';
 import type { ConversationStore } from '../persistence/index.js';
 
