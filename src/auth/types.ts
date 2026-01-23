@@ -7,20 +7,6 @@ import type { ProtonApi, CachedUserKey, CachedMasterKey, PersistedSessionData } 
 export type AuthMethod = 'srp' | 'browser' | 'rclone';
 
 /**
- * Cookie structure for browser auth tokens
- */
-export interface Cookie {
-    name: string;
-    value: string;
-    domain: string;
-    path: string;
-    expires: number;
-    httpOnly: boolean;
-    secure: boolean;
-    sameSite: string;
-}
-
-/**
  * Unified token storage format
  * All auth methods read/write this format to sessions/auth-tokens.json
  */
@@ -32,8 +18,7 @@ export interface StoredTokens {
     keyPassword?: string;
     expiresAt?: string;
     extractedAt: string;
-    // Browser-specific fields
-    cookies?: Cookie[];
+    // Persistence data (browser-specific)
     persistedSession?: PersistedSessionData;
     userKeys?: CachedUserKey[];
     masterKeys?: CachedMasterKey[];

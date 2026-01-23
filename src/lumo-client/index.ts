@@ -3,4 +3,4 @@
  */
 
 export { SimpleLumoClient, type SimpleLumoClientOptions } from './simple-client.js';
-export type { ProtonApi, ProtonApiOptions, AuthTokens, Turn, ToolName, CachedUserKey, CachedMasterKey } from './types.js';
+export type { ProtonApi, ProtonApiOptions, Turn, ToolName, CachedUserKey, CachedMasterKey } from './types.js';

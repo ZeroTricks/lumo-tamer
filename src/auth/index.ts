@@ -9,7 +9,7 @@ import type { AuthProvider, AuthMethod, AuthProviderStatus, StoredTokens } from 
 
 // Re-export types
 export type { AuthProvider, AuthMethod, AuthProviderStatus, StoredTokens };
-export type { ProtonApi, CachedUserKey, CachedMasterKey, PersistedSessionData, Cookie } from './types.js';
+export type { ProtonApi, CachedUserKey, CachedMasterKey, PersistedSessionData } from './types.js';
 
 // Re-export providers for direct use if needed
 export { SRPAuthProvider, BrowserAuthProvider, RcloneAuthProvider };

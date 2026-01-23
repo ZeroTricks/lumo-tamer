@@ -17,7 +17,6 @@ import type {
     ProtonApi,
     CachedUserKey,
     CachedMasterKey,
-    Cookie,
 } from '../types.js';
 
 export class BrowserAuthProvider implements AuthProvider {
@@ -42,10 +41,10 @@ export class BrowserAuthProvider implements AuthProvider {
         const data = readFileSync(this.tokenCachePath, 'utf-8');
         this.tokens = JSON.parse(data) as StoredTokens;
 
-        // Validate we have browser tokens (has cookies)
-        if (!this.tokens.cookies || this.tokens.cookies.length === 0) {
+        // Validate we have required fields
+        if (!this.tokens.uid || !this.tokens.accessToken) {
             throw new Error(
-                'Token file does not contain browser cookies.\n' +
+                'Token file missing uid or accessToken.\n' +
                 'Run: npm run extract-tokens'
             );
         }
@@ -54,11 +53,11 @@ export class BrowserAuthProvider implements AuthProvider {
         logger.info({
             extractedAt: this.tokens.extractedAt,
             ageHours: tokenAge.toFixed(1),
-            cookieCount: this.tokens.cookies.length,
+            uid: this.tokens.uid.slice(0, 8) + '...',
         }, 'Browser tokens loaded');
 
         if (!this.isValid()) {
-            logger.warn('Some cookies have expired. Re-run extract-tokens if you get auth errors.');
+            logger.warn('Tokens likely expired (>24h old). Re-run extract-tokens if you get auth errors.');
         }
 
         // Try to extract keyPassword from persisted session
@@ -87,11 +86,10 @@ export class BrowserAuthProvider implements AuthProvider {
     }
 
     getUid(): string {
-        const authCookie = this.getAuthCookie();
-        if (!authCookie) {
-            throw new Error('No AUTH cookie found');
+        if (!this.tokens?.uid) {
+            throw new Error('Not authenticated');
         }
-        return authCookie.name.replace('AUTH-', '');
+        return this.tokens.uid;
     }
 
     getKeyPassword(): string | undefined {
@@ -99,42 +97,29 @@ export class BrowserAuthProvider implements AuthProvider {
     }
 
     createApi(): ProtonApi {
-        if (!this.tokens?.cookies) {
+        if (!this.tokens?.uid || !this.tokens?.accessToken) {
             throw new Error('Not authenticated');
         }
 
-        const authCookie = this.getAuthCookie();
-        if (!authCookie) {
-            throw new Error('No AUTH cookie found for lumo.proton.me');
-        }
-
-        const uid = authCookie.name.replace('AUTH-', '');
-        const accessToken = authCookie.value;
-
-        // Build cookie header from all cookies
-        const cookieHeader = this.tokens.cookies
-            .map((c) => `${c.name}=${c.value}`)
-            .join('; ');
-
         return createProtonApi({
-            uid,
-            accessToken,
-            cookies: cookieHeader,
+            uid: this.tokens.uid,
+            accessToken: this.tokens.accessToken,
+            // No cookies needed - API works with uid + accessToken headers only
         });
     }
 
     isValid(): boolean {
-        if (!this.tokens?.cookies) return false;
-        const now = Date.now() / 1000; // Convert to seconds
-        // Check if any cookie has expired
-        return !this.tokens.cookies.some((c) => c.expires > 0 && c.expires < now);
+        if (!this.tokens?.uid || !this.tokens?.accessToken) return false;
+        // Tokens typically valid for ~24h
+        const ageHours = this.getTokenAgeHours();
+        return ageHours < 24;
     }
 
     isNearExpiry(): boolean {
-        if (!this.tokens?.cookies) return false;
-        const fiveMinutesFromNow = (Date.now() / 1000) + (5 * 60);
-        // Check if any cookie expires within 5 minutes
-        return this.tokens.cookies.some((c) => c.expires > 0 && c.expires < fiveMinutesFromNow);
+        if (!this.tokens) return false;
+        const ageHours = this.getTokenAgeHours();
+        // Consider "near expiry" if within last hour of 24h window
+        return ageHours > 23;
     }
 
     getStatus(): AuthProviderStatus {
@@ -152,7 +137,6 @@ export class BrowserAuthProvider implements AuthProvider {
             return status;
         }
 
-        status.details.cookieCount = this.tokens.cookies?.length ?? 0;
         status.details.extractedAt = this.tokens.extractedAt;
         status.details.hasPersistedSession = !!this.tokens.persistedSession;
 
@@ -160,17 +144,15 @@ export class BrowserAuthProvider implements AuthProvider {
         status.details.age = this.formatDuration(ageHours);
 
         if (!this.isValid()) {
-            status.warnings.push('Some cookies have expired');
+            status.warnings.push('Tokens likely expired (>24h old)');
             status.warnings.push('Run: npm run extract-tokens');
         } else {
             status.valid = true;
         }
 
-        // Find AUTH cookie to show UID
-        const authCookie = this.getAuthCookie();
-        if (authCookie) {
-            const uid = authCookie.name.replace('AUTH-', '');
-            status.details.uid = uid.slice(0, 12) + '...';
+        // Show UID
+        if (this.tokens.uid) {
+            status.details.uid = this.tokens.uid.slice(0, 12) + '...';
         }
 
         // Check keyPassword availability
@@ -193,24 +175,6 @@ export class BrowserAuthProvider implements AuthProvider {
 
     getCachedMasterKeys(): CachedMasterKey[] | undefined {
         return this.tokens?.masterKeys;
-    }
-
-    private getAuthCookie(): Cookie | undefined {
-        if (!this.tokens?.cookies) return undefined;
-
-        // Prefer cookie matching persisted session UID
-        const persistedSessionUid = this.tokens.persistedSession?.UID;
-        if (persistedSessionUid) {
-            const matchingCookie = this.tokens.cookies.find(
-                (c) => c.name === `AUTH-${persistedSessionUid}` && c.domain.includes('lumo.proton.me')
-            );
-            if (matchingCookie) return matchingCookie;
-        }
-
-        // Fallback to any lumo AUTH cookie
-        return this.tokens.cookies.find(
-            (c) => c.name.startsWith('AUTH-') && c.domain.includes('lumo.proton.me')
-        );
     }
 
     private getTokenAgeHours(): number {
