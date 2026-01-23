@@ -21,7 +21,8 @@
       "@proton/crypto/lib/subtle/hash": ["./proton-shims/hash.ts"],
       "@proton/crypto/lib/utils": ["./proton-shims/utils.ts"],
       "@proton/shared/lib/apps/helper": ["./proton-shims/apps-helper.ts"],
-      "@proton/shared/lib/fetch/headers": ["./proton-shims/fetch-headers.ts"]
+      "@proton/shared/lib/fetch/headers": ["./proton-shims/fetch-headers.ts"],
+      "lodash/isNil": ["./proton-shims/lodash-isNil.ts"]
     }
   },
   "include": ["src/**/*"],
