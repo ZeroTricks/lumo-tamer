@@ -35,7 +35,7 @@ export async function handleStreamingRequest(
     let accumulatedText = '';
 
     const emitter = new ResponseEventEmitter(res);
-    const client = deps.getLumoClient();
+    const client = deps.lumoClient;
 
     try {
       // Event 1: response.created
@@ -189,7 +189,7 @@ export async function handleNonStreamingRequest(
 
   // Non-streaming response
   const result = await deps.queue.add(async () => {
-    const client = deps.getLumoClient();
+    const client = deps.lumoClient;
     return await client.chatWithHistory(
       turns,
       undefined,

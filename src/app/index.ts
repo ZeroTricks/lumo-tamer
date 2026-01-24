@@ -5,7 +5,6 @@
  * providing a unified context for both CLI and API modes.
  */
 
-import { RequestQueue } from './queue.js';
 import { getPersistenceConfig } from './config.js';
 import { logger } from './logger.js';
 import { LumoClient } from '../lumo-client/index.js';
@@ -16,15 +15,10 @@ import type { AppContext } from './types.js';
 
 export class Application implements AppContext {
   private lumoClient!: LumoClient;
-  private queue: RequestQueue;
   private authProvider!: AuthProvider;
   private protonApi!: ProtonApi;
   private uid!: string;
   private syncInitialized = false;
-
-  private constructor() {
-    this.queue = new RequestQueue(1); // Process one message at a time
-  }
 
   /**
    * Create and initialize the application
@@ -140,10 +134,6 @@ export class Application implements AppContext {
 
   getLumoClient(): LumoClient {
     return this.lumoClient;
-  }
-
-  getQueue(): RequestQueue {
-    return this.queue;
   }
 
   getConversationStore(): ConversationStore {

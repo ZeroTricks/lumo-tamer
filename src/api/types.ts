@@ -1,10 +1,10 @@
-import { RequestQueue } from '../app/queue.js';
+import { RequestQueue } from './queue.js';
 import { LumoClient } from '../lumo-client/index.js';
 import type { ConversationStore } from '../persistence/index.js';
 
 export interface EndpointDependencies {
   queue: RequestQueue;
-  getLumoClient: () => LumoClient;
+  lumoClient: LumoClient;
   conversationStore?: ConversationStore;
   syncInitialized?: boolean;
 }

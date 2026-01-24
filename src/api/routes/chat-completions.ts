@@ -182,7 +182,7 @@ async function handleStreamingRequest(
   await deps.queue.add(async () => {
     const id = `chatcmpl-${randomUUID()}`;
     const created = Math.floor(Date.now() / 1000);
-    const client = deps.getLumoClient();
+    const client = deps.lumoClient;
 
     // Create detector if custom tools are provided
     const detector = hasCustomTools ? new StreamingToolDetector() : null;
@@ -371,7 +371,7 @@ async function handleNonStreamingRequest(
   const requestTitle = existingConv?.title === 'New Conversation';
 
   const chatResult = await deps.queue.add(async () => {
-    const client = deps.getLumoClient();
+    const client = deps.lumoClient;
     return await client.chatWithHistory(
       turns,
       undefined,
