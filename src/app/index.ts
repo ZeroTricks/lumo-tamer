@@ -6,7 +6,7 @@
  */
 
 import { RequestQueue } from './queue.js';
-import { persistenceConfig } from './config.js';
+import { getPersistenceConfig } from './config.js';
 import { logger } from './logger.js';
 import { LumoClient } from '../lumo-client/index.js';
 import { createAuthProvider, type AuthProvider, type ProtonApi } from '../auth/index.js';
@@ -52,6 +52,7 @@ export class Application implements AppContext {
    * Initialize sync service for conversation persistence
    */
   private async initializeSync(): Promise<void> {
+    const persistenceConfig = getPersistenceConfig();
     if (!persistenceConfig?.enabled) {
       logger.info('Persistence is disabled, skipping sync initialization');
       return;

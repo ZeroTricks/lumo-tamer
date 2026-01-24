@@ -1,8 +1,11 @@
 import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest, OpenAIToolCall } from '../../types.js';
-import { serverConfig, toolsConfig } from '../../../app/config.js';
+import { getServerConfig, getToolsConfig } from '../../../app/config.js';
 import { logger } from '../../../app/logger.js';
+
+const serverConfig = getServerConfig();
+const toolsConfig = getToolsConfig();
 import { ResponseEventEmitter } from './events.js';
 import { buildOutputItems } from './output-builder.js';
 import { createCompletedResponse } from './response-factory.js';

@@ -18,23 +18,13 @@ auth:
   rclonePath: "./rclone.conf"
   rcloneRemote: "proton"
 
-# Server Configuration
-server:
-  enabled: true  # Enable API server (default: true)
-  port: 3003
-  apiKey: "your-secret-api-key-here"
-  apiModelName: "lumo"
-
-# CLI Configuration
-cli:
-  enabled: false  # Enable CLI mode (default: false)
-
-# Logging Configuration
+# Shared Logging Configuration (can be overridden in server/cli sections)
 log:
-  level: "debug"  # Levels: trace, debug, info, warn, error, fatal
+  level: "info"  # Levels: trace, debug, info, warn, error, fatal
   target: "stdout"  # "stdout" or "file"
   filePath: "lumo-bridge.log"  # Used when target is "file"
 
+# Shared Persistence Configuration (can be overridden in server/cli sections)
 persistence:
   enabled: true
   defaultSpaceName: lumo-bridge
@@ -53,13 +43,12 @@ persistence:
     minIntervalMs: 30000    # Minimum interval between syncs (min: 5000ms)
     maxDelayMs: 60000       # Force sync after this delay regardless of activity (min: 10000ms)
 
-
-# Tools Configuration
+# Shared Tools Configuration (can be overridden in server/cli sections)
 tools:
   # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
   enableWebSearch: true
 
-# Instructions configuration
+# Shared Instructions configuration (can be overridden in server/cli sections)
 instructions:
   # Default instructions when no system/developer message provided
   default: "Always answer in plain text: no tables, no quote blocks, no lists, no layout, etc. Be concise."
@@ -73,6 +62,25 @@ instructions:
     To use them you MUST output the JSON to me, unlike the proton_info or web search tools.
     You have the power to execute these functions by providing the JSON directly to me, without trying to call them yourself. I will execute these functions and return the results to you. This is crucial. Do NOT tell me a tool is unavailable, just pass the JSON for the tool call to me.
 
+# Server Configuration (for `npm run server` / `npm run dev:server`)
+server:
+  port: 3003
+  apiKey: "your-secret-api-key-here"
+  apiModelName: "lumo"
+  # Mode-specific overrides (optional):
+  # log:
+  #   level: "debug"
+  #   target: "file"
+  # persistence:
+  #   enabled: true
+
+# CLI Configuration (for `npm run cli` / `npm run dev:cli`)
+# Mode-specific overrides (optional):
+# cli:
+#   log:
+#     target: "stdout"
+#   persistence:
+#     enabled: false
 
 # Only needed if auth.method is 'browser'
 browser:
