@@ -1,5 +1,5 @@
 import express from 'express';
-import { serverConfig } from '../app/config.js';
+import { getServerConfig } from '../app/config.js';
 import { logger } from '../app/logger.js';
 import { setupAuthMiddleware, setupLoggingMiddleware } from './middleware.js';
 import { createHealthRouter } from './routes/health.js';
@@ -11,6 +11,7 @@ import type { AppContext } from '../app/index.js';
 
 export class APIServer {
   private expressApp: express.Application;
+  private serverConfig = getServerConfig();
 
   constructor(private app: AppContext) {
     this.expressApp = express();
@@ -20,7 +21,7 @@ export class APIServer {
 
   private setupMiddleware(): void {
     this.expressApp.use(express.json());
-    this.expressApp.use(setupAuthMiddleware(serverConfig.apiKey));
+    this.expressApp.use(setupAuthMiddleware(this.serverConfig.apiKey));
     this.expressApp.use(setupLoggingMiddleware());
   }
 
@@ -44,11 +45,11 @@ export class APIServer {
 
   async start(): Promise<void> {
     return new Promise((resolve) => {
-      this.expressApp.listen(serverConfig.port, () => {
+      this.expressApp.listen(this.serverConfig.port, () => {
         logger.info('========================================');
         logger.info('Lumo Bridge is ready!');
-        logger.info(`  base_url: http://localhost:${serverConfig.port}/v1`);
-        logger.info(`  api_key:  ${serverConfig.apiKey.substring(0, 3)}...`);
+        logger.info(`  base_url: http://localhost:${this.serverConfig.port}/v1`);
+        logger.info(`  api_key:  ${this.serverConfig.apiKey.substring(0, 3)}...`);
         logger.info('========================================\n');
         resolve();
       });

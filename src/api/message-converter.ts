@@ -4,7 +4,7 @@
 
 import type { ChatMessage, ResponseInputItem, OpenAITool } from './types.js';
 import type { Turn } from '../lumo-client/index.js';
-import { instructionsConfig } from '../app/config.js';
+import { getInstructionsConfig } from '../app/config.js';
 import { isCommand } from '../app/commands.js';
 
 /**
@@ -15,6 +15,7 @@ import { isCommand } from '../app/commands.js';
  * @returns Formatted instruction string for tools
  */
 export function buildToolsInstruction(tools: OpenAITool[]): string {
+  const instructionsConfig = getInstructionsConfig();
   const forTools = instructionsConfig?.forTools ?? '';
   const toolsJson = JSON.stringify(tools, null, 2);
   return `${forTools}\n\nAvailable tools:\n${toolsJson}`;
@@ -35,6 +36,7 @@ function getEffectiveInstructions(
   requestInstructions?: string,
   toolsInstruction?: string
 ): string | undefined {
+  const instructionsConfig = getInstructionsConfig();
   const defaultInstructions = instructionsConfig?.default;
   const append = instructionsConfig?.append ?? false;
 

@@ -3,7 +3,7 @@
  *
  * Uses the shared Application layer for auth, persistence, and client access.
  *
- * Usage: npm run dev (with cli.enabled: true in config)
+ * Usage: npm run dev:cli (or npm run cli for production)
  *        Single query mode: pass query as argv[2]
  *        Interactive mode: no argv
  */
@@ -11,7 +11,6 @@
 import * as readline from 'readline';
 import { randomUUID } from 'crypto';
 import { logger } from '../app/logger.js';
-import { serverConfig } from '../app/config.js';
 import { isCommand, executeCommand, type CommandContext } from '../app/commands.js';
 import type { AppContext } from '../app/index.js';
 import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
@@ -185,11 +184,6 @@ export class CLIClient {
     }
 
     process.stdout.write('Goodbye!\n');
-
-    // Inform user if server is still running
-    if (serverConfig.enabled !== false) {
-      process.stdout.write('API server still running. Press Ctrl+C to stop.\n');
-    }
   }
 
   private handleError(error: unknown): void {

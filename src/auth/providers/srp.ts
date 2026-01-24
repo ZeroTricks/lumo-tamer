@@ -7,7 +7,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { logger } from '../../app/logger.js';
-import { protonConfig, authConfig, persistenceConfig } from '../../app/config.js';
+import { protonConfig, authConfig, getPersistenceConfig } from '../../app/config.js';
 import { runProtonAuth } from '../go-proton-api/proton-auth-cli.js';
 import { createProtonApi } from '../api-factory.js';
 import { fetchKeys } from '../fetch-keys.js';
@@ -59,7 +59,7 @@ export class SRPAuthProvider implements AuthProvider {
     }
 
     private async fetchAndCacheKeys(): Promise<void> {
-        if (!persistenceConfig?.enabled) return;
+        if (!getPersistenceConfig()?.enabled) return;
         if (!this.supportsPersistence()) return;  // SRP can't use persistence anyway
         if (!this.tokens) return;
         if (this.tokens.userKeys && this.tokens.masterKeys) {

@@ -18,7 +18,8 @@ make dev-down     # Stop
 ```bash
 npm install
 cp config.example.yaml config.yaml  # Edit with your config
-npm run dev
+npm run dev:server  # Start API server with hot reload
+npm run dev:cli     # Start CLI with hot reload
 ```
 
 ### First Time Setup

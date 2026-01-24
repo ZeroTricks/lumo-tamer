@@ -1,8 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse, OpenAIToolCall } from '../types.js';
-import { serverConfig, toolsConfig, persistenceConfig } from '../../app/config.js';
+import { getServerConfig, getToolsConfig, getPersistenceConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
+
+const serverConfig = getServerConfig();
+const toolsConfig = getToolsConfig();
+const persistenceConfig = getPersistenceConfig();
 import { convertMessagesToTurns } from '../message-converter.js';
 import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../tool-parser.js';
 import { StreamingToolDetector } from '../streaming-tool-detector.js';

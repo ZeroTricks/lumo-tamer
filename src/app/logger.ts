@@ -1,15 +1,15 @@
 import pino from 'pino';
-import { logConfig } from './config.js';
+import type { LogConfig } from './config.js';
 
 // Determine transport based on config
-function getTransport(): pino.TransportSingleOptions {
-  const target = logConfig?.target ?? 'stdout';
+function getTransport(config?: LogConfig): pino.TransportSingleOptions {
+  const target = config?.target ?? 'stdout';
 
   if (target === 'file') {
     return {
       target: 'pino/file',
       options: {
-        destination: logConfig?.filePath ?? 'lumo-bridge.log',
+        destination: config?.filePath ?? 'lumo-bridge.log',
         mkdir: true,
       },
     };
@@ -26,11 +26,33 @@ function getTransport(): pino.TransportSingleOptions {
   };
 }
 
-// Create logger instance
-export const logger = pino({
-  level: logConfig?.level ?? 'info',
-  transport: getTransport(),
+// Create logger instance with given config
+export function createLogger(config?: LogConfig): pino.Logger {
+  return pino({
+    level: config?.level ?? 'info',
+    transport: getTransport(config),
+  });
+}
+
+// Module-level logger instance, initialized lazily or via initLogger()
+let _logger: pino.Logger | null = null;
+
+// Initialize the global logger with mode-specific config
+// Must be called early in entry point, before other modules use logger
+export function initLogger(config?: LogConfig): void {
+  _logger = createLogger(config);
+}
+
+// Get the global logger instance
+// Falls back to default config if not initialized
+export const logger: pino.Logger = new Proxy({} as pino.Logger, {
+  get(_target, prop) {
+    if (!_logger) {
+      // Lazy init with default config if not explicitly initialized
+      _logger = createLogger();
+    }
+    return (_logger as unknown as Record<string | symbol, unknown>)[prop];
+  },
 });
 
-// Export convenience methods
 export default logger;

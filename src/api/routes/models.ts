@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { serverConfig } from '../../app/config.js';
+import { getServerConfig } from '../../app/config.js';
 
 export function createModelsRouter(): Router {
   const router = Router();
+  const serverConfig = getServerConfig();
 
   router.get('/v1/models', (req: Request, res: Response) => {
     res.json({
