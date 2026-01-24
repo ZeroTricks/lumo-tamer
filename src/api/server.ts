@@ -7,11 +7,13 @@ import { createModelsRouter } from './routes/models.js';
 import { createChatCompletionsRouter } from './routes/chat-completions.js';
 import { createResponsesRouter } from './routes/responses/index.js';
 import { EndpointDependencies } from './types.js';
+import { RequestQueue } from './queue.js';
 import type { AppContext } from '../app/index.js';
 
 export class APIServer {
   private expressApp: express.Application;
   private serverConfig = getServerConfig();
+  private queue = new RequestQueue(1); // Process one request at a time
 
   constructor(private app: AppContext) {
     this.expressApp = express();
@@ -36,8 +38,8 @@ export class APIServer {
 
   private getDependencies(): EndpointDependencies {
     return {
-      queue: this.app.getQueue(),
-      getLumoClient: () => this.app.getLumoClient(),
+      queue: this.queue,
+      lumoClient: this.app.getLumoClient(),
       conversationStore: this.app.getConversationStore(),
       syncInitialized: this.app.isSyncInitialized(),
     };
