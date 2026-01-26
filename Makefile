@@ -1,7 +1,7 @@
 # Lumo Bridge Makefile
 # Uses multi-stage Dockerfile with targets for dev and production builds
 
-.PHONY: help dev dev-build dev-down shell logs install clean build
+.PHONY: help dev dev-build dev-down shell logs install clean build go-auth go-auth-build
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -21,6 +21,13 @@ build: ## Build TypeScript locally
 
 clean: ## Clean build artifacts
 	npm run clean
+
+# Authentication (go-proton-api)
+go-auth-build: ## Build the Go authentication binary
+	cd go-auth && go build -o ../bin/proton-auth
+
+go-auth: auth-build ## Run SRP authentication (interactive)
+	./bin/proton-auth -o sessions/auth-tokens.json
 
 # Docker development
 dev-docker: ## Start development container

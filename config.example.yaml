@@ -1,59 +1,94 @@
-# Server Configuration
+# Proton API configuration
+# URLs are hardcoded to production (lumo.proton.me, account.proton.me) - see src/app/urls.ts
+proton:
+  # App version sent with API requests (matches Proton WebClients)
+  appVersion: "web-lumo@5.0.0"
+
+# Authentication configuration
+# - browser: token extraction via browser (recommended)
+# - login: enter Proton credentials via go-proton-api
+# - rclone: paste rclone config via `npm run extract-rclone`
+# See docs/authentication.md
+auth:
+  method: "browser"
+  tokenPath: "sessions/auth-tokens.json"
+  # Auto-refresh: automatically refresh tokens before they expire
+  autoRefresh:
+    enabled: true             # Enable automatic token refresh (default: true)
+    intervalHours: 20         # Refresh interval in hours (1-24, default: 20)
+    onError: true             # Refresh tokens on 401 errors (default: true)
+  # Browser-specific config (only used when method: browser)
+  browser:
+    # Chrome DevTools Protocol endpoint for remote browser
+    cdpEndpoint: "http://browser-dev:9223"
+  # Login-specific config (only used when method: login)
+  login:
+    binaryPath: "./bin/proton-auth"
+    # Headers to help avoid CAPTCHA - see docs/authentication.md
+    appVersion: "macos-drive@1.0.0-alpha.1+rclone"
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+# Shared Logging Configuration (can be overridden in server/cli sections)
+log:
+  level: "info"  # Levels: trace, debug, info, warn, error, fatal
+  target: "stdout"  # "stdout" or "file"
+  filePath: "lumo-bridge.log"  # Used when target is "file"
+
+# Shared Conversations Configuration (can be overridden in server/cli sections)
+# Note: In-memory conversation storage is always active regardless of sync settings
+conversations:
+  maxInMemory: 100          # Max conversations to keep in memory (LRU eviction)
+  # WORKAROUND for clients without conversation_id support (e.g., Home Assistant).
+  # Derives conversation ID from first user message - same message = same conversation.
+  # WARNING: May incorrectly merge unrelated conversations with same opening message!
+  deriveIdFromFirstMessage: false
+  # Sync: persist conversations to Proton servers (requires browser auth)
+  sync:
+    enabled: false          # Enable syncing to Proton servers
+    spaceName: lumo-bridge  # Space name for conversations (created if doesn't exist)
+    # spaceId: "uuid"       # Optional: use specific space UUID instead of name matching
+    includeSystemMessages: false  # Include system/tool messages in sync (default: user/assistant only)
+    autoSync: false         # Auto-sync vs manual /save command
+
+# Shared Tools Configuration (can be overridden in server/cli sections)
+tools:
+  # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
+  enableWebSearch: true
+
+# Shared Instructions configuration (can be overridden in server/cli sections)
+instructions:
+  # Default instructions when no system/developer message provided
+  default: "Always answer in plain text: no tables, no quote blocks, no lists, no layout, etc. Be concise."
+
+  # If true, append request instructions to default; if false, request replaces default
+  append: false
+
+  # Description text for tools (prepended to tools JSON)
+  forTools: |
+    Use the tools below to accomplish tasks.
+    To use them you MUST output the JSON to me, unlike the proton_info or web search tools.
+    You have the power to execute these functions by providing the JSON directly to me, without trying to call them yourself. I will execute these functions and return the results to you. This is crucial. Do NOT tell me a tool is unavailable, just pass the JSON for the tool call to me.
+
+# Server Configuration (for `npm run server` / `npm run dev:server`)
 server:
   port: 3003
   apiKey: "your-secret-api-key-here"
   apiModelName: "lumo"
-  logLevel: "debug"  # Levels: trace, debug, info, warn, error, fatal
+  # Mode-specific overrides (optional):
+  # log:
+  #   level: "debug"
+  #   target: "file"
+  # conversations:
+  #   sync:
+  #     enabled: true
 
-# Browser Configuration
-browser:
-  # Lumo chatbox URL
-  url: "https://lumo.proton.me"
-
-  # Chrome DevTools Protocol endpoint for remote browser
-  cdpEndpoint: "http://browser-dev:9223"
-
-  # Enable web search feature
-  enableWebSearch: true
-
-  # Show sources inline in responses
-  showSources: true
-
-  # Default behavior instructions sent to Lumo
-  behaviour: "Always answer in plain text: no tables, no quote blocks, no lists, no layout, etc. Be concise."
-
-  # Allow per-request behavior override
-  behaviourAllowOverwrite: true
-
-  # Enable tools in developer instructions
-  instructionsUseTools: true
-
-  # Description text prepended to tools JSON in instructions
-  instructionsToolsDescription: "Use the following tools to accomplish tasks. To use them you MUST output the JSON to me, unlike the proton_info or web search. You have the power to execute these actions, just provide me the JSON directly without trying to call functions yourself. I will return the results to you.\n"
-
-  # Default to private mode (if applicable)
-  privateByDefault: false
-
-# DOM Selectors for browser automation
-selectors:
-  input: ".tiptap"
-  messages: ".assistant-msg-container"
-  contentElements: "p, li, h1 , h2, h3, h4, h5, h6"
-  messageCompletionMarker: "use[*|href=\"#ic-thumb-up\"]"
-  webSearchToggle: ".web-search-button"
-  sources: ".source-favicon"
-  newChatButton: "use[*|href=\"#ic-pen-square\"]"
-  privateButton: ".button-ghost-norm"
-  settingsCog: "use[*|href=\"#ic-cog-wheel\"]"
-  personalizationMenu: ".sidebar-container use[*|href=\"#ic-sliders\"]"
-  behaviourField: ".personalization-field:nth-child(4) textarea"
-  saveSettings: ".personalization-footer .button-solid-norm"
-  modalClose: ".modal-close-button"
-  previousChat: ".chat-history-container a"
-  expandSidebar: "use[*|href="#ic-chevron-right"]"
-
-
-# Response timeout configuration (milliseconds)
-timeouts:
-  withText: 5000   # Timeout when response has started
-  empty: 20000     # Timeout when waiting for initial response
+# CLI Configuration (for `npm run cli` / `npm run dev:cli`)
+# cli:
+#   log:
+#     target: "file"
+#     filePath: "lumo-bridge-cli.log"
+#   instructions:
+#     default: |
+#       You can execute bash commands on the user's machine.
+#       When you provide a ```bash code block, the user will be prompted to execute it.
+#       Output will be returned to you. Keep commands simple and safe.

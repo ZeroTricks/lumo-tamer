@@ -42,6 +42,36 @@ Browser GUI: http://localhost:3001 (noVNC)
 
 See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for all commands.
 
+## Authentication
+
+### rclone
+
+TODO
+
+### SRP Authentication
+
+Uses Proton's official SRP authentication via a Go binary wrapper:
+
+```bash
+# Build the Go binary (requires Go 1.24+)
+cd go-auth && go build -o ../bin/proton-auth
+
+# Run authentication (interactive prompts)
+./bin/proton-auth -o sessions/auth-tokens.json
+```
+
+Configure in `config.yaml`:
+```yaml
+auth:
+  method: srp
+  binaryPath: "./bin/proton-auth"
+  tokenCachePath: "sessions/auth-tokens.json"
+```
+
+### Browser Token Extraction
+
+Extract tokens from an existing browser session. See `scripts/extract-auth-token.ts`.
+
 ## Configuration
 
 **Find DOM selectors** using DevTools:

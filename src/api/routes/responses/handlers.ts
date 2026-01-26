@@ -1,21 +1,27 @@
 import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { EndpointDependencies, OpenAIResponseRequest } from '../../types.js';
-import { serverConfig } from '../../../config.js';
-import { logger } from '../../../logger.js';
-import { ChatboxInteractor } from '../../../browser/chatbox.js';
+import { EndpointDependencies, OpenAIResponseRequest, OpenAIToolCall } from '../../types.js';
+import { getServerConfig, getToolsConfig } from '../../../app/config.js';
+import { logger } from '../../../app/logger.js';
+
+const serverConfig = getServerConfig();
+const toolsConfig = getToolsConfig();
 import { ResponseEventEmitter } from './events.js';
-import { buildOutputItems, ToolCall } from './output-builder.js';
+import { buildOutputItems } from './output-builder.js';
 import { createCompletedResponse } from './response-factory.js';
+import type { Turn } from '../../../lumo-client/index.js';
+import type { ConversationId } from '../../../conversations/index.js';
+import { StreamingToolDetector } from 'api/streaming-tool-detector.js';
+import type { CommandContext } from '../../../app/commands.js';
+import { postProcessTitle } from '../../../proton-shims/lumo-api-client-utils.js';
 
 export async function handleStreamingRequest(
   req: Request,
   res: Response,
   deps: EndpointDependencies,
   request: OpenAIResponseRequest,
-  inputText: string,
-  chatbox: ChatboxInteractor,
-  createdCallIds: Set<string>
+  turns: Turn[],
+  conversationId: ConversationId
 ): Promise<void> {
   // Streaming response with event-based format
   res.setHeader('Content-Type', 'text/event-stream');
@@ -29,6 +35,7 @@ export async function handleStreamingRequest(
     let accumulatedText = '';
 
     const emitter = new ResponseEventEmitter(res);
+    const client = deps.lumoClient;
 
     try {
       // Event 1: response.created
@@ -52,48 +59,102 @@ export async function handleStreamingRequest(
       // Event 4: response.content_part.added
       emitter.emitContentPartAdded(itemId, 0, 0);
 
-      // Get response (handles both commands and regular messages)
-      const result = await chatbox.getResponse(inputText, (delta: string) => {
-        logger.debug(`[Server] Sending delta ( ${delta.length} chars)`);
-        accumulatedText += delta;
+      // Determine if external tools (web_search, etc.) should be enabled
+      const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
 
-        // Event 5+: response.output_text.delta (multiple)
-        emitter.emitOutputTextDelta(itemId, 0, 0, delta);
-      });
+      // Check if request has custom tools (legacy mode)
+      const hasCustomTools = request.tools && request.tools.length > 0;
+
+      // Create detector if custom tools are provided
+      const detector = hasCustomTools ? new StreamingToolDetector() : null;
+      const toolCallsEmitted: OpenAIToolCall[] = [];
+      let toolCallIndex = 0;
+
+
+      // Build command context for /save and other commands
+      const commandContext: CommandContext = {
+        syncInitialized: deps.syncInitialized ?? false,
+        conversationId,
+        authManager: deps.authManager,
+        tokenCachePath: deps.tokenCachePath,
+      };
+
+      // Request title for new conversations (title still has default value)
+      const existingConv = deps.conversationStore?.get(conversationId);
+      const requestTitle = existingConv?.title === 'New Conversation';
+
+      // Get response using LumoClient
+      const result = await client.chatWithHistory(
+        turns,
+        (chunk: string) => {
+          if (detector) {
+            // Use streaming tool detector
+            const { textToEmit, completedToolCalls } = detector.processChunk(chunk);
+
+            accumulatedText += textToEmit;
+
+            // Emit text delta if any
+            // emitContentDelta(textToEmit);
+            emitter.emitOutputTextDelta(itemId, 0, 0, textToEmit);
+
+            let i = 0;
+            // Emit tool call deltas for completed tools
+            for (const tc of completedToolCalls) {
+              const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
+              // Track call ID per-conversation for function output deduplication
+              deps.conversationStore?.addGeneratedCallId(conversationId, callId);
+              toolCallsEmitted.push({
+                id: callId,
+                type: 'function',
+                function: {
+                  name: tc.name,
+                  arguments: JSON.stringify(tc.arguments),
+                },
+              });
+
+              // emitToolCallDelta(toolCallIndex++, callId, tc.name, tc.arguments);
+              emitter.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), i++);
+              logger.debug({ name: tc.name }, '[Server] Tool call emitted in stream');
+            }
+          } else {
+            // No tools - pass through directly
+            emitter.emitOutputTextDelta(itemId, 0, 0, chunk);
+          }
+        },
+
+        { enableEncryption: true, enableExternalTools, commandContext, requestTitle }
+      );
+
       logger.debug('[Server] Stream completed');
 
+      if(detector){
+        emitter.emitOutputTextDelta(itemId, 0, 0, detector.getPendingText());
+      }
+
+      // Save generated title if present
+      if (result.title && deps.conversationStore) {
+        const processedTitle = postProcessTitle(result.title);
+        deps.conversationStore.setTitle(conversationId, processedTitle);
+        logger.debug({ conversationId, title: processedTitle }, 'Set generated title');
+      }
+
       // Update accumulated text from result (in case of discrepancy)
-      accumulatedText = result.text;
+      accumulatedText = result.response;
 
       // Event N-4: response.output_text.done
       emitter.emitOutputTextDone(itemId, 0, 0, accumulatedText);
 
-      // Emit function call events if tool calls are present
-      if (result.toolCalls) {
-        for (let i = 0; i < result.toolCalls.length; i++) {
-          const toolCall = result.toolCalls[i];
-          const fcId = `fc-${randomUUID()}`;
-          const callId = `call-${randomUUID()}`;
-
-          // Track this call_id as one we created
-          createdCallIds.add(callId);
-
-          // Ensure arguments are JSON-encoded string
-          const argumentsJson = typeof toolCall.arguments === 'string'
-            ? toolCall.arguments
-            : JSON.stringify(toolCall.arguments);
-
-          emitter.emitFunctionCallEvents(fcId, callId, toolCall.name, argumentsJson, 1 + i);
-        }
-      }
-
-      // Build output array with message and function_call items
+      // Build output array with message item only (no tool calls)
       const output = buildOutputItems({
         text: accumulatedText,
-        toolCalls: result.toolCalls,
         itemId,
-        createdCallIds,
       });
+
+      // Persist assistant response if conversation store is available
+      if (deps.conversationStore) {
+        deps.conversationStore.appendAssistantResponse(conversationId, accumulatedText);
+        logger.debug({ conversationId }, 'Persisted assistant response');
+      }
 
       // Event N-1: response.completed
       const completedResponse = createCompletedResponse(id, createdAt, request, output);
@@ -112,26 +173,58 @@ export async function handleNonStreamingRequest(
   res: Response,
   deps: EndpointDependencies,
   request: OpenAIResponseRequest,
-  inputText: string,
-  chatbox: ChatboxInteractor,
-  createdCallIds: Set<string>
+  turns: Turn[],
+  conversationId: ConversationId
 ): Promise<void> {
+  // Determine if external tools (web_search, etc.) should be enabled
+  const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
+
+  // Build command context for /save and other commands
+  const commandContext: CommandContext = {
+    syncInitialized: deps.syncInitialized ?? false,
+    conversationId,
+    authManager: deps.authManager,
+    tokenCachePath: deps.tokenCachePath,
+  };
+
+  // Request title for new conversations (title still has default value)
+  const existingConv = deps.conversationStore?.get(conversationId);
+  const requestTitle = existingConv?.title === 'New Conversation';
+
   // Non-streaming response
   const result = await deps.queue.add(async () => {
-    return await chatbox.getResponse(inputText);
+    const client = deps.lumoClient;
+    return await client.chatWithHistory(
+      turns,
+      undefined,
+      { enableEncryption: true, enableExternalTools, commandContext, requestTitle }
+    );
   });
 
   const id = `resp-${randomUUID()}`;
   const itemId = `item-${randomUUID()}`;
   const createdAt = Math.floor(Date.now() / 1000);
 
-  // Build output array with message and function_call items
+  // Save generated title if present
+  if (result.title && deps.conversationStore) {
+    const processedTitle = postProcessTitle(result.title);
+    deps.conversationStore.setTitle(conversationId, processedTitle);
+    logger.debug({ conversationId, title: processedTitle }, 'Set generated title');
+  }
+
+  // TODO: call tools
+
+  // Build output array with message item only (no tool calls)
   const output = buildOutputItems({
-    text: result.text,
-    toolCalls: result.toolCalls,
+    text: result.response,
     itemId,
-    createdCallIds,
   });
+
+  // Persist assistant response if conversation store is available
+  if (deps.conversationStore) {
+    deps.conversationStore.appendAssistantResponse(conversationId, result.response);
+    logger.debug({ conversationId }, 'Persisted assistant response');
+  }
 
   const response = createCompletedResponse(id, createdAt, request, output);
 
