@@ -22,4 +22,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  logger.fatal({ error: err.message, stack: err.stack }, 'Fatal error');
+  process.exit(1);
+});
