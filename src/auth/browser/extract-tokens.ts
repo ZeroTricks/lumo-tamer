@@ -19,7 +19,7 @@ import { authConfig, getPersistenceConfig } from '../../app/config.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { extractAndSaveTokens } from './extractor.js';
 
-const outputPath = resolveProjectPath(authConfig.tokenCachePath);
+const outputPath = resolveProjectPath(authConfig.tokenPath);
 
 async function main(): Promise<void> {
     try {

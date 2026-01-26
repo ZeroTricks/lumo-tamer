@@ -39,7 +39,7 @@ export class Application implements AppContext {
     this.authProvider = await createAuthProvider();
 
     // Create AuthManager with auto-refresh configuration
-    const tokenCachePath = resolveProjectPath(authConfig.tokenCachePath);
+    const tokenCachePath = resolveProjectPath(authConfig.tokenPath);
     const autoRefreshConfig = authConfig?.autoRefresh;
 
     this.authManager = new AuthManager({

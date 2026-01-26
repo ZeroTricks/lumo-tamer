@@ -24,7 +24,7 @@ export class BrowserAuthProvider extends BaseAuthProvider {
     private keyPassword?: string;
 
     constructor() {
-        super(resolveProjectPath(authConfig.tokenCachePath));
+        super(resolveProjectPath(authConfig.tokenPath));
     }
 
     async initialize(): Promise<void> {

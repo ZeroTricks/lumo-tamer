@@ -28,13 +28,6 @@ const toolsConfigSchema = z.object({
   enableWebSearch: z.boolean().optional().default(false),
 }).optional();
 
-const browserConfigSchema = z.object({
-  url: z.string().optional(),
-  cdpEndpoint: z.string().optional(),
-  showSources: z.boolean().optional(),
-  privateByDefault: z.boolean().optional(),
-}).optional();
-
 const autoSyncConfigSchema = z.object({
   enabled: z.boolean().default(false),
   debounceMs: z.number().min(1000).default(5000),
@@ -59,16 +52,31 @@ const authAutoRefreshConfigSchema = z.object({
   onError: z.boolean().default(true),
 }).optional();
 
+// Auth method-specific config schemas
+const authBrowserConfigSchema = z.object({
+  cdpEndpoint: z.string().optional(),
+}).optional();
+
+const authSrpConfigSchema = z.object({
+  binaryPath: z.string(),
+  // Headers to avoid CAPTCHA - only used by proton-auth binary
+  appVersion: z.string().optional(),
+  userAgent: z.string().optional(),
+}).optional();
+
+const authRcloneConfigSchema = z.object({
+  configPath: z.string().default('~/.config/rclone/rclone.conf'),
+  configSection: z.string().optional(),
+}).optional();
+
 const authConfigSchema = z.object({
   method: z.enum(['srp', 'browser', 'rclone']).default('browser'),
-  binaryPath: z.string().default('./bin/proton-auth'),
-  tokenCachePath: z.string().default('sessions/auth-tokens.json'),
-  rclonePath: z.string().optional(),
-  rcloneRemote: z.string().optional(),
+  tokenPath: z.string().default('sessions/auth-tokens.json'),
   autoRefresh: authAutoRefreshConfigSchema,
-  // SRP-specific headers (to avoid CAPTCHA). Only used by proton-auth binary.
-  srpAppVersion: z.string().optional(),
-  srpUserAgent: z.string().optional(),
+  // Method-specific config
+  browser: authBrowserConfigSchema,
+  srp: authSrpConfigSchema,
+  rclone: authRcloneConfigSchema,
 });
 
 // Mode-overridable config keys
@@ -91,7 +99,6 @@ const configSchema = modeOverridesSchema.extend({
   server: serverConfigSchema,
   cli: cliConfigSchema,
   proton: protonConfigSchema,
-  browser: browserConfigSchema,
   auth: authConfigSchema,
 });
 
@@ -163,7 +170,6 @@ export function getServerConfig() {
 // ============================================================================
 
 export const protonConfig = config.proton;
-export const browserConfig = config.browser;
 export const authConfig = config.auth;
 
 // ============================================================================
@@ -173,11 +179,13 @@ export const authConfig = config.auth;
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 export type ProtonConfig = z.infer<typeof protonConfigSchema>;
 export type ToolsConfig = z.infer<typeof toolsConfigSchema>;
-export type BrowserConfig = z.infer<typeof browserConfigSchema>;
 export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;
 export type PersistenceConfig = z.infer<typeof persistenceConfigSchema>;
 export type AutoSyncConfig = z.infer<typeof autoSyncConfigSchema>;
 export type AuthConfig = z.infer<typeof authConfigSchema>;
+export type AuthBrowserConfig = z.infer<typeof authBrowserConfigSchema>;
+export type AuthSrpConfig = z.infer<typeof authSrpConfigSchema>;
+export type AuthRcloneConfig = z.infer<typeof authRcloneConfigSchema>;
 export type AuthAutoRefreshConfig = z.infer<typeof authAutoRefreshConfigSchema>;
 export type CliConfig = z.infer<typeof cliConfigSchema>;
 export type LogConfig = z.infer<typeof logConfigSchema>;
