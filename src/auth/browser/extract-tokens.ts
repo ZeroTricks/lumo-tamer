@@ -15,7 +15,7 @@ import { initLogger, logger } from '../../app/logger.js';
 // Always log to stdout for CLI scripts - users need to see the output
 initLogger({ level: 'info', target: 'stdout', filePath: '' });
 
-import { authConfig } from '../../app/config.js';
+import { authConfig, getPersistenceConfig } from '../../app/config.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { extractAndSaveTokens } from './extractor.js';
 
@@ -31,7 +31,10 @@ async function main(): Promise<void> {
         }
 
         // Summary
-        if (result.tokens.persistedSession?.blob && result.tokens.persistedSession?.clientKey) {
+        const persistenceEnabled = getPersistenceConfig()?.enabled ?? false;
+        if (!persistenceEnabled) {
+            logger.info('Persistence disabled - encryption keys not fetched');
+        } else if (result.tokens.persistedSession?.blob && result.tokens.persistedSession?.clientKey) {
             logger.info('Extended auth data extracted - conversation persistence enabled');
         } else if (result.tokens.persistedSession?.blob) {
             logger.warn('Conversation persistence may not work without ClientKey');
