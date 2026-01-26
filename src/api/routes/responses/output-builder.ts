@@ -10,17 +10,17 @@ export interface BuildOutputOptions {
   text: string;
   toolCalls?: ToolCall[] | null;
   itemId?: string;
-  createdCallIds?: Set<string>;
+  generatedCallIds?: Set<string>;
 }
 
 export function buildOutputItems(options: BuildOutputOptions): OutputItem[] {
-  const { text, toolCalls, itemId, createdCallIds } = options;
+  const { text, toolCalls, itemId, generatedCallIds } = options;
 
   const messageItem = buildMessageItem(itemId || `item-${randomUUID()}`, text);
   const output: OutputItem[] = [messageItem];
 
   if (toolCalls && toolCalls.length > 0) {
-    const functionCallItems = buildFunctionCallItems(toolCalls, createdCallIds);
+    const functionCallItems = buildFunctionCallItems(toolCalls, generatedCallIds);
     output.push(...functionCallItems);
   }
 
@@ -45,14 +45,14 @@ export function buildMessageItem(itemId: string, text: string): MessageOutputIte
 
 export function buildFunctionCallItems(
   toolCalls: ToolCall[],
-  createdCallIds?: Set<string>
+  generatedCallIds?: Set<string>
 ): FunctionCallOutputItem[] {
   return toolCalls.map(toolCall => {
     const callId = `call-${randomUUID()}`;
 
     // Track this call_id if Set was provided
-    if (createdCallIds) {
-      createdCallIds.add(callId);
+    if (generatedCallIds) {
+      generatedCallIds.add(callId);
     }
 
     // Ensure arguments are JSON-encoded string

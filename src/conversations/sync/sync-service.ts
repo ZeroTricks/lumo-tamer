@@ -24,9 +24,9 @@ import {
     type LumoApi,
     RoleInt,
     StatusInt,
-} from './lumo-api-adapter.js';
+} from './lumo-api.js';
 import type { ProtonApi } from '../../lumo-client/types.js';
-import { getConversationStore } from '../conversation-store.js';
+import { getConversationStore } from '../store.js';
 import type { KeyManager } from '../encryption/key-manager.js';
 import type { ConversationState, Message, SpaceId, RemoteId, MessageRole, MessageStatus } from '../types.js';
 
@@ -146,7 +146,7 @@ export class SyncService {
      * 2. Otherwise, find a space with matching spaceName (projectName)
      * 3. If no match found, create a new space with spaceName
      */
-    async ensureSpace(): Promise<{ spaceId: SpaceId; remoteId: RemoteId }> {
+    async getOrCreateSpace(): Promise<{ spaceId: SpaceId; remoteId: RemoteId }> {
         // Already have a space
         if (this.spaceId && this.spaceRemoteId && this.spaceKey) {
             return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
@@ -371,7 +371,7 @@ export class SyncService {
         }
 
         // Ensure we have a space
-        const { remoteId: spaceRemoteId } = await this.ensureSpace();
+        const { remoteId: spaceRemoteId } = await this.getOrCreateSpace();
 
         const store = getConversationStore();
         const dirtyConversations = store.getDirty();

@@ -34,4 +34,4 @@ export {
     type RemoteMessage,
     type RemoteSpace,
     type RemoteConversation,
-} from './lumo-api-adapter.js';
+} from './lumo-api.js';

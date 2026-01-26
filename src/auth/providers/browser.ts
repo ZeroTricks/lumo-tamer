@@ -9,7 +9,7 @@ import { logger } from '../../app/logger.js';
 import { authConfig, protonConfig, getConversationsConfig } from '../../app/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { resolveProjectPath } from '../../app/paths.js';
-import { decryptPersistedSession } from '../../persistence/session-keys.js';
+import { decryptPersistedSession } from '../../conversations/session-keys.js';
 import { BaseAuthProvider } from './base.js';
 import type { AuthProviderStatus } from '../types.js';
 

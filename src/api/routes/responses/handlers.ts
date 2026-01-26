@@ -10,7 +10,7 @@ import { ResponseEventEmitter } from './events.js';
 import { buildOutputItems } from './output-builder.js';
 import { createCompletedResponse } from './response-factory.js';
 import type { Turn } from '../../../lumo-client/index.js';
-import type { ConversationId } from '../../../persistence/index.js';
+import type { ConversationId } from '../../../conversations/index.js';
 import { StreamingToolDetector } from 'api/streaming-tool-detector.js';
 import type { CommandContext } from '../../../app/commands.js';
 import { postProcessTitle } from '../../../proton-shims/lumo-api-client-utils.js';
@@ -102,7 +102,7 @@ export async function handleStreamingRequest(
             for (const tc of completedToolCalls) {
               const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
               // Track call ID per-conversation for function output deduplication
-              deps.conversationStore?.addCreatedCallId(conversationId, callId);
+              deps.conversationStore?.addGeneratedCallId(conversationId, callId);
               toolCallsEmitted.push({
                 id: callId,
                 type: 'function',

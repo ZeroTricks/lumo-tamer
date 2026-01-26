@@ -4,7 +4,7 @@
  */
 
 import { logger } from './logger.js';
-import { getSyncService, getConversationStore, getAutoSyncService } from '../persistence/index.js';
+import { getSyncService, getConversationStore, getAutoSyncService } from '../conversations/index.js';
 import type { AuthManager } from '../auth/index.js';
 
 /**
