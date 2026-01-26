@@ -1,10 +1,9 @@
 /**
- * Extract tokens from rclone config and save to sessions/auth-tokens.json
- *
- * Usage: npm run extract-rclone
+ * Rclone Authentication Entry Point
  *
  * Prompts the user to paste their rclone protondrive config section,
  * then saves tokens in the unified format used by all auth providers.
+ * Used by CLI (npm run auth) for rclone authentication method.
  */
 
 import * as readline from 'readline';
@@ -53,7 +52,12 @@ async function readMultilineInput(): Promise<string> {
     return lines.join('\n');
 }
 
-export async function extractRcloneTokens(): Promise<void> {
+/**
+ * Run rclone authentication
+ *
+ * Prompts for rclone config paste, parses tokens, and saves to file.
+ */
+export async function runRcloneAuthentication(): Promise<void> {
     const content = await readMultilineInput();
 
     if (!content.trim()) {
@@ -89,7 +93,7 @@ export async function extractRcloneTokens(): Promise<void> {
 // Only run when invoked directly (not when imported)
 const isDirectInvocation = import.meta.url === `file://${process.argv[1]}`;
 if (isDirectInvocation) {
-    extractRcloneTokens().catch(error => {
+    runRcloneAuthentication().catch(error => {
         logger.error({ error }, 'Extraction failed');
         process.exit(1);
     });

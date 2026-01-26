@@ -697,15 +697,15 @@ async function promptForCdpEndpoint(defaultEndpoint?: string): Promise<string> {
 }
 
 /**
- * Extract tokens and save to file
+ * Run browser authentication
  *
- * Convenience function that extracts tokens and saves them to the specified path.
- * Used by CLI and can be used by AuthManager for scheduled refresh.
+ * Prompts for CDP endpoint, extracts tokens from browser session, and saves to file.
+ * Used by CLI (npm run auth) for browser authentication method.
  *
  * @param outputPath - Path to save tokens
  * @returns Extraction result
  */
-export async function extractAndSaveTokens(outputPath: string): Promise<ExtractionResult> {
+export async function runBrowserAuthentication(outputPath: string): Promise<ExtractionResult> {
     const configEndpoint = authConfig.browser?.cdpEndpoint;
     const cdpEndpoint = await promptForCdpEndpoint(configEndpoint);
 

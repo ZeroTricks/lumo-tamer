@@ -21,9 +21,9 @@ initLogger({ level: 'info', target: 'stdout', filePath: '' });
 import * as readline from 'readline';
 import { authConfig, authMethodSchema, getPersistenceConfig } from '../app/config.js';
 import { resolveProjectPath } from '../app/paths.js';
-import { extractAndSaveTokens } from './browser/extractor.js';
-import { extractRcloneTokens } from './rclone/extract.js';
-import { runSrpAuthentication } from './providers/srp.js';
+import { runBrowserAuthentication } from './browser/authenticate.js';
+import { runRcloneAuthentication } from './rclone/authenticate.js';
+import { runSrpAuthentication } from './go-proton-api/authenticate.js';
 import { BrowserAuthProvider } from './providers/browser.js';
 import { RcloneAuthProvider } from './providers/rclone.js';
 import { SRPAuthProvider } from './providers/srp.js';
@@ -66,7 +66,7 @@ interface BrowserAuthResult {
 
 async function authenticateBrowser(): Promise<BrowserAuthResult> {
     const outputPath = resolveProjectPath(authConfig.tokenPath);
-    const result = await extractAndSaveTokens(outputPath);
+    const result = await runBrowserAuthentication(outputPath);
 
     // Log warnings
     for (const warning of result.warnings) {
@@ -107,7 +107,7 @@ async function main(): Promise<void> {
                 break;
             }
             case 'rclone':
-                await extractRcloneTokens();
+                await runRcloneAuthentication();
                 break;
             case 'srp':
                 await runSrpAuthentication();
