@@ -53,6 +53,11 @@ export interface AuthProvider {
     getUid(): string;
 
     /**
+     * Get the current access token
+     */
+    getAccessToken(): string;
+
+    /**
      * Get the keyPassword for decrypting user keys (if available)
      */
     getKeyPassword(): string | undefined;

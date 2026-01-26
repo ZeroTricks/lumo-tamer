@@ -63,6 +63,9 @@ export async function executeCommand(
       case 'logout':
         return await handleLogoutCommand(context);
 
+      case 'refreshtokens':
+        return await handleRefreshTokensCommand(context);
+
       case 'deleteallspaces':
         return await handleDeleteAllSpacesCommand(context);
 
@@ -91,6 +94,7 @@ function getHelpText(): string {
   /help              - Show this help message
   /title <text>      - Set conversation title
   /save, /sync       - Sync conversations to Proton server
+  /refreshtokens     - Manually refresh auth tokens
   /logout            - Revoke session and delete tokens
   /deleteallspaces   - Delete ALL spaces from server (destructive!)
   /quit              - Exit CLI (CLI mode only)`;
@@ -139,6 +143,23 @@ async function handleSaveCommand(context?: CommandContext): Promise<string> {
   } catch (error) {
     logger.error({ error }, 'Failed to execute /save command');
     return `Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+  }
+}
+
+/**
+ * Handle /refreshtokens command - manually trigger token refresh
+ */
+async function handleRefreshTokensCommand(context?: CommandContext): Promise<string> {
+  try {
+    if (!context?.authManager) {
+      return 'Token refresh not available - missing auth context.';
+    }
+
+    await context.authManager.refreshNow();
+    return 'Tokens refreshed successfully.';
+  } catch (error) {
+    logger.error({ error }, 'Failed to execute /refreshtokens command');
+    return `Token refresh failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
   }
 }
 

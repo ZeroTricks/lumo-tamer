@@ -190,10 +190,10 @@ If the browser has multiple Proton sessions (different accounts), extraction pri
 |---------|---------------|----------|-------------------|
 | keyPassword | Yes | Yes | Yes |
 | Conversation sync | Full | Full | Full |
-| Browser required | No | No | Yes |
+| Browser required | No | No | Yes (initial only) |
 | Go toolchain required | No | Yes | No |
 | Extraction step | None | `./bin/proton-auth` | `npm run extract-tokens` |
-| Token refresh | Manual (rclone) | Automatic | Manual |
+| Token refresh | Automatic | Automatic | Automatic |
 | 2FA support | Any (via rclone) | TOTP | Any |
 | CAPTCHA handling | Interactive (rclone) | Fails | Interactive |
 | Setup complexity | Low | Medium | Low |
@@ -204,16 +204,14 @@ If the browser has multiple Proton sessions (different accounts), extraction pri
 |-----------|--------|-----|---------|---------|
 | `uid` | Yes | Yes | Yes | User identifier for API requests |
 | `accessToken` | Yes | Yes | Yes | Authentication for API calls |
-| `refreshToken` | Yes | Yes | No* | Get new access tokens without re-auth |
+| `refreshToken` | Yes | Yes | Yes | Get new access tokens without re-auth |
 | `keyPassword` | Yes | Yes | Yes | Decrypt user's PGP private keys |
 | `userKeys` | No | No | Yes | Encrypted PGP keys for signing/decryption |
 | `masterKeys` | No | No | Yes | Lumo-specific keys for conversation encryption |
 
-*Browser auth cannot extract refreshToken (HTTP-only cookie).
-
 **Why these matter:**
 - **accessToken**: Required for all API calls. Expires in ~24h.
-- **refreshToken**: Allows automatic token refresh without user interaction. Only SRP and rclone have this.
+- **refreshToken**: Allows automatic token refresh without user interaction. All auth methods support this.
 - **keyPassword**: Derived from your account password + salt. Needed to decrypt your PGP private keys for end-to-end encryption.
 - **userKeys**: Your encrypted PGP private keys. Fetched from `/core/v4/users`. May require specific API scope.
 - **masterKeys**: Lumo-specific encryption keys. Fetched from `/lumo/v1/masterkeys`. May require specific API scope.
@@ -224,9 +222,9 @@ If the browser has multiple Proton sessions (different accounts), extraction pri
 
 | Method | Before Starting Server | On Token Expiry |
 |--------|----------------------|-----------------|
-| rclone | None - reads config directly | Run `rclone lsd remote:`, restart server |
-| SRP | `./bin/proton-auth -o sessions/auth-tokens.json` | Automatic (or re-run binary) |
-| Browser | `npm run extract-tokens` | Re-run `npm run extract-tokens` |
+| rclone | None - reads config directly | Automatic refresh |
+| SRP | `./bin/proton-auth -o sessions/auth-tokens.json` | Automatic refresh |
+| Browser | `npm run extract-tokens` | Automatic refresh |
 
 ---
 
@@ -293,30 +291,48 @@ If keys were cached but server still gets scope errors, the AUTH cookie used may
 
 
 
-## Current Token Refresh Status
-- SRP auth method: Has automatic refresh via AuthManager.refresh() in manager.ts:99-138. It calls /auth/refresh endpoint to get new access tokens.
-- rclone auth method: No automatic refresh. You need to run rclone lsd remote: externally to trigger rclone's token refresh, then restart the server.
-- Browser extraction: No automatic refresh. Requires manual re-extraction when tokens expire.
+## Token Refresh
 
-### Why Browser Auth Cannot Have Automatic Refresh
+All auth methods now support automatic token refresh via the `AuthManager`:
 
-Proton stores refresh tokens as **HTTP-only cookies** - a security feature that prevents JavaScript access (XSS protection). This means:
+| Method | Refresh Mechanism | Auto-Refresh |
+|--------|-------------------|--------------|
+| **SRP** | `/auth/refresh` endpoint | Yes |
+| **rclone** | `/auth/refresh` endpoint | Yes |
+| **Browser** | `/auth/refresh` endpoint | Yes |
 
-- The `AUTH-{uid}` cookie (access token) is extractable
-- The refresh token cookie is **not accessible** to JavaScript or Playwright
-- The browser automatically includes HTTP-only cookies in requests, but their values cannot be read
+### Configuration
 
-This is intentional security design, not a limitation we can work around.
+```yaml
+auth:
+  autoRefresh:
+    enabled: true        # Enable automatic refresh (default: true)
+    intervalHours: 20    # Scheduled refresh interval (default: 20)
+    onError: true        # Refresh on 401 errors (default: true)
+```
 
-**Workarounds** (all require browser to be running):
-1. **Manual re-extraction**: Run `npm run extract-tokens` when tokens expire (~5 seconds)
-2. **Browser-assisted refresh**: Use Playwright to trigger navigation, forcing Proton's client to refresh, then re-extract
-3. **Intercept during login**: Capture refresh token from API response during active login (only works at login time)
+### How It Works
 
-For automated/production use cases, use **SRP authentication** which has full automatic refresh support.
+All auth methods store a `refreshToken` and use Proton's `/auth/refresh` endpoint to get new access tokens without re-authentication. This happens:
+- On a schedule (every `intervalHours`)
+- On 401 errors (if `onError: true`)
 
-### Adding Refresh to rclone Method
-Moderate complexity - we could detect 401 errors and shell out to `rclone lsd remote:` to trigger refresh, then reload config.
+For browser auth, the `REFRESH-{uid}` cookie is extracted during initial token extraction. This cookie contains the refresh token in JSON format, allowing subsequent token refresh without needing the browser.
+
+### Manual Refresh
+
+You can manually trigger a refresh via:
+- **Chat command**: `/refreshtokens`
+- **API**: `POST /v1/auth/refresh`
+- **Programmatic**: `authManager.refreshNow()`
+
+### Technical Details
+
+The refresh endpoint returns new tokens via `Set-Cookie` headers (not in the JSON body):
+- `AUTH-{uid}` cookie contains the new access token
+- `REFRESH-{uid}` cookie contains the new refresh token (JSON-encoded)
+
+lumo-bridge parses these cookies and updates the token cache file.
 
 ### Would Cached Keys Still Work After Refresh?
 Yes - the cached userKeys and masterKeys remain valid after token refresh because:
@@ -335,3 +351,49 @@ So after a token refresh:
 - Cached masterKeys ✓ (still valid - encrypted with same PGP keys)
 
 The only scenario where cached keys become invalid is if you change your Proton password - that would regenerate the keyPassword and potentially re-encrypt your private keys.
+
+---
+
+## Logout
+
+Proper logout involves two steps:
+1. **Revoke session on Proton servers**: `DELETE /core/v4/auth`
+2. **Delete local token cache**: Remove `sessions/auth-tokens.json`
+
+### How to Logout
+
+**CLI**: Use the `/logout` command
+```
+/logout
+```
+
+**API**: `POST /v1/auth/logout`
+```bash
+curl -X POST http://localhost:3003/v1/auth/logout \
+  -H "Authorization: Bearer your-api-key"
+```
+
+**Programmatic**:
+```typescript
+import { logout } from './auth/index.js';
+
+await logout({
+  api: authProvider.createApi(),
+  tokenCachePath: 'sessions/auth-tokens.json',
+  revokeRemote: true,  // Call Proton's revoke API
+  deleteLocal: true,   // Delete token file
+});
+```
+
+### What Happens on Logout
+
+1. The session is revoked on Proton's servers (access token becomes invalid)
+2. The local token file is deleted
+3. Server needs to be restarted (or tokens need to be re-extracted)
+
+### Just Deleting the Token File
+
+If you just delete `sessions/auth-tokens.json` without calling the revoke API:
+- The access token remains valid on Proton's side until it expires (~24h)
+- Server will crash when trying to load tokens
+- This is less secure but simpler for local development
