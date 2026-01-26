@@ -10,8 +10,7 @@ import { logger } from './logger.js';
 import { resolveProjectPath } from './paths.js';
 import { LumoClient } from '../lumo-client/index.js';
 import { createAuthProvider, AuthManager, type AuthProvider, type ProtonApi } from '../auth/index.js';
-import { getConversationStore, type ConversationStore } from '../persistence/conversation-store.js';
-import { getSyncService, getKeyManager, getAutoSyncService } from '../persistence/index.js';
+import { getConversationStore, type ConversationStore, initializePersistence } from '../persistence/index.js';
 import type { AppContext } from './types.js';
 
 export class Application implements AppContext {
@@ -68,87 +67,13 @@ export class Application implements AppContext {
    */
   private async initializeSync(): Promise<void> {
     const persistenceConfig = getPersistenceConfig();
-    if (!persistenceConfig?.enabled) {
-      logger.info('Persistence is disabled, skipping sync initialization');
-      return;
-    }
-
-    if (!this.authProvider.supportsPersistence()) {
-      logger.warn(
-        { method: this.authProvider.method },
-        'Persistence requires browser auth (SRP/rclone tokens lack lumo scope for spaces API)'
-      );
-      return;
-    }
-
-    const keyPassword = this.authProvider.getKeyPassword();
-    if (!keyPassword) {
-      logger.info({ method: this.authProvider.method }, 'No keyPassword available - sync will not be initialized');
-      return;
-    }
-
-    try {
-      // Get cached keys from browser provider if available
-      const cachedUserKeys = this.authProvider.getCachedUserKeys?.();
-      const cachedMasterKeys = this.authProvider.getCachedMasterKeys?.();
-
-      logger.info({
-        method: this.authProvider.method,
-        hasCachedUserKeys: !!cachedUserKeys,
-        hasCachedMasterKeys: !!cachedMasterKeys,
-      }, 'Initializing KeyManager with keyPassword...');
-
-      // Initialize KeyManager
-      const keyManager = getKeyManager({
-        protonApi: this.protonApi,
-        cachedUserKeys,
-        cachedMasterKeys,
-      });
-
-      await keyManager.initialize(keyPassword);
-
-      // Initialize SyncService
-      const syncService = getSyncService({
-        protonApi: this.protonApi,
-        uid: this.uid,
-        keyManager,
-        defaultSpaceName: persistenceConfig.defaultSpaceName,
-        spaceId: persistenceConfig.spaceId,
-        saveSystemMessages: persistenceConfig.saveSystemMessages,
-      });
-
-      this.syncInitialized = true;
-
-      // Eagerly fetch/create space
-      try {
-        await syncService.ensureSpace();
-        logger.info({ method: this.authProvider.method }, 'Sync service initialized successfully');
-      } catch (spaceError) {
-        const msg = spaceError instanceof Error ? spaceError.message : String(spaceError);
-        logger.warn({ error: msg }, 'ensureSpace failed, but sync service is still available for commands');
-      }
-
-      // Initialize auto-sync if enabled
-      const autoSyncConfig = persistenceConfig.autoSync;
-      if (autoSyncConfig?.enabled) {
-        const autoSync = getAutoSyncService(syncService, {
-          enabled: true,
-          debounceMs: autoSyncConfig.debounceMs,
-          minIntervalMs: autoSyncConfig.minIntervalMs,
-          maxDelayMs: autoSyncConfig.maxDelayMs,
-        });
-
-        // Connect to conversation store
-        const store = getConversationStore();
-        store.setOnDirtyCallback(() => autoSync.notifyDirty());
-
-        logger.info('Auto-sync enabled and connected to conversation store');
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      logger.error({ errorMessage, errorStack }, 'Failed to initialize sync service');
-    }
+    const result = await initializePersistence({
+      protonApi: this.protonApi,
+      uid: this.uid,
+      authProvider: this.authProvider,
+      persistenceConfig,
+    });
+    this.syncInitialized = result.initialized;
   }
 
   // AppContext implementation
