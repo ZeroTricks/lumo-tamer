@@ -18,7 +18,8 @@ make dev-down     # Stop
 ```bash
 npm install
 cp config.example.yaml config.yaml  # Edit with your config
-npm run dev
+npm run dev:server  # Start API server with hot reload
+npm run dev:cli     # Start CLI with hot reload
 ```
 
 ### First Time Setup
@@ -157,6 +158,32 @@ vim config.yaml  # Auto-reloads
 - `open-webui` - Optional test UI (port 8080)
 
 Start specific services: `docker compose up app-dev browser-dev`
+
+## Upstream Sync
+
+The `src/proton/` directory contains adapted code from Proton's WebClients repository. To check for upstream changes:
+
+```bash
+npm run sync-upstream
+
+# With a visual diff tool (e.g., kompare, meld, kdiff3):
+DIFF_TOOL=kompare npm run sync-upstream
+```
+
+**Features:**
+- Fetches files directly from GitHub (no local clone needed)
+- Compares tracked commit vs latest upstream
+- Auto-detects appVersion changes from upstream `package.json`
+
+**Menu options:**
+1. View summary of changes
+2. Open file in diff tool
+3. Update appVersion in config.yaml
+4. Update UPSTREAM.md with latest commit
+5. Copy upstream file for manual review
+6. Show upstream commit history
+
+See [src/proton/UPSTREAM.md](../src/proton/UPSTREAM.md) for file mappings and adaptation notes.
 
 ## Resources
 

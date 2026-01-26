@@ -1,13 +1,15 @@
-import { BrowserManager } from '../browser/manager.js';
-import { RequestQueue } from '../queue/manager.js';
-import { ChatboxInteractor } from '../browser/chatbox.js';
-import { Page } from 'playwright';
+import { RequestQueue } from './queue.js';
+import { LumoClient } from '../lumo-client/index.js';
+import type { ConversationStore } from '../conversations/index.js';
+import type { AuthManager } from '../auth/index.js';
 
 export interface EndpointDependencies {
-  browserManager: BrowserManager;
   queue: RequestQueue;
-  getChatbox: () => Promise<ChatboxInteractor>;
-  getPage: () => Promise<Page>;
+  lumoClient: LumoClient;
+  conversationStore?: ConversationStore;
+  syncInitialized?: boolean;
+  authManager?: AuthManager;
+  tokenCachePath?: string;
 }
 
 // Chat Completions API types
@@ -16,12 +18,40 @@ export interface ChatMessage {
   content: string;
 }
 
+// OpenAI tool definition
+export interface OpenAITool {
+  type: 'function';
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
+}
+
+// Tool call in response
+export interface OpenAIToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
 export interface OpenAIChatRequest {
   model: string;
   messages: ChatMessage[];
   stream?: boolean;
   temperature?: number;
   max_tokens?: number;
+  tools?: OpenAITool[];
+  // Custom extension for conversation persistence
+  conversation_id?: string;
+}
+
+// Extended chat message with optional tool calls
+export interface ChatMessageWithTools extends ChatMessage {
+  tool_calls?: OpenAIToolCall[];
 }
 
 export interface OpenAIChatResponse {
@@ -31,7 +61,7 @@ export interface OpenAIChatResponse {
   model: string;
   choices: Array<{
     index: number;
-    message: ChatMessage;
+    message: ChatMessageWithTools;
     finish_reason: string;
   }>;
   usage?: {
@@ -41,6 +71,24 @@ export interface OpenAIChatResponse {
   };
 }
 
+// Streaming tool call delta (used in OpenAI streaming format)
+export interface StreamingToolCallDelta {
+  index: number;
+  id?: string;
+  type?: 'function';
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+}
+
+// Delta in streaming chunks - can have content OR tool_calls
+export interface StreamingDelta {
+  role?: 'assistant';
+  content?: string;
+  tool_calls?: StreamingToolCallDelta[];
+}
+
 export interface OpenAIStreamChunk {
   id: string;
   object: 'chat.completion.chunk';
@@ -48,7 +96,7 @@ export interface OpenAIStreamChunk {
   model: string;
   choices: Array<{
     index: number;
-    delta: Partial<ChatMessage>;
+    delta: StreamingDelta;
     finish_reason: string | null;
   }>;
 }
@@ -74,6 +122,11 @@ export interface OpenAIResponseRequest {
   store?: boolean;
   metadata?: Record<string, string>;
   tools?: any[];
+  // Continuation from previous response (stateless mode)
+  previous_response_id?: string;
+  // Conversation identifier (per OpenAI spec: string ID or object)
+  // Cannot be used with previous_response_id
+  conversation?: string | { id: string };
 }
 
 // Output item types for OpenAI Response

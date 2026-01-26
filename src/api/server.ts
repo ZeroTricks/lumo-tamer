@@ -1,70 +1,64 @@
 import express from 'express';
-import { BrowserManager } from '../browser/manager.js';
-import { ChatboxInteractor } from '../browser/chatbox.js';
-import { RequestQueue } from '../queue/manager.js';
-import { serverConfig } from '../config.js';
-import { logger } from '../logger.js';
+import { getServerConfig, authConfig } from '../app/config.js';
+import { resolveProjectPath } from '../app/paths.js';
+import { logger } from '../app/logger.js';
 import { setupAuthMiddleware, setupLoggingMiddleware } from './middleware.js';
 import { createHealthRouter } from './routes/health.js';
 import { createModelsRouter } from './routes/models.js';
 import { createChatCompletionsRouter } from './routes/chat-completions.js';
 import { createResponsesRouter } from './routes/responses/index.js';
+import { createAuthRouter } from './routes/auth.js';
 import { EndpointDependencies } from './types.js';
+import { RequestQueue } from './queue.js';
+import type { AppContext } from '../app/index.js';
 
 export class APIServer {
-  private app: express.Application;
-  private browserManager: BrowserManager;
-  private chatbox: ChatboxInteractor | null = null;
-  private queue: RequestQueue;
+  private expressApp: express.Application;
+  private serverConfig = getServerConfig();
+  private queue = new RequestQueue(1); // Process one request at a time
 
-  constructor(browserManager: BrowserManager) {
-    this.app = express();
-    this.browserManager = browserManager;
-    this.queue = new RequestQueue(1); // Process one message at a time
-
+  constructor(private app: AppContext) {
+    this.expressApp = express();
     this.setupMiddleware();
     this.setupRoutes();
   }
 
   private setupMiddleware(): void {
-    this.app.use(express.json());
-    this.app.use(setupAuthMiddleware(serverConfig.apiKey));
-    this.app.use(setupLoggingMiddleware());
+    this.expressApp.use(express.json());
+    this.expressApp.use(setupAuthMiddleware(this.serverConfig.apiKey));
+    this.expressApp.use(setupLoggingMiddleware());
   }
 
   private setupRoutes(): void {
     const deps = this.getDependencies();
 
-    this.app.use(createHealthRouter(deps));
-    this.app.use(createModelsRouter());
-    this.app.use(createChatCompletionsRouter(deps));
-    this.app.use(createResponsesRouter(deps));
+    this.expressApp.use(createHealthRouter(deps));
+    this.expressApp.use(createModelsRouter());
+    this.expressApp.use(createChatCompletionsRouter(deps));
+    this.expressApp.use(createResponsesRouter(deps));
+    this.expressApp.use(createAuthRouter(deps));
   }
 
   private getDependencies(): EndpointDependencies {
-    return {
-      browserManager: this.browserManager,
-      queue: this.queue,
-      getChatbox: () => this.getChatbox(),
-      getPage: () => this.browserManager.getPage(),
-    };
-  }
+    const tokenCachePath = resolveProjectPath(authConfig.tokenPath);
 
-  private async getChatbox(): Promise<ChatboxInteractor> {
-    if (!this.chatbox) {
-      const page = await this.browserManager.getPage();
-      this.chatbox = new ChatboxInteractor(page, this.browserManager);
-    }
-    return this.chatbox;
+    return {
+      queue: this.queue,
+      lumoClient: this.app.getLumoClient(),
+      conversationStore: this.app.getConversationStore(),
+      syncInitialized: this.app.isSyncInitialized(),
+      authManager: this.app.getAuthManager(),
+      tokenCachePath,
+    };
   }
 
   async start(): Promise<void> {
     return new Promise((resolve) => {
-      this.app.listen(serverConfig.port, () => {
+      this.expressApp.listen(this.serverConfig.port, () => {
         logger.info('========================================');
-        logger.info('✓ Lumo Bridge is ready!');
-        logger.info(`  base_url: http://localhost:${serverConfig.port}/v1`);
-        logger.info(`  api_key:  ${serverConfig.apiKey.substring(0,3)}...`);
+        logger.info('Lumo Bridge is ready!');
+        logger.info(`  base_url: http://localhost:${this.serverConfig.port}/v1`);
+        logger.info(`  api_key:  ${this.serverConfig.apiKey.substring(0, 3)}...`);
         logger.info('========================================\n');
         resolve();
       });
