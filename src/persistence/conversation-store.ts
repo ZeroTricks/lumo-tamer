@@ -212,6 +212,40 @@ export class ConversationStore {
     }
 
     /**
+     * Append a single user message (CLI mode - no deduplication needed)
+     */
+    appendUserMessage(id: ConversationId, content: string): Message {
+        const state = this.getOrCreate(id);
+        const now = Date.now();
+
+        const parentId = state.messages.length > 0
+            ? state.messages[state.messages.length - 1].id
+            : undefined;
+
+        const message: Message = {
+            id: randomUUID(),
+            conversationId: id,
+            createdAt: now,
+            role: 'user',
+            parentId,
+            status: 'completed',
+            content,
+        };
+
+        state.messages.push(message);
+        this.markDirty(state);
+        state.metadata.updatedAt = now;
+
+        logger.debug({
+            conversationId: id,
+            messageId: message.id,
+            contentLength: content.length,
+        }, 'Appended user message');
+
+        return message;
+    }
+
+    /**
      * Mark conversation as generating (for streaming)
      */
     setGenerating(id: ConversationId): void {
