@@ -10,7 +10,15 @@ import { logger } from '../app/logger.js';
 const originalConsole = { ...console };
 
 export function installConsoleShim(): void {
-    console.log = (...args) => logger.debug({ args }, 'console.log');
+    console.log = (...args) => {
+        const msg = args[0]?.toString() ?? '';
+        // Verbose API logs from proton-upstream/remote/api.ts go to trace
+        if (msg.startsWith('lumo api:') || msg.startsWith('listSpaces:') || msg.startsWith('getAsset:')) {
+            logger.trace({ args }, 'console.log');
+        } else {
+            logger.debug({ args }, 'console.log');
+        }
+    };
     console.debug = (...args) => logger.debug({ args }, 'console.debug');
     console.info = (...args) => logger.info({ args }, 'console.info');
     console.warn = (...args) => logger.warn({ args }, 'console.warn');
