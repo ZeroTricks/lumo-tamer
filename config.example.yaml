@@ -7,7 +7,7 @@ proton:
 # Authentication configuration
 # - browser: token extraction via browser (recommended)
 # - srp: direct SRP auth via go-proton-api
-# - rclone: read auth details from rclone config file
+# - rclone: paste rclone config via `npm run extract-rclone`
 # See docs/authentication.md
 auth:
   method: "browser"
@@ -27,10 +27,6 @@ auth:
     # Headers to help avoid CAPTCHA - see docs/authentication.md
     appVersion: "macos-drive@1.0.0-alpha.1+rclone"
     userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-  # Rclone-specific config (only used when method: rclone)
-  rclone:
-    configPath: "./rclone.conf"
-    configSection: "proton"
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
 log:

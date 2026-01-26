@@ -64,11 +64,6 @@ const authSrpConfigSchema = z.object({
   userAgent: z.string().optional(),
 }).optional();
 
-const authRcloneConfigSchema = z.object({
-  configPath: z.string().default('~/.config/rclone/rclone.conf'),
-  configSection: z.string().optional(),
-}).optional();
-
 const authConfigSchema = z.object({
   method: z.enum(['srp', 'browser', 'rclone']).default('browser'),
   tokenPath: z.string().default('sessions/auth-tokens.json'),
@@ -76,7 +71,6 @@ const authConfigSchema = z.object({
   // Method-specific config
   browser: authBrowserConfigSchema,
   srp: authSrpConfigSchema,
-  rclone: authRcloneConfigSchema,
 });
 
 // Mode-overridable config keys
@@ -185,7 +179,6 @@ export type AutoSyncConfig = z.infer<typeof autoSyncConfigSchema>;
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 export type AuthBrowserConfig = z.infer<typeof authBrowserConfigSchema>;
 export type AuthSrpConfig = z.infer<typeof authSrpConfigSchema>;
-export type AuthRcloneConfig = z.infer<typeof authRcloneConfigSchema>;
 export type AuthAutoRefreshConfig = z.infer<typeof authAutoRefreshConfigSchema>;
 export type CliConfig = z.infer<typeof cliConfigSchema>;
 export type LogConfig = z.infer<typeof logConfigSchema>;
