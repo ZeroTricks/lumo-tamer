@@ -12,7 +12,7 @@ import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../too
 import { StreamingToolDetector } from '../streaming-tool-detector.js';
 import type { Turn } from '../../lumo-client/index.js';
 import type { CommandContext } from '../../app/commands.js';
-import type { ConversationId } from '../../persistence/index.js';
+import type { ConversationId } from '../../conversations/index.js';
 import { postProcessTitle } from '../../proton-shims/lumo-api-client-utils.js';
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session

@@ -7,7 +7,7 @@ import { createEmptyResponse } from './response-factory.js';
 import { convertResponseInputToTurns } from '../../message-converter.js';
 import { getConversationsConfig } from '../../../app/config.js';
 import type { Turn } from '../../../lumo-client/index.js';
-import type { ConversationId } from '../../../persistence/index.js';
+import type { ConversationId } from '../../../conversations/index.js';
 
 const conversationsConfig = getConversationsConfig();
 
@@ -90,18 +90,18 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
           .filter((item): item is FunctionCallOutput =>
             typeof item === 'object' && 'type' in item && item.type === 'function_call_output'
           )
-          // Only process outputs for call_ids we created in THIS conversation
-          .filter((item) => deps.conversationStore?.hasCreatedCallId(conversationId, item.call_id) ?? false);
+          // Only process outputs for call_ids we generated in THIS conversation
+          .filter((item) => deps.conversationStore?.hasGeneratedCallId(conversationId, item.call_id) ?? false);
 
         // Get the last function output if any
         const lastFunctionOutput = functionOutputs[functionOutputs.length - 1];
 
         if (lastFunctionOutput) {
           // Check if this call_id is different from last processed (per-conversation)
-          const isDuplicate = deps.conversationStore?.isDuplicateFunctionOutput(conversationId, lastFunctionOutput.call_id) ?? false;
+          const isDuplicate = deps.conversationStore?.isDuplicateFunctionCallId(conversationId, lastFunctionOutput.call_id) ?? false;
 
           if (!isDuplicate) {
-            deps.conversationStore?.setLastProcessedFunctionOutput(conversationId, lastFunctionOutput.call_id);
+            deps.conversationStore?.setLastFunctionCallId(conversationId, lastFunctionOutput.call_id);
 
             logger.debug(`[Server] Processing function_call_output for call_id: ${lastFunctionOutput.call_id}`);
 
@@ -144,8 +144,8 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
         return res.json(createEmptyResponse(request));
       }
 
-      // Update last processed message (per-conversation)
-      deps.conversationStore?.setLastProcessedUserMessage(conversationId, inputText);
+      // Update last user message (per-conversation)
+      deps.conversationStore?.setLastUserMessage(conversationId, inputText);
 
       // Persist all messages from input to conversation store
       // The deduplication logic in appendMessages will filter out already-stored messages

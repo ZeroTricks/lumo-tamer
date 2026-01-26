@@ -9,7 +9,7 @@
 
 import { Router, Request, Response } from 'express';
 import { EndpointDependencies } from '../types.js';
-import { getAutoSyncService } from '../../persistence/index.js';
+import { getAutoSyncService } from '../../conversations/index.js';
 import { logger } from '../../app/logger.js';
 
 export function createAuthRouter(deps: EndpointDependencies): Router {

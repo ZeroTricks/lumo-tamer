@@ -4,7 +4,7 @@
 
 import type { LumoClient } from '../lumo-client/index.js';
 import type { AuthProvider, AuthManager } from '../auth/index.js';
-import type { ConversationStore } from '../persistence/conversation-store.js';
+import type { ConversationStore } from '../conversations/store.js';
 
 /**
  * Application context exposed to CLI and API

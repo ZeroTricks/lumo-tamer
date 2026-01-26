@@ -16,7 +16,7 @@ import type { StoredTokens } from '../types.js';
 import { authConfig, protonConfig, getConversationsConfig } from '../../app/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { logger } from '../../app/logger.js';
-import { decryptPersistedSession } from '../../persistence/session-keys.js';
+import { decryptPersistedSession } from '../../conversations/session-keys.js';
 
 export interface ExtractionOptions {
     /** CDP endpoint to connect to browser */

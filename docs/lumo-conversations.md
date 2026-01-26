@@ -212,33 +212,33 @@ When `sync.autoSync: true`:
 ## Module Structure
 
 ```
-src/persistence/
-├── conversation-store.ts    # In-memory store with LRU
-├── deduplication.ts         # Message hash deduplication
-├── types.ts                 # Core types
+src/conversations/
+├── store.ts                # In-memory store with LRU
+├── deduplication.ts        # Message hash deduplication
+├── types.ts                # Core types
 ├── encryption/
-│   └── key-manager.ts       # Master/space key management
+│   └── key-manager.ts      # Master/space key management
 └── sync/
-    ├── sync-service.ts      # Manual sync to server
-    ├── auto-sync.ts         # Automatic sync scheduling
-    └── lumo-api-adapter.ts  # REST API client
+    ├── sync-service.ts     # Manual sync to server
+    ├── auto-sync.ts        # Automatic sync scheduling
+    └── lumo-api.ts         # REST API client
 ```
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| [src/persistence/conversation-store.ts](../src/persistence/conversation-store.ts) | In-memory store |
-| [src/persistence/sync/sync-service.ts](../src/persistence/sync/sync-service.ts) | Server sync |
-| [src/persistence/sync/auto-sync.ts](../src/persistence/sync/auto-sync.ts) | Auto-sync scheduling |
-| [src/persistence/encryption/key-manager.ts](../src/persistence/encryption/key-manager.ts) | Key management |
+| [src/conversations/conversation-store.ts](../src/conversations/conversation-store.ts) | In-memory store |
+| [src/conversations/sync/sync-service.ts](../src/conversations/sync/sync-service.ts) | Server sync |
+| [src/conversations/sync/auto-sync.ts](../src/conversations/sync/auto-sync.ts) | Auto-sync scheduling |
+| [src/conversations/encryption/key-manager.ts](../src/conversations/encryption/key-manager.ts) | Key management |
 | [src/app/commands.ts](../src/app/commands.ts) | `/save`, `/title` commands |
 | [src/proton-shims/lumo-api-client-utils.ts](../src/proton-shims/lumo-api-client-utils.ts) | `postProcessTitle()` |
 
 ## Verification
 
 ```bash
-# Start with persistence + auto-sync
+# Start with sync + auto-sync
 npm run dev
 
 # Send messages

@@ -10,7 +10,7 @@ import { logger } from './logger.js';
 import { resolveProjectPath } from './paths.js';
 import { LumoClient } from '../lumo-client/index.js';
 import { createAuthProvider, AuthManager, type AuthProvider, type ProtonApi } from '../auth/index.js';
-import { getConversationStore, type ConversationStore, initializePersistence } from '../persistence/index.js';
+import { getConversationStore, type ConversationStore, initializeSync } from '../conversations/index.js';
 import type { AppContext } from './types.js';
 
 export class Application implements AppContext {
@@ -71,7 +71,7 @@ export class Application implements AppContext {
    */
   private async initializeSync(): Promise<void> {
     const conversationsConfig = getConversationsConfig();
-    const result = await initializePersistence({
+    const result = await initializeSync({
       protonApi: this.protonApi,
       uid: this.uid,
       authProvider: this.authProvider,
