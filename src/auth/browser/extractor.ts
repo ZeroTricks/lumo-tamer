@@ -12,7 +12,7 @@ import { dirname } from 'path';
 import { promises as dns, ADDRCONFIG } from 'dns';
 import type { PersistedSessionData } from '../../lumo-client/types.js';
 import type { StoredTokens } from '../types.js';
-import { browserConfig, protonConfig, getPersistenceConfig } from '../../app/config.js';
+import { authConfig, protonConfig, getPersistenceConfig } from '../../app/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { logger } from '../../app/logger.js';
 import { decryptPersistedSession } from '../../persistence/session-keys.js';
@@ -689,18 +689,15 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
  */
 export async function extractAndSaveTokens(outputPath: string): Promise<ExtractionResult> {
     // Validate config
-    if (!browserConfig?.cdpEndpoint) {
-        throw new Error('browser.cdpEndpoint is required in config.yaml for token extraction');
-    }
-    if (!browserConfig?.url) {
-        throw new Error('browser.url is required in config.yaml for token extraction');
+    if (!authConfig.browser?.cdpEndpoint) {
+        throw new Error('auth.browser.cdpEndpoint is required in config.yaml for token extraction');
     }
 
     const persistenceEnabled = getPersistenceConfig()?.enabled ?? false;
 
     const result = await extractBrowserTokens({
-        cdpEndpoint: browserConfig.cdpEndpoint,
-        targetUrl: browserConfig.url,
+        cdpEndpoint: authConfig.browser.cdpEndpoint,
+        targetUrl: PROTON_URLS.LUMO_BASE,
         fetchPersistenceKeys: persistenceEnabled,
         appVersion: protonConfig.appVersion,
     });

@@ -20,8 +20,11 @@ export class SRPAuthProvider extends BaseAuthProvider {
     private binaryPath: string;
 
     constructor() {
-        super(resolveProjectPath(authConfig.tokenCachePath));
-        this.binaryPath = resolveProjectPath(authConfig.binaryPath);
+        super(resolveProjectPath(authConfig.tokenPath));
+        if (!authConfig.srp?.binaryPath) {
+            throw new Error('auth.srp.binaryPath is required for SRP authentication');
+        }
+        this.binaryPath = resolveProjectPath(authConfig.srp.binaryPath);
     }
 
     async initialize(): Promise<void> {

@@ -40,7 +40,7 @@ export class APIServer {
   }
 
   private getDependencies(): EndpointDependencies {
-    const tokenCachePath = resolveProjectPath(authConfig.tokenCachePath);
+    const tokenCachePath = resolveProjectPath(authConfig.tokenPath);
 
     return {
       queue: this.queue,

@@ -5,25 +5,32 @@ proton:
   appVersion: "web-lumo@5.0.0"
 
 # Authentication configuration
+# - browser: token extraction via browser (recommended)
 # - srp: direct SRP auth via go-proton-api
-# - browser: token extraction via browser
 # - rclone: read auth details from rclone config file
 # See docs/authentication.md
 auth:
   method: "browser"
-  binaryPath: "./bin/proton-auth"
-  tokenCachePath: "sessions/auth-tokens.json"
-  rclonePath: "./rclone.conf"
-  rcloneRemote: "proton"
-  # SRP-specific headers (only used when method: srp)
-  # Different values may help avoid CAPTCHA - see docs/authentication.md
-  srpAppVersion: "macos-drive@1.0.0-alpha.1+rclone"
-  srpUserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  tokenPath: "sessions/auth-tokens.json"
   # Auto-refresh: automatically refresh tokens before they expire
   autoRefresh:
     enabled: true             # Enable automatic token refresh (default: true)
     intervalHours: 20         # Refresh interval in hours (1-24, default: 20)
     onError: true             # Refresh tokens on 401 errors (default: true)
+  # Browser-specific config (only used when method: browser)
+  browser:
+    # Chrome DevTools Protocol endpoint for remote browser
+    cdpEndpoint: "http://browser-dev:9223"
+  # SRP-specific config (only used when method: srp)
+  srp:
+    binaryPath: "./bin/proton-auth"
+    # Headers to help avoid CAPTCHA - see docs/authentication.md
+    appVersion: "macos-drive@1.0.0-alpha.1+rclone"
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  # Rclone-specific config (only used when method: rclone)
+  rclone:
+    configPath: "./rclone.conf"
+    configSection: "proton"
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
 log:
@@ -91,11 +98,3 @@ server:
 #       You can execute bash commands on the user's machine.
 #       When you provide a ```bash code block, the user will be prompted to execute it.
 #       Output will be returned to you. Keep commands simple and safe.
-
-# Only needed if auth.method is 'browser'
-browser:
-  # Lumo chatbox URL
-  url: "https://lumo.proton.me"
-
-  # Chrome DevTools Protocol endpoint for remote browser
-  cdpEndpoint: "http://browser-dev:9223"
