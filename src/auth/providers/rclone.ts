@@ -5,34 +5,21 @@
  * Supports automatic token refresh since rclone extraction includes refreshToken.
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { logger } from '../../app/logger.js';
 import { authConfig } from '../../app/config.js';
 import { resolveProjectPath } from '../../app/paths.js';
-import { createProtonApi } from '../api-factory.js';
-import { refreshWithRefreshToken } from '../token-refresh.js';
-import type { AuthProvider, AuthProviderStatus, StoredTokens, ProtonApi } from '../types.js';
+import { BaseAuthProvider } from './base.js';
+import type { AuthProviderStatus } from '../types.js';
 
-export class RcloneAuthProvider implements AuthProvider {
+export class RcloneAuthProvider extends BaseAuthProvider {
     readonly method = 'rclone' as const;
 
-    private tokens: StoredTokens | null = null;
-    private tokenCachePath: string;
-
     constructor() {
-        this.tokenCachePath = resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json');
+        super(resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json'));
     }
 
     async initialize(): Promise<void> {
-        if (!existsSync(this.tokenCachePath)) {
-            throw new Error(
-                `Token file not found: ${this.tokenCachePath}\n` +
-                'Run: npm run extract-rclone'
-            );
-        }
-
-        const data = readFileSync(this.tokenCachePath, 'utf-8');
-        this.tokens = JSON.parse(data) as StoredTokens;
+        this.tokens = this.loadTokensFromFile();
 
         // Validate we have rclone tokens
         if (this.tokens.method !== 'rclone') {
@@ -41,6 +28,8 @@ export class RcloneAuthProvider implements AuthProvider {
                 'Run: npm run extract-rclone'
             );
         }
+
+        this.validateTokens();
 
         logger.info({
             uid: this.tokens.uid.slice(0, 12) + '...',
@@ -51,28 +40,6 @@ export class RcloneAuthProvider implements AuthProvider {
         if (!this.tokens.keyPassword) {
             logger.warn('keyPassword missing from rclone tokens - conversation persistence disabled');
         }
-    }
-
-    getUid(): string {
-        if (!this.tokens) {
-            throw new Error('Not authenticated - no UID available');
-        }
-        return this.tokens.uid;
-    }
-
-    getKeyPassword(): string | undefined {
-        return this.tokens?.keyPassword;
-    }
-
-    createApi(): ProtonApi {
-        if (!this.tokens) {
-            throw new Error('Not authenticated');
-        }
-
-        return createProtonApi({
-            uid: this.tokens.uid,
-            accessToken: this.tokens.accessToken,
-        });
     }
 
     isValid(): boolean {
@@ -87,39 +54,6 @@ export class RcloneAuthProvider implements AuthProvider {
         const expiresAt = new Date(this.tokens.expiresAt);
         const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
         return expiresAt <= fiveMinutesFromNow;
-    }
-
-    /**
-     * Refresh tokens using Proton's /auth/refresh endpoint
-     *
-     * Rclone extraction includes refreshToken, so we can refresh
-     * without needing rclone or browser.
-     */
-    async refresh(): Promise<void> {
-        if (!this.tokens?.refreshToken) {
-            throw new Error('No refresh token available - re-run: npm run extract-rclone');
-        }
-
-        logger.info('Refreshing rclone tokens...');
-        const refreshed = await refreshWithRefreshToken(this.tokens);
-
-        // Update tokens, preserving keyPassword and other metadata
-        this.tokens = {
-            ...this.tokens,
-            ...refreshed,
-        };
-
-        this.saveTokens();
-        logger.info('Rclone token refresh successful');
-    }
-
-    private saveTokens(): void {
-        if (!this.tokens) return;
-        writeFileSync(
-            this.tokenCachePath,
-            JSON.stringify(this.tokens, null, 2),
-            { mode: 0o600 }
-        );
     }
 
     supportsPersistence(): boolean {

@@ -4,13 +4,12 @@
  * Handles:
  * - Scheduled token refresh (interval-based)
  * - On-demand refresh (on 401 errors)
- * - Token refresh for all auth methods (SRP, rclone use /auth/refresh; browser re-extracts)
+ * - Token refresh for all auth methods (all use /auth/refresh endpoint)
  * - Logout with session revocation
  */
 
 import { logger } from '../app/logger.js';
 import { createProtonApi, type ProtonApiWithRefresh } from './api-factory.js';
-import { extractAndSaveTokens } from './browser/extractor.js';
 import { logout as performLogout } from './logout.js';
 import type { AuthProvider, ProtonApi } from './types.js';
 
@@ -75,8 +74,7 @@ export class AuthManager {
     /**
      * Start scheduled auto-refresh
      *
-     * For browser auth: re-runs extraction at interval
-     * For SRP/rclone: calls provider.refresh() at interval
+     * All auth methods call provider.refresh() at interval.
      */
     startAutoRefresh(): void {
         if (!this.autoRefreshConfig.enabled) {
@@ -118,8 +116,7 @@ export class AuthManager {
     /**
      * Refresh tokens immediately
      *
-     * - SRP/rclone: calls provider.refresh() (uses /auth/refresh endpoint)
-     * - Browser: re-runs extraction from browser session
+     * All auth methods now use provider.refresh() which calls /auth/refresh endpoint.
      */
     async refreshNow(): Promise<void> {
         if (this.isRefreshing) {
@@ -131,11 +128,7 @@ export class AuthManager {
         try {
             logger.info({ method: this.provider.method }, 'Refreshing tokens...');
 
-            if (this.provider.method === 'browser') {
-                // Browser auth: re-extract from browser
-                await this.refreshBrowserTokens();
-            } else if (this.provider.refresh) {
-                // SRP/rclone: use provider's refresh method
+            if (this.provider.refresh) {
                 await this.provider.refresh();
             } else {
                 throw new Error(`No refresh method available for ${this.provider.method}`);
@@ -172,45 +165,10 @@ export class AuthManager {
     }
 
     /**
-     * Refresh browser tokens by re-running extraction
-     */
-    private async refreshBrowserTokens(): Promise<void> {
-        logger.info('Re-extracting browser tokens...');
-
-        const result = await extractAndSaveTokens(this.tokenCachePath);
-
-        // Log any warnings from extraction
-        for (const warning of result.warnings) {
-            logger.warn(warning);
-        }
-
-        // Re-initialize the provider to pick up new tokens
-        await this.provider.initialize();
-
-        logger.info('Browser token re-extraction complete');
-    }
-
-    /**
      * Get current access token from provider
-     * (Accesses private tokens field - providers should expose this)
      */
     private getAccessToken(): string {
-        // All providers store tokens internally - we need to access via createApi
-        // For now, create a temporary API to get the token structure
-        // This is a workaround - ideally providers would expose getAccessToken()
-        const tempApi = this.provider.createApi();
-        // The API closure captures uid and accessToken, but we can't access them directly
-        // Instead, we rely on the fact that providers reload from cache
-
-        // Actually, we need a better approach. Let's just re-read from the provider's internal state
-        // by creating an API and extracting credentials from it.
-
-        // For now, use a simpler approach: trust that after refresh, the provider has valid tokens
-        // and createApi() will use them.
-
-        // Return placeholder - the actual implementation needs providers to expose this
-        // This will be fixed when we update the providers
-        return (this.provider as unknown as { tokens?: { accessToken: string } }).tokens?.accessToken ?? '';
+        return this.provider.getAccessToken();
     }
 
     /**

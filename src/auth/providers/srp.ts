@@ -5,25 +5,22 @@
  * Supports automatic token refresh.
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { logger } from '../../app/logger.js';
 import { authConfig, getPersistenceConfig } from '../../app/config.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { runProtonAuth } from '../go-proton-api/proton-auth-cli.js';
-import { createProtonApi } from '../api-factory.js';
 import { fetchKeys } from '../fetch-keys.js';
-import { refreshWithRefreshToken } from '../token-refresh.js';
-import type { AuthProvider, AuthProviderStatus, StoredTokens, ProtonApi, CachedUserKey, CachedMasterKey } from '../types.js';
+import { BaseAuthProvider } from './base.js';
+import type { AuthProviderStatus, StoredTokens } from '../types.js';
 
-export class SRPAuthProvider implements AuthProvider {
+export class SRPAuthProvider extends BaseAuthProvider {
     readonly method = 'srp' as const;
 
-    private tokens: StoredTokens | null = null;
-    private tokenCachePath: string;
     private binaryPath: string;
 
     constructor() {
-        this.tokenCachePath = resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json');
+        super(resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json'));
         this.binaryPath = resolveProjectPath(authConfig?.binaryPath ?? './bin/proton-auth');
     }
 
@@ -31,7 +28,7 @@ export class SRPAuthProvider implements AuthProvider {
         // Try to load cached tokens first
         if (existsSync(this.tokenCachePath)) {
             try {
-                const cached = this.loadCachedTokens();
+                const cached = this.loadCachedTokensSafe();
                 // Accept tokens without method field (created by Go binary) or with method: 'srp'
                 const isSrpTokens = cached && (!cached.method || cached.method === 'srp');
                 if (isSrpTokens && !this.isExpired(cached)) {
@@ -74,7 +71,7 @@ export class SRPAuthProvider implements AuthProvider {
             const keys = await fetchKeys(this.createApi());
             if (keys.userKeys) this.tokens.userKeys = keys.userKeys;
             if (keys.masterKeys) this.tokens.masterKeys = keys.masterKeys;
-            this.saveTokens();
+            this.saveTokensToFile();
             logger.info('Keys cached successfully');
         } catch (err) {
             logger.warn({ err }, 'Failed to fetch keys - persistence may not work');
@@ -88,7 +85,7 @@ export class SRPAuthProvider implements AuthProvider {
 
         // If output went to file, read it back
         if (!result.accessToken && existsSync(this.tokenCachePath)) {
-            this.tokens = this.loadCachedTokens();
+            this.tokens = this.loadCachedTokensSafe();
         } else {
             this.tokens = {
                 method: 'srp',
@@ -99,62 +96,14 @@ export class SRPAuthProvider implements AuthProvider {
                 expiresAt: result.expiresAt || new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
                 extractedAt: new Date().toISOString(),
             };
-            this.saveTokens();
+            this.saveTokensToFile();
         }
 
         logger.info('SRP authentication successful');
     }
 
-    async refresh(): Promise<void> {
-        if (!this.tokens?.refreshToken) {
-            throw new Error('No refresh token available');
-        }
-
-        logger.info('Refreshing SRP tokens...');
-        const refreshed = await refreshWithRefreshToken(this.tokens);
-
-        // Update tokens, preserving keyPassword and other metadata
-        this.tokens = {
-            ...this.tokens,
-            ...refreshed,
-        };
-
-        this.saveTokens();
-        logger.info('SRP token refresh successful');
-    }
-
-    getUid(): string {
-        if (!this.tokens) {
-            throw new Error('Not authenticated - no UID available');
-        }
-        return this.tokens.uid;
-    }
-
-    getKeyPassword(): string | undefined {
-        return this.tokens?.keyPassword;
-    }
-
-    getCachedUserKeys(): CachedUserKey[] | undefined {
-        return this.tokens?.userKeys;
-    }
-
-    getCachedMasterKeys(): CachedMasterKey[] | undefined {
-        return this.tokens?.masterKeys;
-    }
-
     supportsPersistence(): boolean {
         return false;  // SRP tokens lack lumo scope for spaces API
-    }
-
-    createApi(): ProtonApi {
-        if (!this.tokens) {
-            throw new Error('Not authenticated');
-        }
-
-        return createProtonApi({
-            uid: this.tokens.uid,
-            accessToken: this.tokens.accessToken,
-        });
     }
 
     isValid(): boolean {
@@ -217,22 +166,17 @@ export class SRPAuthProvider implements AuthProvider {
         return status;
     }
 
-    private loadCachedTokens(): StoredTokens | null {
+    // === SRP-specific helpers ===
+
+    /**
+     * Load cached tokens, returning null on error instead of throwing.
+     */
+    private loadCachedTokensSafe(): StoredTokens | null {
         try {
-            const data = readFileSync(this.tokenCachePath, 'utf-8');
-            return JSON.parse(data) as StoredTokens;
+            return this.loadTokensFromFile();
         } catch {
             return null;
         }
-    }
-
-    private saveTokens(): void {
-        if (!this.tokens) return;
-        writeFileSync(
-            this.tokenCachePath,
-            JSON.stringify(this.tokens, null, 2),
-            { mode: 0o600 }
-        );
     }
 
     private isExpired(tokens: StoredTokens): boolean {

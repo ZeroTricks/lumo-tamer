@@ -2,53 +2,33 @@
  * Browser Auth Provider
  *
  * Uses tokens extracted from browser session via Playwright.
- * No automatic refresh - user must re-run npm run extract-tokens.
+ * Supports token refresh via /auth/refresh if REFRESH cookie was extracted.
  */
 
-import { readFileSync, existsSync } from 'fs';
 import { logger } from '../../app/logger.js';
-import { authConfig } from '../../app/config.js';
+import { authConfig, protonConfig } from '../../app/config.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { decryptPersistedSession } from '../../persistence/session-keys.js';
-import { createProtonApi } from '../api-factory.js';
-import type {
-    AuthProvider,
-    AuthProviderStatus,
-    StoredTokens,
-    ProtonApi,
-    CachedUserKey,
-    CachedMasterKey,
-} from '../types.js';
+import { BaseAuthProvider } from './base.js';
+import type { AuthProviderStatus } from '../types.js';
 
-export class BrowserAuthProvider implements AuthProvider {
+interface RefreshResponse {
+    UID: string;
+    ExpiresIn?: number;
+}
+
+export class BrowserAuthProvider extends BaseAuthProvider {
     readonly method = 'browser' as const;
 
-    private tokens: StoredTokens | null = null;
-    private tokenCachePath: string;
     private keyPassword?: string;
 
     constructor() {
-        this.tokenCachePath = resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json');
+        super(resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json'));
     }
 
     async initialize(): Promise<void> {
-        if (!existsSync(this.tokenCachePath)) {
-            throw new Error(
-                `Token file not found: ${this.tokenCachePath}\n` +
-                'Run: npm run extract-tokens'
-            );
-        }
-
-        const data = readFileSync(this.tokenCachePath, 'utf-8');
-        this.tokens = JSON.parse(data) as StoredTokens;
-
-        // Validate we have required fields
-        if (!this.tokens.uid || !this.tokens.accessToken) {
-            throw new Error(
-                'Token file missing uid or accessToken.\n' +
-                'Run: npm run extract-tokens'
-            );
-        }
+        this.tokens = this.loadTokensFromFile();
+        this.validateTokens();
 
         const tokenAge = this.getTokenAgeHours();
         logger.info({
@@ -86,27 +66,9 @@ export class BrowserAuthProvider implements AuthProvider {
         }
     }
 
-    getUid(): string {
-        if (!this.tokens?.uid) {
-            throw new Error('Not authenticated');
-        }
-        return this.tokens.uid;
-    }
-
+    // Override to use extracted keyPassword instead of tokens.keyPassword
     getKeyPassword(): string | undefined {
         return this.keyPassword;
-    }
-
-    createApi(): ProtonApi {
-        if (!this.tokens?.uid || !this.tokens?.accessToken) {
-            throw new Error('Not authenticated');
-        }
-
-        return createProtonApi({
-            uid: this.tokens.uid,
-            accessToken: this.tokens.accessToken,
-            // No cookies needed - API works with uid + accessToken headers only
-        });
     }
 
     isValid(): boolean {
@@ -170,17 +132,118 @@ export class BrowserAuthProvider implements AuthProvider {
         return status;
     }
 
-    getCachedUserKeys(): CachedUserKey[] | undefined {
-        return this.tokens?.userKeys;
-    }
-
-    getCachedMasterKeys(): CachedMasterKey[] | undefined {
-        return this.tokens?.masterKeys;
-    }
-
     supportsPersistence(): boolean {
         return true;
     }
+
+    /**
+     * Browser-specific token refresh using cookie-based approach.
+     *
+     * Unlike SRP/rclone which use JSON body, browser auth must send the refresh
+     * token as a cookie and parse new tokens from Set-Cookie response headers.
+     */
+    async refresh(): Promise<void> {
+        if (!this.tokens?.refreshToken) {
+            throw new Error('No refresh token available');
+        }
+
+        const baseUrl = 'https://lumo.proton.me/api';
+        const clientId = 'WebLumo';
+
+        // Reconstruct the REFRESH cookie value as the browser would send it
+        const refreshCookieValue = encodeURIComponent(JSON.stringify({
+            ResponseType: 'token',
+            ClientID: clientId,
+            GrantType: 'refresh_token',
+            RefreshToken: this.tokens.refreshToken,
+            UID: this.tokens.uid,
+        }));
+        const refreshCookie = `REFRESH-${this.tokens.uid}=${refreshCookieValue}`;
+
+        logger.info({
+            uid: this.tokens.uid.slice(0, 8) + '...',
+            clientId,
+            baseUrl,
+        }, 'Refreshing browser tokens via /auth/refresh (cookie-based)');
+
+        const response = await fetch(`${baseUrl}/auth/refresh`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-pm-uid': this.tokens.uid,
+                'x-pm-appversion': protonConfig.appVersion,
+                'Cookie': refreshCookie,
+            },
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.text().catch(() => '');
+            logger.error(
+                { status: response.status, body: errorBody.slice(0, 200) },
+                'Browser token refresh failed'
+            );
+            throw new Error(`Token refresh failed: ${response.status}`);
+        }
+
+        // Parse tokens from Set-Cookie headers
+        const setCookieHeaders = response.headers.getSetCookie?.() || [];
+        logger.debug({ setCookieHeaders }, 'Refresh response cookies');
+
+        let newAccessToken: string | undefined;
+        let newRefreshToken: string | undefined;
+
+        for (const cookie of setCookieHeaders) {
+            // AUTH-{uid}=<accessToken>; ...
+            const authMatch = cookie.match(/^AUTH-[^=]+=([^;]+)/);
+            if (authMatch) {
+                newAccessToken = authMatch[1];
+            }
+
+            // REFRESH-{uid}=<url-encoded json>; ...
+            const refreshMatch = cookie.match(/^REFRESH-[^=]+=([^;]+)/);
+            if (refreshMatch) {
+                try {
+                    const decoded = JSON.parse(decodeURIComponent(refreshMatch[1]));
+                    newRefreshToken = decoded.RefreshToken;
+                } catch {
+                    logger.warn({ cookie: refreshMatch[1].slice(0, 50) }, 'Failed to parse REFRESH cookie');
+                }
+            }
+        }
+
+        // Also check JSON body for ExpiresIn
+        const data = await response.json() as RefreshResponse;
+
+        if (!newAccessToken) {
+            logger.error({
+                data,
+                setCookieCount: setCookieHeaders.length,
+            }, 'No access token in refresh response cookies');
+            throw new Error('No access token in refresh response');
+        }
+
+        const expiresIn = data.ExpiresIn || 12 * 60 * 60; // Default 12 hours
+
+        // Update tokens
+        this.tokens = {
+            ...this.tokens,
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken || this.tokens.refreshToken,
+            uid: data.UID || this.tokens.uid,
+            expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+            extractedAt: new Date().toISOString(), // Reset age on refresh
+        };
+
+        this.saveTokensToFile();
+
+        logger.info({
+            method: this.method,
+            uid: this.tokens.uid.slice(0, 8) + '...',
+            expiresIn: `${Math.round(expiresIn / 3600)}h`,
+        }, 'Browser token refresh successful');
+    }
+
+    // === Browser-specific helpers ===
 
     private getTokenAgeHours(): number {
         if (!this.tokens?.extractedAt) return 0;

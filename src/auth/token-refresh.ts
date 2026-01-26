@@ -3,6 +3,8 @@
  *
  * Both SRP and rclone have refresh tokens that can be used with Proton's
  * /auth/refresh endpoint to obtain new access tokens without re-authentication.
+ *
+ * Browser auth uses a different cookie-based approach (see BrowserAuthProvider.refresh()).
  */
 
 import { protonConfig } from '../app/config.js';
@@ -17,9 +19,10 @@ interface RefreshResponse {
 }
 
 /**
- * Refresh tokens using Proton's /auth/refresh endpoint
+ * Refresh tokens using Proton's /auth/refresh endpoint (JSON body approach).
  *
- * Works with both SRP and rclone auth methods since both store a refreshToken.
+ * Works with SRP and rclone auth methods since both store a refreshToken.
+ * Browser auth should NOT use this - it has its own cookie-based refresh.
  *
  * @param tokens - Current stored tokens (must include refreshToken)
  * @returns Partial token update with new accessToken, refreshToken, uid, and expiresAt

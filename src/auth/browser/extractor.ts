@@ -624,11 +624,37 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
             }
         }
 
+        // Extract REFRESH cookie for token refresh without browser
+        // The REFRESH-{uid} cookie contains the refresh token in JSON format
+        // Cookie is set on account.proton.me with path /api/auth/refresh
+        const allRefreshCookies = relevantCookies.filter(c => c.name.startsWith('REFRESH-'));
+        logger.debug({
+            count: allRefreshCookies.length,
+            cookies: allRefreshCookies.map(c => ({ name: c.name, domain: c.domain }))
+        }, 'Found REFRESH cookies');
+
+        const refreshCookie = allRefreshCookies.find(c => c.name === `REFRESH-${outputUid}`);
+
+        let refreshToken: string | undefined;
+        if (refreshCookie) {
+            try {
+                const decoded = JSON.parse(decodeURIComponent(refreshCookie.value));
+                refreshToken = decoded.RefreshToken;
+                logger.info({ uid: outputUid.slice(0, 8) + '...' }, 'Extracted refresh token from REFRESH cookie');
+            } catch (e) {
+                logger.warn({ error: e }, 'Failed to parse REFRESH cookie');
+            }
+        } else {
+            logger.warn({ uid: outputUid.slice(0, 8) + '...', availableRefresh: allRefreshCookies.map(c => c.name) },
+                'No REFRESH cookie found for active session - token refresh will require re-extraction');
+        }
+
         // Build result
         const tokens: StoredTokens = {
             method: 'browser',
             uid: outputUid,
             accessToken: outputAccessToken,
+            refreshToken,
             extractedAt: new Date().toISOString(),
             persistedSession,
             userKeys,
