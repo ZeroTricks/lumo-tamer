@@ -34,7 +34,7 @@ export { extractBrowserTokens, extractAndSaveTokens } from './browser/extractor.
 export type { ExtractionOptions, ExtractionResult } from './browser/extractor.js';
 
 // Re-export extraction utilities (for scripts)
-export { parseRcloneConfig } from './rclone/index.js';
+export { parseRcloneSection } from './rclone/index.js';
 export { runProtonAuth } from './go-proton-api/proton-auth-cli.js';
 
 /**

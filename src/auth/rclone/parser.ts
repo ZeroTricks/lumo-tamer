@@ -1,47 +1,26 @@
 /**
- * Parser for rclone protondrive config files
+ * Parser for rclone protondrive config sections
  *
- * Extracts authentication tokens from an existing rclone config,
+ * Extracts authentication tokens from pasted rclone config content,
  * including the keyPassword (stored as base64-encoded client_salted_key_pass).
  */
 
-import { readFileSync } from 'fs';
-import { homedir } from 'os';
 import { logger } from '../../app/logger.js';
 import type { SRPAuthTokens } from '../go-proton-api/types.js';
 import type { RcloneProtonConfig } from './types.js';
 import { REQUIRED_RCLONE_FIELDS } from './types.js';
 
 /**
- * Expand ~ to home directory
+ * Parse key-value pairs from INI-style content
  */
-function expandPath(path: string): string {
-    if (path.startsWith('~/')) {
-        return path.replace('~', homedir());
-    }
-    return path;
-}
-
-/**
- * Parse an INI section from config content
- */
-function parseIniSection(content: string, sectionName: string): Record<string, string> {
-    // Match section header and content until next section or EOF
-    const escapedName = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const sectionRegex = new RegExp(`\\[${escapedName}\\]([\\s\\S]*?)(?=\\n\\[|$)`);
-    const match = content.match(sectionRegex);
-
-    if (!match) {
-        throw new Error(`Section [${sectionName}] not found in rclone config`);
-    }
-
+function parseKeyValues(content: string): Record<string, string> {
     const result: Record<string, string> = {};
-    const lines = match[1].split('\n');
+    const lines = content.split('\n');
 
     for (const line of lines) {
         const trimmed = line.trim();
-        // Skip empty lines and comments
-        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith(';')) {
+        // Skip empty lines, comments, and section headers
+        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith(';') || trimmed.startsWith('[')) {
             continue;
         }
         // Match key = value pairs
@@ -55,30 +34,29 @@ function parseIniSection(content: string, sectionName: string): Record<string, s
 }
 
 /**
- * Parse rclone config and extract auth tokens
+ * Extract section name from content (e.g., "[proton-test]" -> "proton-test")
+ */
+function extractSectionName(content: string): string | undefined {
+    const match = content.match(/^\[([^\]]+)\]/m);
+    return match?.[1];
+}
+
+/**
+ * Parse rclone config section content and extract auth tokens
  *
- * @param configPath - Path to rclone.conf (supports ~ expansion)
- * @param remoteName - Name of the remote section (e.g., "proton-test")
+ * @param content - Pasted rclone config section content
  * @returns SRPAuthTokens compatible with AuthManager
  */
-export function parseRcloneConfig(configPath: string, remoteName: string): SRPAuthTokens {
-    const expandedPath = expandPath(configPath);
+export function parseRcloneSection(content: string): SRPAuthTokens {
+    const sectionName = extractSectionName(content) ?? 'unknown';
+    const section = parseKeyValues(content);
 
-    logger.debug({ configPath: expandedPath, remoteName }, 'Parsing rclone config');
-
-    let content: string;
-    try {
-        content = readFileSync(expandedPath, 'utf-8');
-    } catch (err) {
-        throw new Error(`Failed to read rclone config at ${expandedPath}: ${err}`);
-    }
-
-    const section = parseIniSection(content, remoteName);
+    logger.debug({ sectionName }, 'Parsing rclone config section');
 
     // Validate it's a protondrive remote
     if (section.type !== 'protondrive') {
         throw new Error(
-            `Remote "${remoteName}" is type "${section.type}", expected "protondrive"`
+            `Remote is type "${section.type || 'undefined'}", expected "protondrive"`
         );
     }
 
@@ -86,7 +64,7 @@ export function parseRcloneConfig(configPath: string, remoteName: string): SRPAu
     const missing = REQUIRED_RCLONE_FIELDS.filter(field => !section[field]);
     if (missing.length > 0) {
         throw new Error(
-            `Remote "${remoteName}" is missing required fields: ${missing.join(', ')}. ` +
+            `Config is missing required fields: ${missing.join(', ')}. ` +
             'Run "rclone config reconnect" to refresh credentials.'
         );
     }
@@ -102,8 +80,8 @@ export function parseRcloneConfig(configPath: string, remoteName: string): SRPAu
     }
 
     logger.info(
-        { remoteName, uid: config.client_uid.slice(0, 8) + '...' },
-        'Loaded auth tokens from rclone config'
+        { sectionName, uid: config.client_uid.slice(0, 8) + '...' },
+        'Parsed auth tokens from rclone config'
     );
 
     return {
@@ -112,7 +90,7 @@ export function parseRcloneConfig(configPath: string, remoteName: string): SRPAu
         uid: config.client_uid,
         userID: '', // Not stored in rclone config
         keyPassword,
-        expiresAt: '', // Not tracked by rclone - tokens refreshed externally
+        expiresAt: '', // Not tracked by rclone
         extractedAt: new Date().toISOString(),
     };
 }
