@@ -17,8 +17,7 @@ import type { AppContext } from '../app/index.js';
 import type { Turn } from '../lumo-client/index.js';
 import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
 import { CodeBlockDetector, type CodeBlock } from './code-block-detector.js';
-import { executeBlock, isExecutable } from './code-executor.js';
-import { confirm } from './confirmation.js';
+import { executeBlock, isExecutable, confirm } from './code-executor.js';
 
 /**
  * Inject instructions into the first user message of turns.
