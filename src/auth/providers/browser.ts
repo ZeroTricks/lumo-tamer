@@ -8,6 +8,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { logger } from '../../app/logger.js';
 import { authConfig } from '../../app/config.js';
+import { resolveProjectPath } from '../../app/paths.js';
 import { decryptPersistedSession } from '../../persistence/session-keys.js';
 import { createProtonApi } from '../api-factory.js';
 import type {
@@ -27,7 +28,7 @@ export class BrowserAuthProvider implements AuthProvider {
     private keyPassword?: string;
 
     constructor() {
-        this.tokenCachePath = authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json';
+        this.tokenCachePath = resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json');
     }
 
     async initialize(): Promise<void> {
