@@ -19,7 +19,7 @@ import { initLogger, logger } from '../app/logger.js';
 initLogger({ level: 'info', target: 'stdout', filePath: '' });
 
 import * as readline from 'readline';
-import { authConfig, authMethodSchema, getPersistenceConfig } from '../app/config.js';
+import { authConfig, authMethodSchema, getConversationsConfig } from '../app/config.js';
 import { resolveProjectPath } from '../app/paths.js';
 import { runBrowserAuthentication } from './browser/authenticate.js';
 import { runRcloneAuthentication } from './rclone/authenticate.js';
@@ -74,9 +74,9 @@ async function authenticateBrowser(): Promise<BrowserAuthResult> {
     }
 
     // Summary
-    const persistenceEnabled = getPersistenceConfig()?.enabled ?? false;
-    if (!persistenceEnabled) {
-        logger.info('Persistence disabled - encryption keys not fetched');
+    const syncEnabled = getConversationsConfig()?.sync?.enabled ?? false;
+    if (!syncEnabled) {
+        logger.info('Sync disabled - encryption keys not fetched');
     } else if (result.tokens.persistedSession?.blob && result.tokens.persistedSession?.clientKey) {
         logger.info('Extended auth data extracted - conversation persistence enabled');
     } else if (result.tokens.persistedSession?.blob) {

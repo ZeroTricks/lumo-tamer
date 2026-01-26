@@ -7,7 +7,7 @@
 
 import { existsSync } from 'fs';
 import { logger } from '../../app/logger.js';
-import { authConfig, getPersistenceConfig } from '../../app/config.js';
+import { authConfig, getConversationsConfig } from '../../app/config.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { runProtonAuth } from '../login/proton-auth-cli.js';
 import { fetchKeys } from '../fetch-keys.js';
@@ -61,7 +61,7 @@ export class LoginAuthProvider extends BaseAuthProvider {
     }
 
     private async fetchAndCacheKeys(): Promise<void> {
-        if (!getPersistenceConfig()?.enabled) return;
+        if (!getConversationsConfig()?.sync?.enabled) return;
         if (!this.supportsPersistence()) return;  // Login tokens lack lumo scope for spaces API
         if (!this.tokens) return;
         if (this.tokens.userKeys && this.tokens.masterKeys) {

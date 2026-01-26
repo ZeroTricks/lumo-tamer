@@ -100,13 +100,10 @@ export type PendingChange =
     | { type: 'delete_conversation'; conversationId: ConversationId };
 
 /**
- * Store configuration
+ * Conversation store configuration (internal)
  */
-export interface PersistenceConfig {
-    enabled: boolean;
-    syncInterval: number;           // ms between sync attempts
+export interface ConversationStoreConfig {
     maxConversationsInMemory: number;
-    defaultSpaceName: string;
 }
 
 /**

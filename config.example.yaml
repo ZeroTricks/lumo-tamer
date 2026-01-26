@@ -34,24 +34,21 @@ log:
   target: "stdout"  # "stdout" or "file"
   filePath: "lumo-bridge.log"  # Used when target is "file"
 
-# Shared Persistence Configuration (can be overridden in server/cli sections)
-persistence:
-  enabled: false
-  defaultSpaceName: lumo-bridge
-  # Sync all message types (system, tool_call, tool_result) to Proton server
-  # Default: false (only sync user/assistant messages)
-  saveSystemMessages: false
+# Shared Conversations Configuration (can be overridden in server/cli sections)
+# Note: In-memory conversation storage is always active regardless of sync settings
+conversations:
+  maxInMemory: 100          # Max conversations to keep in memory (LRU eviction)
   # WORKAROUND for clients without conversation_id support (e.g., Home Assistant).
   # Derives conversation ID from first user message - same message = same conversation.
   # WARNING: May incorrectly merge unrelated conversations with same opening message!
-  # Default: false (each request without conversation_id creates a new conversation)
   deriveIdFromFirstMessage: false
-  # Auto-sync: automatically sync conversations to server
-  autoSync:
-    enabled: false          # Enable automatic sync (default: false, use /save command)
-    debounceMs: 5000        # Wait after last change before syncing (min: 1000ms)
-    minIntervalMs: 30000    # Minimum interval between syncs (min: 5000ms)
-    maxDelayMs: 60000       # Force sync after this delay regardless of activity (min: 10000ms)
+  # Sync: persist conversations to Proton servers (requires browser auth)
+  sync:
+    enabled: false          # Enable syncing to Proton servers
+    spaceName: lumo-bridge  # Space name for conversations (created if doesn't exist)
+    # spaceId: "uuid"       # Optional: use specific space UUID instead of name matching
+    includeSystemMessages: false  # Include system/tool messages in sync (default: user/assistant only)
+    autoSync: false         # Auto-sync vs manual /save command
 
 # Shared Tools Configuration (can be overridden in server/cli sections)
 tools:
@@ -81,8 +78,9 @@ server:
   # log:
   #   level: "debug"
   #   target: "file"
-  # persistence:
-  #   enabled: true
+  # conversations:
+  #   sync:
+  #     enabled: true
 
 # CLI Configuration (for `npm run cli` / `npm run dev:cli`)
 # cli:

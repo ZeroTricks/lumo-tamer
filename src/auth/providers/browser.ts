@@ -6,7 +6,7 @@
  */
 
 import { logger } from '../../app/logger.js';
-import { authConfig, protonConfig, getPersistenceConfig } from '../../app/config.js';
+import { authConfig, protonConfig, getConversationsConfig } from '../../app/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { decryptPersistedSession } from '../../persistence/session-keys.js';
@@ -107,10 +107,10 @@ export class BrowserAuthProvider extends BaseAuthProvider {
             status.details.uid = this.tokens.uid.slice(0, 12) + '...';
         }
 
-        // Check keyPassword availability (only warn if persistence is enabled)
+        // Check keyPassword availability (only warn if sync is enabled)
         status.details.hasKeyPassword = !!this.keyPassword;
-        const persistenceEnabled = getPersistenceConfig()?.enabled ?? false;
-        if (!this.keyPassword && persistenceEnabled) {
+        const syncEnabled = getConversationsConfig()?.sync?.enabled ?? false;
+        if (!this.keyPassword && syncEnabled) {
             if (!this.tokens.persistedSession?.blob) {
                 status.warnings.push('No persisted session blob found');
             }

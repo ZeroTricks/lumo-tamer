@@ -5,11 +5,11 @@ import { logger } from '../../../app/logger.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './handlers.js';
 import { createEmptyResponse } from './response-factory.js';
 import { convertResponseInputToTurns } from '../../message-converter.js';
-import { getPersistenceConfig } from '../../../app/config.js';
+import { getConversationsConfig } from '../../../app/config.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../persistence/index.js';
 
-const persistenceConfig = getPersistenceConfig();
+const conversationsConfig = getConversationsConfig();
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session
 // This prevents 409 conflicts with deleted conversations from previous sessions
@@ -63,7 +63,7 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       } else if (request.previous_response_id) {
         // Use previous_response_id for stateless continuation
         conversationId = request.previous_response_id;
-      } else if (persistenceConfig?.deriveIdFromFirstMessage) {
+      } else if (conversationsConfig?.deriveIdFromFirstMessage) {
         // WORKAROUND for clients that don't provide conversation (e.g., Home Assistant).
         // Generate deterministic ID from first USER message so conversations with same start get same ID.
         // WARNING: This may incorrectly merge unrelated conversations with the same opening message!
