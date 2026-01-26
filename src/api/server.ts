@@ -1,11 +1,13 @@
 import express from 'express';
-import { getServerConfig } from '../app/config.js';
+import { getServerConfig, authConfig } from '../app/config.js';
+import { resolveProjectPath } from '../app/paths.js';
 import { logger } from '../app/logger.js';
 import { setupAuthMiddleware, setupLoggingMiddleware } from './middleware.js';
 import { createHealthRouter } from './routes/health.js';
 import { createModelsRouter } from './routes/models.js';
 import { createChatCompletionsRouter } from './routes/chat-completions.js';
 import { createResponsesRouter } from './routes/responses/index.js';
+import { createAuthRouter } from './routes/auth.js';
 import { EndpointDependencies } from './types.js';
 import { RequestQueue } from './queue.js';
 import type { AppContext } from '../app/index.js';
@@ -34,14 +36,19 @@ export class APIServer {
     this.expressApp.use(createModelsRouter());
     this.expressApp.use(createChatCompletionsRouter(deps));
     this.expressApp.use(createResponsesRouter(deps));
+    this.expressApp.use(createAuthRouter(deps));
   }
 
   private getDependencies(): EndpointDependencies {
+    const tokenCachePath = resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json');
+
     return {
       queue: this.queue,
       lumoClient: this.app.getLumoClient(),
       conversationStore: this.app.getConversationStore(),
       syncInitialized: this.app.isSyncInitialized(),
+      authManager: this.app.getAuthManager(),
+      tokenCachePath,
     };
   }
 

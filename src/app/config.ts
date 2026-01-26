@@ -1,8 +1,8 @@
 import { readFileSync } from 'fs';
-import { join } from 'path';
 import { load } from 'js-yaml';
 import { z } from 'zod';
 import merge from 'lodash/merge.js';
+import { resolveProjectPath } from './paths.js';
 
 // ============================================================================
 // Zod Schemas
@@ -55,12 +55,19 @@ const persistenceConfigSchema = z.object({
   autoSync: autoSyncConfigSchema,
 }).optional();
 
+const authAutoRefreshConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  intervalHours: z.number().min(1).max(24).default(20),
+  onError: z.boolean().default(true),
+}).optional();
+
 const authConfigSchema = z.object({
   method: z.enum(['srp', 'browser', 'rclone']).default('browser'),
   binaryPath: z.string().default('./bin/proton-auth'),
   tokenCachePath: z.string().default('sessions/auth-tokens.json'),
   rclonePath: z.string().optional(),
   rcloneRemote: z.string().optional(),
+  autoRefresh: authAutoRefreshConfigSchema,
 });
 
 // Mode-overridable config keys
@@ -96,7 +103,7 @@ type ModeOverrides = z.infer<typeof modeOverridesSchema>;
 
 function loadConfig(): RawConfig {
   try {
-    const configPath = join(process.cwd(), 'config.yaml');
+    const configPath = resolveProjectPath('config.yaml');
     const fileContents = readFileSync(configPath, 'utf8');
     return configSchema.parse(load(fileContents));
   } catch (error) {
@@ -170,5 +177,6 @@ export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;
 export type PersistenceConfig = z.infer<typeof persistenceConfigSchema>;
 export type AutoSyncConfig = z.infer<typeof autoSyncConfigSchema>;
 export type AuthConfig = z.infer<typeof authConfigSchema>;
+export type AuthAutoRefreshConfig = z.infer<typeof authAutoRefreshConfigSchema>;
 export type CliConfig = z.infer<typeof cliConfigSchema>;
 export type LogConfig = z.infer<typeof logConfigSchema>;

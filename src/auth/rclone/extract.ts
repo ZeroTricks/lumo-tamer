@@ -8,16 +8,17 @@
  */
 
 import { writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { dirname } from 'path';
 import { parseRcloneConfig } from './parser.js';
 import { authConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
+import { resolveProjectPath } from '../../app/paths.js';
 import type { StoredTokens } from '../types.js';
 
 // Get rclone config from auth config
 const rclonePath = authConfig?.rclonePath ?? '~/.config/rclone/rclone.conf';
 const remoteName = authConfig?.rcloneRemote;
-const outputPath = authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json';
+const outputPath = resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json');
 
 async function extractRcloneTokens(): Promise<void> {
     logger.info('=== Rclone Token Extraction ===');
@@ -50,13 +51,12 @@ async function extractRcloneTokens(): Promise<void> {
         };
 
         // Ensure output directory exists
-        mkdirSync(join(process.cwd(), 'sessions'), { recursive: true });
+        mkdirSync(dirname(outputPath), { recursive: true });
 
         // Write tokens
-        const fullOutputPath = join(process.cwd(), outputPath);
-        writeFileSync(fullOutputPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+        writeFileSync(outputPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
 
-        logger.info({ outputPath: fullOutputPath }, 'Tokens saved');
+        logger.info({ outputPath }, 'Tokens saved');
         logger.info({
             uid: tokens.uid.slice(0, 12) + '...',
             hasKeyPassword: !!tokens.keyPassword,

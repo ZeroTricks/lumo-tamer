@@ -5,10 +5,11 @@
  * providing a unified context for both CLI and API modes.
  */
 
-import { getPersistenceConfig } from './config.js';
+import { getPersistenceConfig, authConfig } from './config.js';
 import { logger } from './logger.js';
+import { resolveProjectPath } from './paths.js';
 import { LumoClient } from '../lumo-client/index.js';
-import { createAuthProvider, type AuthProvider, type ProtonApi } from '../auth/index.js';
+import { createAuthProvider, AuthManager, type AuthProvider, type ProtonApi } from '../auth/index.js';
 import { getConversationStore, type ConversationStore } from '../persistence/conversation-store.js';
 import { getSyncService, getKeyManager, getAutoSyncService } from '../persistence/index.js';
 import type { AppContext } from './types.js';
@@ -16,6 +17,7 @@ import type { AppContext } from './types.js';
 export class Application implements AppContext {
   private lumoClient!: LumoClient;
   private authProvider!: AuthProvider;
+  private authManager!: AuthManager;
   private protonApi!: ProtonApi;
   private uid!: string;
   private syncInitialized = false;
@@ -31,15 +33,34 @@ export class Application implements AppContext {
   }
 
   /**
-   * Initialize authentication using the unified auth provider
+   * Initialize authentication using AuthManager with auto-refresh
    */
   private async initializeAuth(): Promise<void> {
     this.authProvider = await createAuthProvider();
-    this.protonApi = this.authProvider.createApi();
+
+    // Create AuthManager with auto-refresh configuration
+    const tokenCachePath = resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json');
+    const autoRefreshConfig = authConfig?.autoRefresh;
+
+    this.authManager = new AuthManager({
+      provider: this.authProvider,
+      tokenCachePath,
+      autoRefresh: {
+        enabled: autoRefreshConfig?.enabled ?? true,
+        intervalHours: autoRefreshConfig?.intervalHours ?? 20,
+        onError: autoRefreshConfig?.onError ?? true,
+      },
+    });
+
+    // Create API with 401 refresh handling
+    this.protonApi = this.authManager.createApi();
     this.uid = this.authProvider.getUid();
     this.lumoClient = new LumoClient(this.protonApi);
 
-    logger.info({ method: this.authProvider.method }, 'Authentication initialized');
+    // Start scheduled auto-refresh
+    this.authManager.startAutoRefresh();
+
+    logger.info({ method: this.authProvider.method }, 'Authentication initialized with auto-refresh');
   }
 
   /**
@@ -144,8 +165,19 @@ export class Application implements AppContext {
     return this.authProvider;
   }
 
+  getAuthManager(): AuthManager {
+    return this.authManager;
+  }
+
   isSyncInitialized(): boolean {
     return this.syncInitialized;
+  }
+
+  /**
+   * Cleanup resources on shutdown
+   */
+  destroy(): void {
+    this.authManager?.destroy();
   }
 }
 
