@@ -134,6 +134,7 @@ export class CLIClient {
         const commandContext: CommandContext = {
           syncInitialized: this.app.isSyncInitialized(),
           conversationId: this.conversationId,
+          authManager: this.app.getAuthManager(),
         };
         try {
           const result = await executeCommand(input, commandContext);
