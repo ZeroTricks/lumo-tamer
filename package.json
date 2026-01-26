@@ -8,6 +8,7 @@
     "dev:server": "tsx watch src/server.ts",
     "dev:cli": "tsx src/cli.ts",
     "dev:server:debug": "tsx watch --inspect=0.0.0.0:9229 src/server.ts",
+    "dev:cli:debug": "tsx --inspect=0.0.0.0:9229 src/cli.ts",
     "build": "tsc && tsc-alias",
     "server": "node dist/server.js",
     "cli": "node dist/cli.js",

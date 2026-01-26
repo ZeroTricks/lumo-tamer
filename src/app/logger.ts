@@ -1,5 +1,6 @@
 import pino from 'pino';
 import type { LogConfig } from './config.js';
+import { resolveProjectPath } from './paths.js';
 
 // Determine transport based on config
 function getTransport(config?: LogConfig): pino.TransportSingleOptions {
@@ -9,7 +10,7 @@ function getTransport(config?: LogConfig): pino.TransportSingleOptions {
     return {
       target: 'pino/file',
       options: {
-        destination: config?.filePath ?? 'lumo-bridge.log',
+        destination: resolveProjectPath(config?.filePath ?? 'lumo-bridge.log'),
         mkdir: true,
       },
     };
