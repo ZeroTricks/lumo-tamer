@@ -4,7 +4,7 @@
 
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
-import { protonConfig } from '../../app/config.js';
+import { authConfig } from '../../app/config.js';
 import type { SRPAuthResult } from './types.js';
 
 /**
@@ -34,12 +34,13 @@ export async function runProtonAuth(
             args.push('-o', outputPath);
         }
 
-        // Pass config values to the Go binary
-        if (protonConfig.appVersion) {
-            args.push('--app-version', protonConfig.appVersion);
+        // Pass SRP-specific headers to the Go binary (to avoid CAPTCHA)
+        // These are separate from protonConfig.appVersion used for API calls
+        if (authConfig.srpAppVersion) {
+            args.push('--app-version', authConfig.srpAppVersion);
         }
-        if (protonConfig.userAgent) {
-            args.push('--user-agent', protonConfig.userAgent);
+        if (authConfig.srpUserAgent) {
+            args.push('--user-agent', authConfig.srpUserAgent);
         }
 
         // Spawn the process with stdio inherited for interactive prompts

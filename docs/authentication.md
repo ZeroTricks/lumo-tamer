@@ -334,6 +334,8 @@ The refresh endpoint returns new tokens via `Set-Cookie` headers (not in the JSO
 
 lumo-bridge parses these cookies and updates the token cache file.
 
+**Known limitation:** Consecutive token refreshes without an API call in between will fail with "Invalid refresh token". The new refresh token is correctly extracted and stored, but Proton's servers reject it until an actual API request has been made. This doesn't affect normal usage since refresh typically happens on 401 errors (which means an API call was made) or on the 20-hour auto-refresh schedule.
+
 ### Would Cached Keys Still Work After Refresh?
 Yes - the cached userKeys and masterKeys remain valid after token refresh because:
 

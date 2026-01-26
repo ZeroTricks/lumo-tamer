@@ -15,9 +15,7 @@ const logConfigSchema = z.object({
 }).optional();
 
 const protonConfigSchema = z.object({
-  baseUrl: z.string().min(1, 'proton.baseUrl is required'),
   appVersion: z.string().min(1, 'proton.appVersion is required'),
-  userAgent: z.string().optional(),
 });
 
 const instructionsConfigSchema = z.object({
@@ -68,6 +66,9 @@ const authConfigSchema = z.object({
   rclonePath: z.string().optional(),
   rcloneRemote: z.string().optional(),
   autoRefresh: authAutoRefreshConfigSchema,
+  // SRP-specific headers (to avoid CAPTCHA). Only used by proton-auth binary.
+  srpAppVersion: z.string().optional(),
+  srpUserAgent: z.string().optional(),
 });
 
 // Mode-overridable config keys

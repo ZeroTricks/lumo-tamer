@@ -1,10 +1,8 @@
-# Proton API configuration (for direct API integration)
+# Proton API configuration
+# URLs are hardcoded to production (lumo.proton.me, account.proton.me) - see src/app/urls.ts
 proton:
-  baseUrl: "https://lumo.proton.me/api"
-  # Headers for SRP auth (proton-auth binary). Different values may help avoid CAPTCHA.
-  # See docs/authentication.md for alternatives to try.
-  appVersion: "macos-drive@1.0.0-alpha.1+rclone"
-  userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  # App version sent with API requests (matches Proton WebClients)
+  appVersion: "web-lumo@5.0.0"
 
 # Authentication configuration
 # - srp: direct SRP auth via go-proton-api
@@ -17,6 +15,10 @@ auth:
   tokenCachePath: "sessions/auth-tokens.json"
   rclonePath: "./rclone.conf"
   rcloneRemote: "proton"
+  # SRP-specific headers (only used when method: srp)
+  # Different values may help avoid CAPTCHA - see docs/authentication.md
+  srpAppVersion: "macos-drive@1.0.0-alpha.1+rclone"
+  srpUserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   # Auto-refresh: automatically refresh tokens before they expire
   autoRefresh:
     enabled: true             # Enable automatic token refresh (default: true)
@@ -31,7 +33,7 @@ log:
 
 # Shared Persistence Configuration (can be overridden in server/cli sections)
 persistence:
-  enabled: true
+  enabled: false
   defaultSpaceName: lumo-bridge
   # Sync all message types (system, tool_call, tool_result) to Proton server
   # Default: false (only sync user/assistant messages)

@@ -13,6 +13,7 @@ import { promises as dns, ADDRCONFIG } from 'dns';
 import type { PersistedSessionData } from '../../lumo-client/types.js';
 import type { StoredTokens } from '../types.js';
 import { browserConfig, protonConfig, getPersistenceConfig } from '../../app/config.js';
+import { PROTON_URLS } from '../../app/urls.js';
 import { logger } from '../../app/logger.js';
 import { decryptPersistedSession } from '../../persistence/session-keys.js';
 
@@ -160,7 +161,7 @@ async function fetchClientKey(
             // If we're on Lumo, try navigating to account.proton.me
             if (currentUrl.includes('lumo.proton.me')) {
                 logger.debug('Trying account.proton.me API');
-                await page.goto('https://account.proton.me/', { waitUntil: 'domcontentloaded' });
+                await page.goto(PROTON_URLS.ACCOUNT_BASE, { waitUntil: 'domcontentloaded' });
                 await page.waitForTimeout(500);
 
                 const retryResult = await page.evaluate(async ({ uid, accessToken, appVersion }) => {
@@ -221,7 +222,7 @@ async function fetchUserInfo(
 
         const currentUrl = page.url();
         if (!currentUrl.includes('account.proton.me')) {
-            await page.goto('https://account.proton.me/', { waitUntil: 'domcontentloaded' });
+            await page.goto(PROTON_URLS.ACCOUNT_BASE, { waitUntil: 'domcontentloaded' });
             await page.waitForTimeout(500);
         }
 
@@ -281,7 +282,7 @@ async function fetchMasterKeys(
 
         const currentUrl = page.url();
         if (!currentUrl.includes('lumo.proton.me')) {
-            await page.goto('https://lumo.proton.me/', { waitUntil: 'domcontentloaded' });
+            await page.goto(PROTON_URLS.LUMO_BASE, { waitUntil: 'domcontentloaded' });
             await page.waitForTimeout(500);
         }
 
@@ -661,11 +662,13 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
             masterKeys,
         };
 
-        // Add warnings for missing data
-        if (persistedSession?.blob && !persistedSession?.clientKey) {
-            warnings.push('Persisted session blob found but ClientKey fetch failed');
-        } else if (!persistedSession?.blob) {
-            warnings.push('No persisted session blob found - local-only encryption will be used');
+        // Add warnings for missing data (only if persistence was requested)
+        if (fetchPersistenceKeys) {
+            if (persistedSession?.blob && !persistedSession?.clientKey) {
+                warnings.push('Persisted session blob found but ClientKey fetch failed');
+            } else if (!persistedSession?.blob) {
+                warnings.push('No persisted session blob found - local-only encryption will be used');
+            }
         }
 
         return { tokens, warnings };

@@ -15,7 +15,7 @@ export class RcloneAuthProvider extends BaseAuthProvider {
     readonly method = 'rclone' as const;
 
     constructor() {
-        super(resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json'));
+        super(resolveProjectPath(authConfig.tokenCachePath));
     }
 
     async initialize(): Promise<void> {
