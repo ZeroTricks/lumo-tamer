@@ -8,7 +8,7 @@ proton:
 
 # Authentication configuration
 # - srp: direct SRP auth via go-proton-api
-# - browser: token extraction via browser (conversations are not saved atm)
+# - browser: token extraction via browser
 # - rclone: read auth details from rclone config file
 # See docs/authentication.md
 auth:
@@ -17,6 +17,11 @@ auth:
   tokenCachePath: "sessions/auth-tokens.json"
   rclonePath: "./rclone.conf"
   rcloneRemote: "proton"
+  # Auto-refresh: automatically refresh tokens before they expire
+  autoRefresh:
+    enabled: true             # Enable automatic token refresh (default: true)
+    intervalHours: 20         # Refresh interval in hours (1-24, default: 20)
+    onError: true             # Refresh tokens on 401 errors (default: true)
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
 log:
@@ -75,12 +80,15 @@ server:
   #   enabled: true
 
 # CLI Configuration (for `npm run cli` / `npm run dev:cli`)
-# Mode-specific overrides (optional):
 # cli:
 #   log:
-#     target: "stdout"
-#   persistence:
-#     enabled: false
+#     target: "file"
+#     filePath: "lumo-bridge-cli.log"
+#   instructions:
+#     default: |
+#       You can execute bash commands on the user's machine.
+#       When you provide a ```bash code block, the user will be prompted to execute it.
+#       Output will be returned to you. Keep commands simple and safe.
 
 # Only needed if auth.method is 'browser'
 browser:

@@ -245,6 +245,8 @@ async function handleStreamingRequest(
       const commandContext: CommandContext = {
         syncInitialized: deps.syncInitialized ?? false,
         conversationId,
+        authManager: deps.authManager,
+        tokenCachePath: deps.tokenCachePath,
       };
 
       // Request title for new conversations (title still has default value)
@@ -364,6 +366,8 @@ async function handleNonStreamingRequest(
   const commandContext: CommandContext = {
     syncInitialized: deps.syncInitialized ?? false,
     conversationId,
+    authManager: deps.authManager,
+    tokenCachePath: deps.tokenCachePath,
   };
 
   // Request title for new conversations (title still has default value)

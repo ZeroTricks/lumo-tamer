@@ -4,7 +4,8 @@
  */
 
 import { logger } from './logger.js';
-import { getSyncService, getConversationStore } from '../persistence/index.js';
+import { getSyncService, getConversationStore, getAutoSyncService } from '../persistence/index.js';
+import type { AuthManager } from '../auth/index.js';
 
 /**
  * Check if a message is a command (starts with /)
@@ -19,6 +20,10 @@ export function isCommand(message: string): boolean {
 export interface CommandContext {
   syncInitialized: boolean;
   conversationId?: string;
+  /** AuthManager for logout command */
+  authManager?: AuthManager;
+  /** Token cache path for logout command */
+  tokenCachePath?: string;
 }
 
 /**
@@ -55,6 +60,9 @@ export async function executeCommand(
       case 'title':
         return handleTitleCommand(params, context);
 
+      case 'logout':
+        return await handleLogoutCommand(context);
+
       case 'deleteallspaces':
         return await handleDeleteAllSpacesCommand(context);
 
@@ -83,6 +91,7 @@ function getHelpText(): string {
   /help              - Show this help message
   /title <text>      - Set conversation title
   /save, /sync       - Sync conversations to Proton server
+  /logout            - Revoke session and delete tokens
   /deleteallspaces   - Delete ALL spaces from server (destructive!)
   /quit              - Exit CLI (CLI mode only)`;
 }
@@ -130,6 +139,35 @@ async function handleSaveCommand(context?: CommandContext): Promise<string> {
   } catch (error) {
     logger.error({ error }, 'Failed to execute /save command');
     return `Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+  }
+}
+
+/**
+ * Handle /logout command - revoke session and delete tokens
+ */
+async function handleLogoutCommand(context?: CommandContext): Promise<string> {
+  try {
+    if (!context?.authManager) {
+      return 'Logout not available - missing auth context.';
+    }
+
+    // Stop auto-sync if running
+    const autoSync = getAutoSyncService();
+    autoSync?.stop();
+
+    // Perform logout (stops refresh timer, revokes session, deletes tokens)
+    await context.authManager.logout();
+
+    // Schedule graceful shutdown (high timeout to ensure response is sent)
+    setTimeout(() => {
+      logger.info('Shutting down after logout...');
+      process.exit(0);
+    }, 500);
+
+    return 'Logged out successfully. Session revoked and tokens deleted.\nShutting down...';
+  } catch (error) {
+    logger.error({ error }, 'Failed to execute /logout command');
+    return `Logout failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
   }
 }
 

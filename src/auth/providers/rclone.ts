@@ -2,13 +2,15 @@
  * Rclone Auth Provider
  *
  * Uses tokens extracted from rclone config via npm run extract-rclone.
- * No automatic refresh - rclone manages tokens externally.
+ * Supports automatic token refresh since rclone extraction includes refreshToken.
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { logger } from '../../app/logger.js';
 import { authConfig } from '../../app/config.js';
+import { resolveProjectPath } from '../../app/paths.js';
 import { createProtonApi } from '../api-factory.js';
+import { refreshWithRefreshToken } from '../token-refresh.js';
 import type { AuthProvider, AuthProviderStatus, StoredTokens, ProtonApi } from '../types.js';
 
 export class RcloneAuthProvider implements AuthProvider {
@@ -18,7 +20,7 @@ export class RcloneAuthProvider implements AuthProvider {
     private tokenCachePath: string;
 
     constructor() {
-        this.tokenCachePath = authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json';
+        this.tokenCachePath = resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json');
     }
 
     async initialize(): Promise<void> {
@@ -80,8 +82,44 @@ export class RcloneAuthProvider implements AuthProvider {
     }
 
     isNearExpiry(): boolean {
-        // Rclone doesn't track expiry
-        return false;
+        // Check if tokens are near expiry (if we have expiresAt from a previous refresh)
+        if (!this.tokens?.expiresAt) return false;
+        const expiresAt = new Date(this.tokens.expiresAt);
+        const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
+        return expiresAt <= fiveMinutesFromNow;
+    }
+
+    /**
+     * Refresh tokens using Proton's /auth/refresh endpoint
+     *
+     * Rclone extraction includes refreshToken, so we can refresh
+     * without needing rclone or browser.
+     */
+    async refresh(): Promise<void> {
+        if (!this.tokens?.refreshToken) {
+            throw new Error('No refresh token available - re-run: npm run extract-rclone');
+        }
+
+        logger.info('Refreshing rclone tokens...');
+        const refreshed = await refreshWithRefreshToken(this.tokens);
+
+        // Update tokens, preserving keyPassword and other metadata
+        this.tokens = {
+            ...this.tokens,
+            ...refreshed,
+        };
+
+        this.saveTokens();
+        logger.info('Rclone token refresh successful');
+    }
+
+    private saveTokens(): void {
+        if (!this.tokens) return;
+        writeFileSync(
+            this.tokenCachePath,
+            JSON.stringify(this.tokens, null, 2),
+            { mode: 0o600 }
+        );
     }
 
     supportsPersistence(): boolean {

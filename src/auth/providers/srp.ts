@@ -7,10 +7,12 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { logger } from '../../app/logger.js';
-import { protonConfig, authConfig, getPersistenceConfig } from '../../app/config.js';
+import { authConfig, getPersistenceConfig } from '../../app/config.js';
+import { resolveProjectPath } from '../../app/paths.js';
 import { runProtonAuth } from '../go-proton-api/proton-auth-cli.js';
 import { createProtonApi } from '../api-factory.js';
 import { fetchKeys } from '../fetch-keys.js';
+import { refreshWithRefreshToken } from '../token-refresh.js';
 import type { AuthProvider, AuthProviderStatus, StoredTokens, ProtonApi, CachedUserKey, CachedMasterKey } from '../types.js';
 
 export class SRPAuthProvider implements AuthProvider {
@@ -21,8 +23,8 @@ export class SRPAuthProvider implements AuthProvider {
     private binaryPath: string;
 
     constructor() {
-        this.tokenCachePath = authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json';
-        this.binaryPath = authConfig?.binaryPath ?? './bin/proton-auth';
+        this.tokenCachePath = resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json');
+        this.binaryPath = resolveProjectPath(authConfig?.binaryPath ?? './bin/proton-auth');
     }
 
     async initialize(): Promise<void> {
@@ -104,48 +106,21 @@ export class SRPAuthProvider implements AuthProvider {
     }
 
     async refresh(): Promise<void> {
-        if (!this.tokens) {
-            throw new Error('No tokens to refresh');
+        if (!this.tokens?.refreshToken) {
+            throw new Error('No refresh token available');
         }
 
-        const response = await fetch(`${protonConfig.baseUrl}/auth/refresh`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-pm-uid': this.tokens.uid,
-                'x-pm-appversion': protonConfig.appVersion,
-            },
-            body: JSON.stringify({
-                UID: this.tokens.uid,
-                RefreshToken: this.tokens.refreshToken,
-                ResponseType: 'token',
-                GrantType: 'refresh_token',
-                RedirectURI: 'https://protonmail.com',
-            }),
-        });
+        logger.info('Refreshing SRP tokens...');
+        const refreshed = await refreshWithRefreshToken(this.tokens);
 
-        if (!response.ok) {
-            throw new Error(`Token refresh failed: ${response.status}`);
-        }
-
-        const data = await response.json() as {
-            AccessToken: string;
-            RefreshToken: string;
-            UID: string;
-            ExpiresIn?: number;
-        };
-
-        // Update tokens, preserving keyPassword
+        // Update tokens, preserving keyPassword and other metadata
         this.tokens = {
             ...this.tokens,
-            accessToken: data.AccessToken,
-            refreshToken: data.RefreshToken,
-            uid: data.UID,
-            expiresAt: new Date(Date.now() + (data.ExpiresIn || 12 * 60 * 60) * 1000).toISOString(),
+            ...refreshed,
         };
 
         this.saveTokens();
-        logger.info('Token refresh successful');
+        logger.info('SRP token refresh successful');
     }
 
     getUid(): string {

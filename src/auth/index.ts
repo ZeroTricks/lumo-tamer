@@ -16,6 +16,22 @@ export { SRPAuthProvider, BrowserAuthProvider, RcloneAuthProvider };
 
 // Re-export API factory
 export { createProtonApi } from './api-factory.js';
+export type { ApiFactoryOptions, ProtonApiWithRefresh } from './api-factory.js';
+
+// Re-export AuthManager
+export { AuthManager } from './manager.js';
+export type { AuthManagerOptions } from './manager.js';
+
+// Re-export token refresh utilities
+export { refreshWithRefreshToken, canRefreshWithToken } from './token-refresh.js';
+
+// Re-export logout utilities
+export { logout, revokeSession, deleteTokenCache } from './logout.js';
+export type { LogoutOptions } from './logout.js';
+
+// Re-export browser extraction
+export { extractBrowserTokens, extractAndSaveTokens } from './browser/extractor.js';
+export type { ExtractionOptions, ExtractionResult } from './browser/extractor.js';
 
 // Re-export extraction utilities (for scripts)
 export { parseRcloneConfig } from './rclone/index.js';

@@ -1,12 +1,15 @@
 import { RequestQueue } from './queue.js';
 import { LumoClient } from '../lumo-client/index.js';
 import type { ConversationStore } from '../persistence/index.js';
+import type { AuthManager } from '../auth/index.js';
 
 export interface EndpointDependencies {
   queue: RequestQueue;
   lumoClient: LumoClient;
   conversationStore?: ConversationStore;
   syncInitialized?: boolean;
+  authManager?: AuthManager;
+  tokenCachePath?: string;
 }
 
 // Chat Completions API types
