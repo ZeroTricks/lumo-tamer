@@ -165,16 +165,15 @@ Goal: Share conversations between lumo-bridge and Proton WebClient.
 ## Configuration
 
 ```yaml
-persistence:
-  enabled: true
-  defaultSpaceName: lumo-bridge
-  maxConversationsInMemory: 100
-  saveSystemMessages: false     # Only sync user/assistant messages
-  autoSync:
-    enabled: false              # Or use /save command
-    debounceMs: 5000            # Wait after last change (min: 1s)
-    minIntervalMs: 30000        # Min between syncs (min: 5s)
-    maxDelayMs: 60000           # Force sync after (min: 10s)
+conversations:
+  maxInMemory: 100              # Max conversations in memory (LRU eviction)
+  deriveIdFromFirstMessage: false  # For stateless clients (Home Assistant)
+  sync:
+    enabled: true
+    spaceName: lumo-bridge      # Space name (created if doesn't exist)
+    # spaceId: "uuid"           # Or use specific space UUID
+    includeSystemMessages: false  # Only sync user/assistant messages
+    autoSync: false             # Or use /save command
 ```
 
 ## Title Generation
@@ -203,7 +202,7 @@ curl -X POST http://localhost:3000/v1/chat/completions \
 
 ### Auto-Sync
 
-When `autoSync.enabled: true`:
+When `sync.autoSync: true`:
 
 1. `ConversationStore.markDirty()` notifies `AutoSyncService`
 2. **Debounce**: Waits for activity to settle

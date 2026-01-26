@@ -22,16 +22,9 @@ import type {
     Message,
     MessageId,
     MessageRole,
-    PersistenceConfig,
+    ConversationStoreConfig,
     SpaceId,
 } from './types.js';
-
-const DEFAULT_CONFIG: PersistenceConfig = {
-    enabled: true,
-    syncInterval: 30000,
-    maxConversationsInMemory: 100,
-    defaultSpaceName: 'lumo-bridge',
-};
 
 /**
  * In-memory conversation store
@@ -39,12 +32,12 @@ const DEFAULT_CONFIG: PersistenceConfig = {
 export class ConversationStore {
     private conversations = new Map<ConversationId, ConversationState>();
     private accessOrder: ConversationId[] = [];  // LRU tracking
-    private config: PersistenceConfig;
+    private maxConversations: number;
     private defaultSpaceId: SpaceId;
     private onDirtyCallback?: () => void;
 
-    constructor(config: Partial<PersistenceConfig> = {}) {
-        this.config = { ...DEFAULT_CONFIG, ...config };
+    constructor(config: ConversationStoreConfig) {
+        this.maxConversations = config.maxConversationsInMemory;
         this.defaultSpaceId = randomUUID();
         logger.info({ spaceId: this.defaultSpaceId }, 'ConversationStore initialized');
     }
@@ -349,7 +342,7 @@ export class ConversationStore {
         return {
             total: this.conversations.size,
             dirty: this.getDirty().length,
-            maxSize: this.config.maxConversationsInMemory,
+            maxSize: this.maxConversations,
         };
     }
 
@@ -444,7 +437,7 @@ export class ConversationStore {
     }
 
     private evictIfNeeded(): void {
-        while (this.conversations.size > this.config.maxConversationsInMemory) {
+        while (this.conversations.size > this.maxConversations) {
             // Evict least recently used
             const toEvict = this.accessOrder.shift();
             if (toEvict) {
@@ -480,9 +473,13 @@ let storeInstance: ConversationStore | null = null;
 
 /**
  * Get the global ConversationStore instance
+ * Config is required on first call to initialize the store
  */
-export function getConversationStore(config?: Partial<PersistenceConfig>): ConversationStore {
+export function getConversationStore(config?: ConversationStoreConfig): ConversationStore {
     if (!storeInstance) {
+        if (!config) {
+            throw new Error('ConversationStore not initialized - config required on first call');
+        }
         storeInstance = new ConversationStore(config);
     }
     return storeInstance;

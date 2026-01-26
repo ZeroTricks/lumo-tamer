@@ -13,23 +13,10 @@
 import { logger } from '../../app/logger.js';
 import { getSyncService, type SyncService } from './sync-service.js';
 
-export interface AutoSyncConfig {
-    /** Enable auto-sync (default: false) */
-    enabled: boolean;
-    /** Debounce delay - wait this long after last change before syncing (default: 5000ms, min: 1000ms) */
-    debounceMs: number;
-    /** Minimum interval between syncs (default: 30000ms, min: 5000ms) */
-    minIntervalMs: number;
-    /** Maximum time to wait before forcing a sync (default: 60000ms, min: 10000ms) */
-    maxDelayMs: number;
-}
-
-const DEFAULT_CONFIG: AutoSyncConfig = {
-    enabled: false,
-    debounceMs: 5000,
-    minIntervalMs: 30000,
-    maxDelayMs: 60000,
-};
+// Timing constants (not configurable - sensible defaults)
+const DEBOUNCE_MS = 5000;      // Wait after last change before syncing
+const MIN_INTERVAL_MS = 30000; // Minimum interval between syncs
+const MAX_DELAY_MS = 60000;    // Force sync after this delay regardless
 
 /**
  * Auto-Sync Service
@@ -42,7 +29,7 @@ const DEFAULT_CONFIG: AutoSyncConfig = {
  * 4. Max delay: Force sync after maxDelayMs regardless of activity
  */
 export class AutoSyncService {
-    private config: AutoSyncConfig;
+    private enabled: boolean;
     private syncService: SyncService;
 
     // Scheduling state
@@ -57,15 +44,15 @@ export class AutoSyncService {
     private syncCount = 0;
     private lastError: Error | null = null;
 
-    constructor(syncService: SyncService, config: Partial<AutoSyncConfig> = {}) {
-        this.config = { ...DEFAULT_CONFIG, ...config };
+    constructor(syncService: SyncService, enabled = false) {
+        this.enabled = enabled;
         this.syncService = syncService;
 
-        if (this.config.enabled) {
+        if (this.enabled) {
             logger.info({
-                debounceMs: this.config.debounceMs,
-                minIntervalMs: this.config.minIntervalMs,
-                maxDelayMs: this.config.maxDelayMs,
+                debounceMs: DEBOUNCE_MS,
+                minIntervalMs: MIN_INTERVAL_MS,
+                maxDelayMs: MAX_DELAY_MS,
             }, 'AutoSyncService initialized');
         }
     }
@@ -75,7 +62,7 @@ export class AutoSyncService {
      * Call this whenever conversations change
      */
     notifyDirty(): void {
-        if (!this.config.enabled) {
+        if (!this.enabled) {
             return;
         }
 
@@ -101,13 +88,13 @@ export class AutoSyncService {
         // Calculate delay respecting throttle
         const now = Date.now();
         const timeSinceLastSync = now - this.lastSyncTime;
-        const throttleDelay = Math.max(0, this.config.minIntervalMs - timeSinceLastSync);
-        const delay = Math.max(this.config.debounceMs, throttleDelay);
+        const throttleDelay = Math.max(0, MIN_INTERVAL_MS - timeSinceLastSync);
+        const delay = Math.max(DEBOUNCE_MS, throttleDelay);
 
         logger.debug({
             delay,
             throttleDelay,
-            debounceMs: this.config.debounceMs,
+            debounceMs: DEBOUNCE_MS,
             timeSinceLastSync,
         }, 'Scheduling auto-sync');
 
@@ -132,7 +119,7 @@ export class AutoSyncService {
                 logger.info('Max delay reached, forcing sync');
                 this.executeSync();
             }
-        }, this.config.maxDelayMs);
+        }, MAX_DELAY_MS);
     }
 
     /**
@@ -236,7 +223,7 @@ export class AutoSyncService {
         lastError: string | null;
     } {
         return {
-            enabled: this.config.enabled,
+            enabled: this.enabled,
             syncCount: this.syncCount,
             lastSyncTime: this.lastSyncTime,
             pendingSync: this.pendingSync,
@@ -254,13 +241,13 @@ let autoSyncInstance: AutoSyncService | null = null;
  */
 export function getAutoSyncService(
     syncService?: SyncService,
-    config?: Partial<AutoSyncConfig>
+    enabled?: boolean
 ): AutoSyncService {
     if (!autoSyncInstance) {
         if (!syncService) {
             syncService = getSyncService();
         }
-        autoSyncInstance = new AutoSyncService(syncService, config);
+        autoSyncInstance = new AutoSyncService(syncService, enabled);
     }
     return autoSyncInstance;
 }

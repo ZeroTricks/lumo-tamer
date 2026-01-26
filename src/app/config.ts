@@ -28,23 +28,23 @@ const toolsConfigSchema = z.object({
   enableWebSearch: z.boolean().optional().default(false),
 }).optional();
 
-const autoSyncConfigSchema = z.object({
+const syncConfigSchema = z.object({
   enabled: z.boolean().default(false),
-  debounceMs: z.number().min(1000).default(5000),
-  minIntervalMs: z.number().min(5000).default(30000),
-  maxDelayMs: z.number().min(10000).default(60000),
+  spaceId: z.string().uuid().optional(),
+  spaceName: z.string().min(1).default('lumo-bridge'),
+  includeSystemMessages: z.boolean().default(false),
+  autoSync: z.boolean().default(false),
 }).optional();
 
-const persistenceConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  syncInterval: z.number().default(30000),
-  maxConversationsInMemory: z.number().default(100),
-  defaultSpaceName: z.string().default('lumo-bridge'),
-  spaceId: z.string().uuid().optional(),
-  saveSystemMessages: z.boolean().default(false),
-  deriveIdFromFirstMessage: z.boolean().default(false),
-  autoSync: autoSyncConfigSchema,
-}).optional();
+const conversationsDefaults = {
+  maxInMemory: 100,
+  deriveIdFromFirstMessage: false
+};
+const conversationsConfigSchema = z.object({
+  maxInMemory: z.number().default(conversationsDefaults.maxInMemory),
+  deriveIdFromFirstMessage: z.boolean().default(conversationsDefaults.deriveIdFromFirstMessage),
+  sync: syncConfigSchema,
+}).default(conversationsDefaults);
 
 const authAutoRefreshConfigSchema = z.object({
   enabled: z.boolean().default(true),
@@ -78,7 +78,7 @@ const authConfigSchema = z.object({
 // Mode-overridable config keys
 const modeOverridesSchema = z.object({
   log: logConfigSchema,
-  persistence: persistenceConfigSchema,
+  conversations: conversationsConfigSchema,
   instructions: instructionsConfigSchema,
   tools: toolsConfigSchema,
 });
@@ -128,7 +128,7 @@ const config = loadConfig();
 
 export type ConfigMode = 'server' | 'cli';
 
-const MODE_KEYS: (keyof ModeOverrides)[] = ['log', 'persistence', 'instructions', 'tools'];
+const MODE_KEYS: (keyof ModeOverrides)[] = ['log', 'conversations', 'instructions', 'tools'];
 
 let resolved: (ModeOverrides & { mode: ConfigMode }) | null = null;
 
@@ -150,7 +150,7 @@ export function getConfigMode(): ConfigMode | null {
 // ============================================================================
 
 export const getLogConfig = () => resolved?.log ?? config.log;
-export const getPersistenceConfig = () => resolved?.persistence ?? config.persistence;
+export const getConversationsConfig = () => resolved?.conversations ?? config.conversations;
 export const getInstructionsConfig = () => resolved?.instructions ?? config.instructions;
 export const getToolsConfig = () => resolved?.tools ?? config.tools;
 
@@ -176,8 +176,8 @@ export type ServerConfig = z.infer<typeof serverConfigSchema>;
 export type ProtonConfig = z.infer<typeof protonConfigSchema>;
 export type ToolsConfig = z.infer<typeof toolsConfigSchema>;
 export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;
-export type PersistenceConfig = z.infer<typeof persistenceConfigSchema>;
-export type AutoSyncConfig = z.infer<typeof autoSyncConfigSchema>;
+export type ConversationsConfig = z.infer<typeof conversationsConfigSchema>;
+export type SyncConfig = z.infer<typeof syncConfigSchema>;
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 export type AuthBrowserConfig = z.infer<typeof authBrowserConfigSchema>;
 export type AuthLoginConfig = z.infer<typeof authLoginConfigSchema>;

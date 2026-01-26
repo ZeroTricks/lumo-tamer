@@ -5,7 +5,7 @@
  * providing a unified context for both CLI and API modes.
  */
 
-import { getPersistenceConfig, authConfig } from './config.js';
+import { getConversationsConfig, authConfig } from './config.js';
 import { logger } from './logger.js';
 import { resolveProjectPath } from './paths.js';
 import { LumoClient } from '../lumo-client/index.js';
@@ -35,6 +35,10 @@ export class Application implements AppContext {
    * Initialize authentication using AuthManager with auto-refresh
    */
   private async initializeAuth(): Promise<void> {
+    // Initialize conversation store with config (must happen before any getConversationStore() calls)
+    const conversationsConfig = getConversationsConfig();
+    getConversationStore({ maxConversationsInMemory: conversationsConfig.maxInMemory });
+
     this.authProvider = await createAuthProvider();
 
     // Create AuthManager with auto-refresh configuration
@@ -66,12 +70,12 @@ export class Application implements AppContext {
    * Initialize sync service for conversation persistence
    */
   private async initializeSync(): Promise<void> {
-    const persistenceConfig = getPersistenceConfig();
+    const conversationsConfig = getConversationsConfig();
     const result = await initializePersistence({
       protonApi: this.protonApi,
       uid: this.uid,
       authProvider: this.authProvider,
-      persistenceConfig,
+      conversationsConfig,
     });
     this.syncInitialized = result.initialized;
   }

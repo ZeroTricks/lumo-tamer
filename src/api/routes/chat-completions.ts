@@ -1,12 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse, OpenAIToolCall } from '../types.js';
-import { getServerConfig, getToolsConfig, getPersistenceConfig } from '../../app/config.js';
+import { getServerConfig, getToolsConfig, getConversationsConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
 
 const serverConfig = getServerConfig();
 const toolsConfig = getToolsConfig();
-const persistenceConfig = getPersistenceConfig();
+const conversationsConfig = getConversationsConfig();
 import { convertMessagesToTurns } from '../message-converter.js';
 import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../tool-parser.js';
 import { StreamingToolDetector } from '../streaming-tool-detector.js';
@@ -49,7 +49,7 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       // Chat Completions has no conversation parameter per OpenAI spec.
       // We use deriveIdFromFirstMessage to track conversations for Proton sync.
       let conversationId: ConversationId;
-      if (persistenceConfig?.deriveIdFromFirstMessage) {
+      if (conversationsConfig?.deriveIdFromFirstMessage) {
         // Generate deterministic ID from first user message
         const firstUserMessage = request.messages.find(m => m.role === 'user');
         conversationId = firstUserMessage

@@ -76,11 +76,12 @@ export interface SyncServiceConfig {
     keyManager: KeyManager;
     /** User ID for LumoApi authentication */
     uid: string;
-    defaultSpaceName?: string;
-    /** Optional: specify a space UUID directly to bypass name-matching logic */
+    /** Space name to search/create (used if spaceId not set) */
+    spaceName?: string;
+    /** Space UUID to use directly (bypasses name-matching) */
     spaceId?: string;
     /** If true, sync all message types to server; if false, only user/assistant */
-    saveSystemMessages?: boolean;
+    includeSystemMessages?: boolean;
 }
 
 /**
@@ -108,9 +109,9 @@ const StatusToInt: Record<MessageStatus, number | undefined> = {
 export class SyncService {
     private lumoApi: LumoApi;
     private keyManager: KeyManager;
-    private defaultSpaceName: string;
+    private spaceName?: string;
     private configuredSpaceId?: string;
-    private saveSystemMessages: boolean;
+    private includeSystemMessages: boolean;
 
     // Current space info
     private spaceId?: SpaceId;
@@ -126,11 +127,14 @@ export class SyncService {
     };
 
     constructor(config: SyncServiceConfig) {
+        if (!config.spaceId && !config.spaceName) {
+            throw new Error('Either spaceId or spaceName must be provided');
+        }
         this.lumoApi = createLumoApi(config.protonApi, config.uid);
         this.keyManager = config.keyManager;
-        this.defaultSpaceName = config.defaultSpaceName ?? 'lumo-bridge';
+        this.spaceName = config.spaceName;
         this.configuredSpaceId = config.spaceId;
-        this.saveSystemMessages = config.saveSystemMessages ?? false;
+        this.includeSystemMessages = config.includeSystemMessages ?? false;
     }
 
     /**
@@ -139,8 +143,8 @@ export class SyncService {
      *
      * Matching logic:
      * 1. If spaceId is configured, use that space directly (by UUID)
-     * 2. If defaultSpaceName is set, try to find a space with matching projectName
-     * 3. Otherwise, use the first space we can decrypt
+     * 2. Otherwise, find a space with matching spaceName (projectName)
+     * 3. If no match found, create a new space with spaceName
      */
     async ensureSpace(): Promise<{ spaceId: SpaceId; remoteId: RemoteId }> {
         // Already have a space
@@ -151,7 +155,7 @@ export class SyncService {
         // Check if we already have a space on the server
         const searchCriteria = this.configuredSpaceId
             ? { spaceId: this.configuredSpaceId }
-            : { spaceName: this.defaultSpaceName };
+            : { spaceName: this.spaceName };
         logger.info(searchCriteria, 'Checking for existing space...');
         const listResult = await this.lumoApi.listSpaces();
 
@@ -198,7 +202,7 @@ export class SyncService {
         }
 
         // First pass: look for a space with matching project name
-        logger.info({ totalSpaces: existingSpaces.length, lookingFor: this.defaultSpaceName }, 'Starting first pass - looking for project name match');
+        logger.info({ totalSpaces: existingSpaces.length, lookingFor: this.spaceName }, 'Starting first pass - looking for project name match');
         for (const space of existingSpaces) {
             if (!space.id) continue;
 
@@ -220,12 +224,12 @@ export class SyncService {
                     logger.debug({
                         spaceTag: space.id,
                         projectName: spacePrivate?.projectName,
-                        lookingFor: this.defaultSpaceName,
+                        lookingFor: this.spaceName,
                         hasEncrypted: !!encryptedData,
                         decryptedOk: !!spacePrivate,
                     }, 'Checking space for project name match');
 
-                    if (spacePrivate?.projectName === this.defaultSpaceName) {
+                    if (spacePrivate && spacePrivate.projectName === this.spaceName) {
                         this.spaceId = space.id;
                         this.spaceRemoteId = space.remoteId;
                         this.spaceKey = spaceKey;
@@ -249,49 +253,12 @@ export class SyncService {
             }
         }
 
-        // Second pass: fall back to first decryptable space (for backwards compatibility)
-        for (const space of existingSpaces) {
-            if (!space.id) continue;
-
-            try {
-                const spaceKey = await this.keyManager.getSpaceKey(space.id, space.wrappedSpaceKey);
-                const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
-
-                this.spaceId = space.id;
-                this.spaceRemoteId = space.remoteId;
-                this.spaceKey = spaceKey;
-                this.dataEncryptionKey = dataEncryptionKey;
-                this.idMap.spaces.set(space.id, space.remoteId);
-
-                // Try to get project name for logging
-                let projectName = '(unknown)';
-                const encryptedData = typeof space.encrypted === 'string' ? space.encrypted : undefined;
-                if (encryptedData) {
-                    try {
-                        const spacePrivate = await this.decryptSpacePrivate(encryptedData, space.id, dataEncryptionKey);
-                        projectName = spacePrivate?.projectName ?? '(no name)';
-                    } catch {
-                        // Ignore decryption errors for logging
-                    }
-                }
-
-                logger.info({
-                    spaceId: space.id,
-                    remoteId: space.remoteId,
-                    projectName,
-                    note: 'No exact match found, using first available space',
-                }, 'Using existing space (fallback)');
-
-                await this.loadExistingConversations();
-                return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
-            } catch {
-                // Can't unwrap this key, try next space
-                continue;
-            }
+        // No matching space found, create a new one
+        if (!this.spaceName) {
+            // This shouldn't happen - constructor validates that spaceId or spaceName is set
+            throw new Error('Cannot create space: no spaceName configured');
         }
-
-        // No existing space found, create a new one
-        logger.info({ spaceName: this.defaultSpaceName }, 'Creating new space...');
+        logger.info({ spaceName: this.spaceName }, 'Creating new space...');
         return await this.createSpace();
     }
 
@@ -314,7 +281,7 @@ export class SyncService {
         // Encrypt space private data (project name, etc.)
         const spacePrivate: SpacePrivate = {
             isProject: true,
-            projectName: this.defaultSpaceName,
+            projectName: this.spaceName,
         };
         const encryptedPrivate = await this.encryptSpacePrivate(spacePrivate, localId, dataEncryptionKey);
 
@@ -338,7 +305,7 @@ export class SyncService {
         logger.info({
             spaceId: localId,
             remoteId,
-            projectName: this.defaultSpaceName,
+            projectName: this.spaceName,
         }, 'Created new space');
 
         return { spaceId: localId, remoteId };
@@ -483,8 +450,8 @@ export class SyncService {
             logger.debug({ conversationId, remoteId: conversationRemoteId }, 'Updated conversation on server');
         }
 
-        // Sync messages (filter based on saveSystemMessages config)
-        const messagesToSync = this.saveSystemMessages
+        // Sync messages (filter based on includeSystemMessages config)
+        const messagesToSync = this.includeSystemMessages
             ? conversation.messages
             : conversation.messages.filter(m => m.role === 'user' || m.role === 'assistant');
 

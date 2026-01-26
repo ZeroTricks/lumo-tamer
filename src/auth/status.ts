@@ -5,7 +5,7 @@
  */
 
 import { createAuthProvider, type AuthProviderStatus } from './index.js';
-import { authConfig, getPersistenceConfig } from '../app/config.js';
+import { authConfig, getConversationsConfig } from '../app/config.js';
 
 export function printStatus(status: AuthProviderStatus): void {
     const statusIcon = status.valid ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
@@ -33,8 +33,8 @@ export function printSummary(status: AuthProviderStatus, supportsPersistence: bo
     console.log('\n--- Summary ---');
     if (status.valid) {
         console.log('\x1b[32mAuthentication is configured and valid.\x1b[0m');
-        const persistenceEnabled = getPersistenceConfig()?.enabled ?? false;
-        if (!persistenceEnabled) {
+        const syncEnabled = getConversationsConfig()?.sync?.enabled ?? false;
+        if (!syncEnabled) {
             console.log('Conversation persistence: \x1b[33mdisabled\x1b[0m (config)');
         } else if (!supportsPersistence) {
             console.log(`Conversation persistence: \x1b[33mdisabled\x1b[0m (${status.method} auth doesn't support it)`);

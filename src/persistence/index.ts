@@ -23,7 +23,7 @@ export type {
     MessageStatus,
     MessageFingerprint,
     PendingChange,
-    PersistenceConfig,
+    ConversationStoreConfig,
     SpaceId,
     RemoteId,
     IdMapEntry,
@@ -75,7 +75,6 @@ export {
     AutoSyncService,
     getAutoSyncService,
     resetAutoSyncService,
-    type AutoSyncConfig,
 } from './sync/index.js';
 
 // Re-export LumoApi types for consumers
@@ -93,7 +92,7 @@ export {
 
 import { logger } from '../app/logger.js';
 import type { AuthProvider, ProtonApi } from '../auth/index.js';
-import type { PersistenceConfig } from '../app/config.js';
+import type { ConversationsConfig } from '../app/config.js';
 import { getKeyManager } from './encryption/index.js';
 import { getSyncService, getAutoSyncService } from './sync/index.js';
 import { getConversationStore } from './conversation-store.js';
@@ -102,7 +101,7 @@ export interface InitializePersistenceOptions {
     protonApi: ProtonApi;
     uid: string;
     authProvider: AuthProvider;
-    persistenceConfig: PersistenceConfig;
+    conversationsConfig: ConversationsConfig;
 }
 
 export interface InitializePersistenceResult {
@@ -121,10 +120,11 @@ export interface InitializePersistenceResult {
 export async function initializePersistence(
     options: InitializePersistenceOptions
 ): Promise<InitializePersistenceResult> {
-    const { protonApi, uid, authProvider, persistenceConfig } = options;
+    const { protonApi, uid, authProvider, conversationsConfig } = options;
+    const syncConfig = conversationsConfig?.sync;
 
-    if (!persistenceConfig?.enabled) {
-        logger.info('Persistence is disabled, skipping sync initialization');
+    if (!syncConfig?.enabled) {
+        logger.info('Sync is disabled, skipping sync initialization');
         return { initialized: false };
     }
 
@@ -173,9 +173,9 @@ export async function initializePersistence(
             protonApi,
             uid,
             keyManager,
-            defaultSpaceName: persistenceConfig.defaultSpaceName,
-            spaceId: persistenceConfig.spaceId,
-            saveSystemMessages: persistenceConfig.saveSystemMessages,
+            spaceName: syncConfig.spaceName,
+            spaceId: syncConfig.spaceId,
+            includeSystemMessages: syncConfig.includeSystemMessages,
         });
 
         // Eagerly fetch/create space
@@ -191,14 +191,8 @@ export async function initializePersistence(
         }
 
         // Initialize auto-sync if enabled
-        const autoSyncConfig = persistenceConfig.autoSync;
-        if (autoSyncConfig?.enabled) {
-            const autoSync = getAutoSyncService(syncService, {
-                enabled: true,
-                debounceMs: autoSyncConfig.debounceMs,
-                minIntervalMs: autoSyncConfig.minIntervalMs,
-                maxDelayMs: autoSyncConfig.maxDelayMs,
-            });
+        if (syncConfig.autoSync) {
+            const autoSync = getAutoSyncService(syncService, true);
 
             // Connect to conversation store
             const store = getConversationStore();

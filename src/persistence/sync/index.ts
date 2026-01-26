@@ -18,7 +18,6 @@ export {
     AutoSyncService,
     getAutoSyncService,
     resetAutoSyncService,
-    type AutoSyncConfig,
 } from './auto-sync.js';
 
 // Re-export LumoApi adapter and types
