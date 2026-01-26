@@ -20,8 +20,8 @@ export class SRPAuthProvider extends BaseAuthProvider {
     private binaryPath: string;
 
     constructor() {
-        super(resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json'));
-        this.binaryPath = resolveProjectPath(authConfig?.binaryPath ?? './bin/proton-auth');
+        super(resolveProjectPath(authConfig.tokenCachePath));
+        this.binaryPath = resolveProjectPath(authConfig.binaryPath);
     }
 
     async initialize(): Promise<void> {

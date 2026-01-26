@@ -6,6 +6,7 @@
 
 import type { ProtonApi, ProtonApiOptions } from '../lumo-client/types.js';
 import { protonConfig } from '../app/config.js';
+import { PROTON_URLS } from '../app/urls.js';
 import { logger } from '../app/logger.js';
 
 export interface ApiFactoryOptions {
@@ -30,7 +31,7 @@ export interface ApiFactoryOptions {
 export function createProtonApi(options: ApiFactoryOptions): ProtonApi {
     let { uid, accessToken } = options;
     const { cookies, onAuthError } = options;
-    const baseUrl = protonConfig.baseUrl;
+    const baseUrl = PROTON_URLS.LUMO_API;
     const appVersion = protonConfig.appVersion;
 
     /**

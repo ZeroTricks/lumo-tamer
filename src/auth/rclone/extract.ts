@@ -18,7 +18,7 @@ import type { StoredTokens } from '../types.js';
 // Get rclone config from auth config
 const rclonePath = authConfig?.rclonePath ?? '~/.config/rclone/rclone.conf';
 const remoteName = authConfig?.rcloneRemote;
-const outputPath = resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json');
+const outputPath = resolveProjectPath(authConfig.tokenCachePath);
 
 async function extractRcloneTokens(): Promise<void> {
     logger.info('=== Rclone Token Extraction ===');

@@ -40,7 +40,7 @@ export class APIServer {
   }
 
   private getDependencies(): EndpointDependencies {
-    const tokenCachePath = resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json');
+    const tokenCachePath = resolveProjectPath(authConfig.tokenCachePath);
 
     return {
       queue: this.queue,

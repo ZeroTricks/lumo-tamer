@@ -8,6 +8,7 @@
  */
 
 import { protonConfig } from '../app/config.js';
+import { PROTON_URLS } from '../app/urls.js';
 import { logger } from '../app/logger.js';
 import type { StoredTokens } from './types.js';
 
@@ -35,7 +36,7 @@ export async function refreshWithRefreshToken(tokens: StoredTokens): Promise<Par
 
     logger.info({ uid: tokens.uid.slice(0, 8) + '...' }, 'Refreshing tokens via /auth/refresh');
 
-    const response = await fetch(`${protonConfig.baseUrl}/auth/refresh`, {
+    const response = await fetch(`${PROTON_URLS.ACCOUNT_API}/auth/refresh`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

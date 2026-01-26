@@ -7,6 +7,7 @@
 
 import { logger } from '../../app/logger.js';
 import { authConfig, protonConfig } from '../../app/config.js';
+import { PROTON_URLS } from '../../app/urls.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { decryptPersistedSession } from '../../persistence/session-keys.js';
 import { BaseAuthProvider } from './base.js';
@@ -23,7 +24,7 @@ export class BrowserAuthProvider extends BaseAuthProvider {
     private keyPassword?: string;
 
     constructor() {
-        super(resolveProjectPath(authConfig?.tokenCachePath ?? 'sessions/auth-tokens.json'));
+        super(resolveProjectPath(authConfig.tokenCachePath));
     }
 
     async initialize(): Promise<void> {
@@ -147,7 +148,7 @@ export class BrowserAuthProvider extends BaseAuthProvider {
             throw new Error('No refresh token available');
         }
 
-        const baseUrl = 'https://lumo.proton.me/api';
+        const baseUrl = PROTON_URLS.LUMO_API;
         const clientId = 'WebLumo';
 
         // Reconstruct the REFRESH cookie value as the browser would send it
