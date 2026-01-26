@@ -57,14 +57,14 @@ const authBrowserConfigSchema = z.object({
   cdpEndpoint: z.string().optional(),
 }).optional();
 
-const authSrpConfigSchema = z.object({
+const authLoginConfigSchema = z.object({
   binaryPath: z.string(),
   // Headers to avoid CAPTCHA - only used by proton-auth binary
   appVersion: z.string().optional(),
   userAgent: z.string().optional(),
 }).optional();
 
-export const authMethodSchema = z.enum(['srp', 'browser', 'rclone']);
+export const authMethodSchema = z.enum(['login', 'browser', 'rclone']);
 
 const authConfigSchema = z.object({
   method: authMethodSchema.default('browser'),
@@ -72,7 +72,7 @@ const authConfigSchema = z.object({
   autoRefresh: authAutoRefreshConfigSchema,
   // Method-specific config
   browser: authBrowserConfigSchema,
-  srp: authSrpConfigSchema,
+  login: authLoginConfigSchema,
 });
 
 // Mode-overridable config keys
@@ -180,7 +180,7 @@ export type PersistenceConfig = z.infer<typeof persistenceConfigSchema>;
 export type AutoSyncConfig = z.infer<typeof autoSyncConfigSchema>;
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 export type AuthBrowserConfig = z.infer<typeof authBrowserConfigSchema>;
-export type AuthSrpConfig = z.infer<typeof authSrpConfigSchema>;
+export type AuthLoginConfig = z.infer<typeof authLoginConfigSchema>;
 export type AuthAutoRefreshConfig = z.infer<typeof authAutoRefreshConfigSchema>;
 export type CliConfig = z.infer<typeof cliConfigSchema>;
 export type LogConfig = z.infer<typeof logConfigSchema>;

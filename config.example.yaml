@@ -6,7 +6,7 @@ proton:
 
 # Authentication configuration
 # - browser: token extraction via browser (recommended)
-# - srp: direct SRP auth via go-proton-api
+# - login: enter Proton credentials via go-proton-api
 # - rclone: paste rclone config via `npm run extract-rclone`
 # See docs/authentication.md
 auth:
@@ -21,8 +21,8 @@ auth:
   browser:
     # Chrome DevTools Protocol endpoint for remote browser
     cdpEndpoint: "http://browser-dev:9223"
-  # SRP-specific config (only used when method: srp)
-  srp:
+  # Login-specific config (only used when method: login)
+  login:
     binaryPath: "./bin/proton-auth"
     # Headers to help avoid CAPTCHA - see docs/authentication.md
     appVersion: "macos-drive@1.0.0-alpha.1+rclone"

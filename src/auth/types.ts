@@ -4,7 +4,7 @@
 
 import type { ProtonApi, CachedUserKey, CachedMasterKey, PersistedSessionData } from '../lumo-client/types.js';
 
-export type AuthMethod = 'srp' | 'browser' | 'rclone';
+export type AuthMethod = 'login' | 'browser' | 'rclone';
 
 /**
  * Unified token storage format
@@ -37,7 +37,7 @@ export interface AuthProviderStatus {
 
 /**
  * Unified auth provider interface
- * All auth methods (SRP, browser, rclone) implement this interface
+ * All auth methods (login, browser, rclone) implement this interface
  */
 export interface AuthProvider {
     readonly method: AuthMethod;
@@ -83,7 +83,7 @@ export interface AuthProvider {
     getStatus(): AuthProviderStatus;
 
     /**
-     * Refresh tokens (optional - only SRP supports this)
+     * Refresh tokens
      */
     refresh?(): Promise<void>;
 
