@@ -64,8 +64,10 @@ const authSrpConfigSchema = z.object({
   userAgent: z.string().optional(),
 }).optional();
 
+export const authMethodSchema = z.enum(['srp', 'browser', 'rclone']);
+
 const authConfigSchema = z.object({
-  method: z.enum(['srp', 'browser', 'rclone']).default('browser'),
+  method: authMethodSchema.default('browser'),
   tokenPath: z.string().default('sessions/auth-tokens.json'),
   autoRefresh: authAutoRefreshConfigSchema,
   // Method-specific config

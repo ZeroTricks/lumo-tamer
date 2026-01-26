@@ -13,8 +13,7 @@
     "server": "node dist/server.js",
     "cli": "node dist/cli.js",
     "clean": "rm -rf dist",
-    "extract-tokens": "tsx src/auth/browser/extract-tokens.ts",
-    "extract-rclone": "tsx src/auth/rclone/extract.ts",
+    "auth": "tsx src/auth/authenticate.ts",
     "auth-status": "tsx src/auth/status.ts",
     "sync-upstream": "./scripts/sync-upstream.sh"
   },

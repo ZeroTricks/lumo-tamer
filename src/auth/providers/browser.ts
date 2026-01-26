@@ -6,7 +6,7 @@
  */
 
 import { logger } from '../../app/logger.js';
-import { authConfig, protonConfig } from '../../app/config.js';
+import { authConfig, protonConfig, getPersistenceConfig } from '../../app/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { decryptPersistedSession } from '../../persistence/session-keys.js';
@@ -32,39 +32,27 @@ export class BrowserAuthProvider extends BaseAuthProvider {
         this.validateTokens();
 
         const tokenAge = this.getTokenAgeHours();
-        logger.info({
+        logger.debug({
             extractedAt: this.tokens.extractedAt,
             ageHours: tokenAge.toFixed(1),
             uid: this.tokens.uid.slice(0, 8) + '...',
         }, 'Browser tokens loaded');
-
-        if (!this.isValid()) {
-            logger.warn('Tokens likely expired (>24h old). Re-run extract-tokens if you get auth errors.');
-        }
 
         // Try to extract keyPassword from persisted session
         if (this.tokens.persistedSession?.blob && this.tokens.persistedSession?.clientKey) {
             try {
                 const decrypted = await decryptPersistedSession(this.tokens.persistedSession);
                 this.keyPassword = decrypted.keyPassword;
-                logger.info('Extracted keyPassword from browser session');
+                logger.debug('Extracted keyPassword from browser session');
             } catch (err) {
                 logger.warn({ err }, 'Failed to decrypt browser session - keyPassword unavailable');
             }
-        } else {
-            logger.debug({
-                hasBlob: !!this.tokens.persistedSession?.blob,
-                hasClientKey: !!this.tokens.persistedSession?.clientKey,
-            }, 'Browser session missing blob or clientKey - keyPassword unavailable');
         }
 
-        if (this.tokens.userKeys && this.tokens.userKeys.length > 0) {
-            logger.info({ keyCount: this.tokens.userKeys.length }, 'Loaded cached user keys');
-        }
-
-        if (this.tokens.masterKeys && this.tokens.masterKeys.length > 0) {
-            logger.info({ keyCount: this.tokens.masterKeys.length }, 'Loaded cached master keys');
-        }
+        logger.debug({
+            hasUserKeys: this.tokens.userKeys?.length ?? 0,
+            hasMasterKeys: this.tokens.masterKeys?.length ?? 0,
+        }, 'Browser provider initialized');
     }
 
     // Override to use extracted keyPassword instead of tokens.keyPassword
@@ -119,14 +107,15 @@ export class BrowserAuthProvider extends BaseAuthProvider {
             status.details.uid = this.tokens.uid.slice(0, 12) + '...';
         }
 
-        // Check keyPassword availability
+        // Check keyPassword availability (only warn if persistence is enabled)
         status.details.hasKeyPassword = !!this.keyPassword;
-        if (!this.keyPassword) {
+        const persistenceEnabled = getPersistenceConfig()?.enabled ?? false;
+        if (!this.keyPassword && persistenceEnabled) {
             if (!this.tokens.persistedSession?.blob) {
                 status.warnings.push('No persisted session blob found');
             }
             if (!this.tokens.persistedSession?.clientKey) {
-                status.warnings.push('No clientKey available - run extract-tokens');
+                status.warnings.push('No clientKey available - run npm run auth');
             }
         }
 

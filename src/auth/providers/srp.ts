@@ -14,6 +14,15 @@ import { fetchKeys } from '../fetch-keys.js';
 import { BaseAuthProvider } from './base.js';
 import type { AuthProviderStatus, StoredTokens } from '../types.js';
 
+/**
+ * Standalone SRP authentication for CLI use.
+ * Creates a provider, initializes (triggering auth if needed), and returns.
+ */
+export async function runSrpAuthentication(): Promise<void> {
+    const provider = new SRPAuthProvider();
+    await provider.initialize();
+}
+
 export class SRPAuthProvider extends BaseAuthProvider {
     readonly method = 'srp' as const;
 
@@ -82,8 +91,6 @@ export class SRPAuthProvider extends BaseAuthProvider {
     }
 
     private async authenticate(): Promise<void> {
-        logger.info('Starting SRP authentication (interactive)...');
-
         const result = await runProtonAuth(this.binaryPath, this.tokenCachePath);
 
         // If output went to file, read it back
