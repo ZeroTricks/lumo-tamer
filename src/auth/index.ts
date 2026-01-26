@@ -30,8 +30,8 @@ export { logout, revokeSession, deleteTokenCache } from './logout.js';
 export type { LogoutOptions } from './logout.js';
 
 // Re-export browser extraction
-export { extractBrowserTokens, extractAndSaveTokens } from './browser/extractor.js';
-export type { ExtractionOptions, ExtractionResult } from './browser/extractor.js';
+export { extractBrowserTokens, runBrowserAuthentication } from './browser/authenticate.js';
+export type { ExtractionOptions, ExtractionResult } from './browser/authenticate.js';
 
 // Re-export extraction utilities (for scripts)
 export { parseRcloneSection } from './rclone/index.js';
