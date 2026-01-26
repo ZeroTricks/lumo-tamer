@@ -7,7 +7,7 @@
 import { createAuthProvider, type AuthProviderStatus } from './index.js';
 import { authConfig } from '../app/config.js';
 
-function printStatus(status: AuthProviderStatus): void {
+export function printStatus(status: AuthProviderStatus): void {
     const statusIcon = status.valid ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
 
     console.log(`\n${statusIcon} Auth Method: \x1b[1m${status.method}\x1b[0m`);
@@ -67,7 +67,11 @@ async function main(): Promise<void> {
     }
 }
 
-main().catch(err => {
-    console.error('Error:', err);
-    process.exit(1);
-});
+// Only run when invoked directly (not when imported)
+const isDirectInvocation = import.meta.url === `file://${process.argv[1]}`;
+if (isDirectInvocation) {
+    main().catch(err => {
+        console.error('Error:', err);
+        process.exit(1);
+    });
+}

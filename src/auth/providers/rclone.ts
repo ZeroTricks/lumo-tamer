@@ -31,15 +31,11 @@ export class RcloneAuthProvider extends BaseAuthProvider {
 
         this.validateTokens();
 
-        logger.info({
+        logger.debug({
             uid: this.tokens.uid.slice(0, 12) + '...',
             hasKeyPassword: !!this.tokens.keyPassword,
             extractedAt: this.tokens.extractedAt,
         }, 'Rclone tokens loaded');
-
-        if (!this.tokens.keyPassword) {
-            logger.warn('keyPassword missing from rclone tokens - conversation persistence disabled');
-        }
     }
 
     isValid(): boolean {

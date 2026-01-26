@@ -53,49 +53,44 @@ async function readMultilineInput(): Promise<string> {
     return lines.join('\n');
 }
 
-async function extractRcloneTokens(): Promise<void> {
-    logger.info('=== Rclone Token Extraction ===');
+export async function extractRcloneTokens(): Promise<void> {
+    const content = await readMultilineInput();
 
-    try {
-        const content = await readMultilineInput();
-
-        if (!content.trim()) {
-            logger.error('No input provided');
-            process.exit(1);
-        }
-
-        // Parse the pasted content
-        const rcloneTokens = parseRcloneSection(content);
-
-        // Convert to unified StoredTokens format
-        const tokens: StoredTokens = {
-            method: 'rclone',
-            uid: rcloneTokens.uid,
-            accessToken: rcloneTokens.accessToken,
-            refreshToken: rcloneTokens.refreshToken,
-            keyPassword: rcloneTokens.keyPassword,
-            extractedAt: new Date().toISOString(),
-        };
-
-        // Ensure output directory exists
-        mkdirSync(dirname(outputPath), { recursive: true });
-
-        // Write tokens
-        writeFileSync(outputPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
-
-        logger.info({ outputPath }, 'Tokens saved');
-        logger.info({
-            uid: tokens.uid.slice(0, 12) + '...',
-            hasKeyPassword: !!tokens.keyPassword,
-        }, 'Extraction complete');
-
-        logger.info('');
-        logger.info('You can now run: npm run dev');
-
-    } catch (error) {
-        logger.error({ error }, 'Extraction failed');
-        process.exit(1);
+    if (!content.trim()) {
+        throw new Error('No input provided');
     }
+
+    // Parse the pasted content
+    const rcloneTokens = parseRcloneSection(content);
+
+    // Convert to unified StoredTokens format
+    const tokens: StoredTokens = {
+        method: 'rclone',
+        uid: rcloneTokens.uid,
+        accessToken: rcloneTokens.accessToken,
+        refreshToken: rcloneTokens.refreshToken,
+        keyPassword: rcloneTokens.keyPassword,
+        extractedAt: new Date().toISOString(),
+    };
+
+    // Ensure output directory exists
+    mkdirSync(dirname(outputPath), { recursive: true });
+
+    // Write tokens
+    writeFileSync(outputPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+
+    logger.info({ outputPath }, 'Tokens saved');
+    logger.info({
+        uid: tokens.uid.slice(0, 12) + '...',
+        hasKeyPassword: !!tokens.keyPassword,
+    }, 'Extraction complete');
 }
 
-extractRcloneTokens();
+// Only run when invoked directly (not when imported)
+const isDirectInvocation = import.meta.url === `file://${process.argv[1]}`;
+if (isDirectInvocation) {
+    extractRcloneTokens().catch(error => {
+        logger.error({ error }, 'Extraction failed');
+        process.exit(1);
+    });
+}

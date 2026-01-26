@@ -6,6 +6,7 @@
  * (by AuthManager for scheduled refresh) or via CLI (npm run extract-tokens).
  */
 
+import * as readline from 'readline';
 import { chromium, type Page, type BrowserContext, type Browser } from 'playwright';
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
@@ -33,6 +34,8 @@ export interface ExtractionOptions {
 export interface ExtractionResult {
     tokens: StoredTokens;
     warnings: string[];
+    /** The CDP endpoint that was used (for saving back to config) */
+    cdpEndpoint: string;
 }
 
 /**
@@ -671,11 +674,26 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
             }
         }
 
-        return { tokens, warnings };
+        return { tokens, warnings, cdpEndpoint };
     } finally {
         // Don't close the browser - it's shared with lumo-bridge
         logger.debug('Browser connection closed, browser continues running');
     }
+}
+
+/**
+ * Prompt user for CDP endpoint
+ */
+async function promptForCdpEndpoint(defaultEndpoint?: string): Promise<string> {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const defaultValue = defaultEndpoint || 'http://localhost:9222';
+
+    return new Promise(resolve => {
+        rl.question(`CDP endpoint [${defaultValue}]: `, answer => {
+            rl.close();
+            resolve(answer.trim() || defaultValue);
+        });
+    });
 }
 
 /**
@@ -688,15 +706,13 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
  * @returns Extraction result
  */
 export async function extractAndSaveTokens(outputPath: string): Promise<ExtractionResult> {
-    // Validate config
-    if (!authConfig.browser?.cdpEndpoint) {
-        throw new Error('auth.browser.cdpEndpoint is required in config.yaml for token extraction');
-    }
+    const configEndpoint = authConfig.browser?.cdpEndpoint;
+    const cdpEndpoint = await promptForCdpEndpoint(configEndpoint);
 
     const persistenceEnabled = getPersistenceConfig()?.enabled ?? false;
 
     const result = await extractBrowserTokens({
-        cdpEndpoint: authConfig.browser.cdpEndpoint,
+        cdpEndpoint,
         targetUrl: PROTON_URLS.LUMO_BASE,
         fetchPersistenceKeys: persistenceEnabled,
         appVersion: protonConfig.appVersion,

@@ -50,7 +50,7 @@ export { runProtonAuth } from './go-proton-api/proton-auth-cli.js';
 export async function createAuthProvider(): Promise<AuthProvider> {
     const method: AuthMethod = (authConfig?.method as AuthMethod) ?? 'browser';
 
-    logger.info({ method }, 'Creating auth provider');
+    logger.debug({ method }, 'Creating auth provider');
 
     let provider: AuthProvider;
 
