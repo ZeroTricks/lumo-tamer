@@ -1,7 +1,7 @@
 /**
- * SRP Auth Provider
+ * Login Auth Provider
  *
- * Uses Proton's SRP protocol via go-proton-api binary.
+ * Uses Proton's SRP protocol via go-proton-api binary for direct credential login.
  * Supports automatic token refresh.
  */
 
@@ -9,22 +9,22 @@ import { existsSync } from 'fs';
 import { logger } from '../../app/logger.js';
 import { authConfig, getPersistenceConfig } from '../../app/config.js';
 import { resolveProjectPath } from '../../app/paths.js';
-import { runProtonAuth } from '../go-proton-api/proton-auth-cli.js';
+import { runProtonAuth } from '../login/proton-auth-cli.js';
 import { fetchKeys } from '../fetch-keys.js';
 import { BaseAuthProvider } from './base.js';
 import type { AuthProviderStatus, StoredTokens } from '../types.js';
 
-export class SRPAuthProvider extends BaseAuthProvider {
-    readonly method = 'srp' as const;
+export class LoginAuthProvider extends BaseAuthProvider {
+    readonly method = 'login' as const;
 
     private binaryPath: string;
 
     constructor() {
         super(resolveProjectPath(authConfig.tokenPath));
-        if (!authConfig.srp?.binaryPath) {
-            throw new Error('auth.srp.binaryPath is required for SRP authentication');
+        if (!authConfig.login?.binaryPath) {
+            throw new Error('auth.login.binaryPath is required for login authentication');
         }
-        this.binaryPath = resolveProjectPath(authConfig.srp.binaryPath);
+        this.binaryPath = resolveProjectPath(authConfig.login.binaryPath);
     }
 
     async initialize(): Promise<void> {
@@ -32,21 +32,21 @@ export class SRPAuthProvider extends BaseAuthProvider {
         if (existsSync(this.tokenCachePath)) {
             try {
                 const cached = this.loadCachedTokensSafe();
-                // Accept tokens without method field (created by Go binary) or with method: 'srp'
-                const isSrpTokens = cached && (!cached.method || cached.method === 'srp');
-                if (isSrpTokens && !this.isExpired(cached)) {
+                // Accept tokens without method field (created by Go binary) or with method: 'login'
+                const isLoginTokens = cached && (!cached.method || cached.method === 'login');
+                if (isLoginTokens && !this.isExpired(cached)) {
                     // Ensure method is set for consistency
-                    this.tokens = { ...cached, method: 'srp' };
+                    this.tokens = { ...cached, method: 'login' };
                     logger.info(
                         { expiresAt: cached.expiresAt },
-                        'Loaded cached SRP auth tokens'
+                        'Loaded cached login auth tokens'
                     );
                     // Fetch keys if not already cached
                     await this.fetchAndCacheKeys();
                     return;
                 }
-                if (cached && isSrpTokens) {
-                    logger.info('Cached SRP tokens expired, need to re-authenticate');
+                if (cached && isLoginTokens) {
+                    logger.info('Cached login tokens expired, need to re-authenticate');
                 }
             } catch (err) {
                 logger.warn({ err }, 'Failed to load cached tokens');
@@ -62,7 +62,7 @@ export class SRPAuthProvider extends BaseAuthProvider {
 
     private async fetchAndCacheKeys(): Promise<void> {
         if (!getPersistenceConfig()?.enabled) return;
-        if (!this.supportsPersistence()) return;  // SRP can't use persistence anyway
+        if (!this.supportsPersistence()) return;  // Login tokens lack lumo scope for spaces API
         if (!this.tokens) return;
         if (this.tokens.userKeys && this.tokens.masterKeys) {
             logger.debug('Keys already cached, skipping fetch');
@@ -89,7 +89,7 @@ export class SRPAuthProvider extends BaseAuthProvider {
             this.tokens = this.loadCachedTokensSafe();
         } else {
             this.tokens = {
-                method: 'srp',
+                method: 'login',
                 uid: result.uid,
                 accessToken: result.accessToken,
                 refreshToken: result.refreshToken,
@@ -100,11 +100,11 @@ export class SRPAuthProvider extends BaseAuthProvider {
             this.saveTokensToFile();
         }
 
-        logger.info('SRP authentication successful');
+        logger.info('Login authentication successful');
     }
 
     supportsPersistence(): boolean {
-        return false;  // SRP tokens lack lumo scope for spaces API
+        return false;  // Login tokens lack lumo scope for spaces API
     }
 
     isValid(): boolean {
@@ -121,7 +121,7 @@ export class SRPAuthProvider extends BaseAuthProvider {
 
     getStatus(): AuthProviderStatus {
         const status: AuthProviderStatus = {
-            method: 'srp',
+            method: 'login',
             source: this.tokenCachePath,
             valid: false,
             details: {},
@@ -130,7 +130,7 @@ export class SRPAuthProvider extends BaseAuthProvider {
 
         if (!this.tokens) {
             status.warnings.push('No tokens loaded');
-            status.warnings.push('Run: ./bin/proton-auth -o sessions/auth-tokens.json');
+            status.warnings.push('Run: npm run auth and select login');
             return status;
         }
 
@@ -147,7 +147,7 @@ export class SRPAuthProvider extends BaseAuthProvider {
 
             if (hoursRemaining <= 0) {
                 status.warnings.push('Tokens have expired');
-                status.warnings.push('Re-run: ./bin/proton-auth -o sessions/auth-tokens.json');
+                status.warnings.push('Run: npm run auth and select login');
             } else if (hoursRemaining < 1) {
                 status.warnings.push(`Tokens expire in ${Math.round(hoursRemaining * 60)} minutes`);
                 status.valid = true;
@@ -167,7 +167,7 @@ export class SRPAuthProvider extends BaseAuthProvider {
         return status;
     }
 
-    // === SRP-specific helpers ===
+    // === Login-specific helpers ===
 
     /**
      * Load cached tokens, returning null on error instead of throwing.

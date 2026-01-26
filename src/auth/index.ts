@@ -4,7 +4,7 @@
 
 import { authConfig } from '../app/config.js';
 import { logger } from '../app/logger.js';
-import { SRPAuthProvider, BrowserAuthProvider, RcloneAuthProvider } from './providers/index.js';
+import { LoginAuthProvider, BrowserAuthProvider, RcloneAuthProvider } from './providers/index.js';
 import type { AuthProvider, AuthMethod, AuthProviderStatus, StoredTokens } from './types.js';
 
 // Re-export types
@@ -12,7 +12,7 @@ export type { AuthProvider, AuthMethod, AuthProviderStatus, StoredTokens };
 export type { ProtonApi, CachedUserKey, CachedMasterKey, PersistedSessionData } from './types.js';
 
 // Re-export providers for direct use if needed
-export { SRPAuthProvider, BrowserAuthProvider, RcloneAuthProvider };
+export { LoginAuthProvider, BrowserAuthProvider, RcloneAuthProvider };
 
 // Re-export API factory
 export { createProtonApi } from './api-factory.js';
@@ -35,7 +35,7 @@ export type { ExtractionOptions, ExtractionResult } from './browser/authenticate
 
 // Re-export extraction utilities (for scripts)
 export { parseRcloneSection } from './rclone/index.js';
-export { runProtonAuth } from './go-proton-api/proton-auth-cli.js';
+export { runProtonAuth } from './login/proton-auth-cli.js';
 
 /**
  * Create an auth provider based on current configuration
@@ -55,8 +55,8 @@ export async function createAuthProvider(): Promise<AuthProvider> {
     let provider: AuthProvider;
 
     switch (method) {
-        case 'srp':
-            provider = new SRPAuthProvider();
+        case 'login':
+            provider = new LoginAuthProvider();
             break;
         case 'rclone':
             provider = new RcloneAuthProvider();

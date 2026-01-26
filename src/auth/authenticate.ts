@@ -23,16 +23,16 @@ import { authConfig, authMethodSchema, getPersistenceConfig } from '../app/confi
 import { resolveProjectPath } from '../app/paths.js';
 import { runBrowserAuthentication } from './browser/authenticate.js';
 import { runRcloneAuthentication } from './rclone/authenticate.js';
-import { runSrpAuthentication } from './go-proton-api/authenticate.js';
+import { runLoginAuthentication } from './login/authenticate.js';
 import { BrowserAuthProvider } from './providers/browser.js';
 import { RcloneAuthProvider } from './providers/rclone.js';
-import { SRPAuthProvider } from './providers/srp.js';
-import { printStatus } from './status.js';
+import { LoginAuthProvider } from './providers/login.js';
+import { printStatus, printSummary } from './status.js';
 import { updateAuthConfig } from './update-config.js';
 import type { AuthMethod, AuthProvider } from './types.js';
 
-const numToMethod: Record<string, AuthMethod> = { '1': 'browser', '2': 'srp', '3': 'rclone' };
-const methodToNum: Record<AuthMethod, string> = { browser: '1', srp: '2', rclone: '3' };
+const numToMethod: Record<string, AuthMethod> = { '1': 'browser', '2': 'login', '3': 'rclone' };
+const methodToNum: Record<AuthMethod, string> = { browser: '1', login: '2', rclone: '3' };
 
 /**
  * Prompt user to select authentication method
@@ -42,7 +42,7 @@ async function promptForMethod(defaultMethod: AuthMethod): Promise<AuthMethod> {
 
     console.log('Select authentication method:');
     console.log('  1. browser - Extract from logged-in browser session');
-    console.log('  2. srp     - Direct SRP login (requires go binary)');
+    console.log('  2. login   - Enter Proton credentials (requires go binary)');
     console.log('  3. rclone  - Paste rclone config section');
     console.log('');
 
@@ -109,8 +109,8 @@ async function main(): Promise<void> {
             case 'rclone':
                 await runRcloneAuthentication();
                 break;
-            case 'srp':
-                await runSrpAuthentication();
+            case 'login':
+                await runLoginAuthentication();
                 break;
             default:
                 throw new Error(`Unknown auth method: ${method}`);
@@ -128,11 +128,10 @@ async function main(): Promise<void> {
 
         // Show status after extraction
         // Create provider directly based on selected method (not from config, which hasn't reloaded)
-        console.log('\n--- Auth Status ---');
         let provider: AuthProvider;
         switch (method) {
-            case 'srp':
-                provider = new SRPAuthProvider();
+            case 'login':
+                provider = new LoginAuthProvider();
                 break;
             case 'rclone':
                 provider = new RcloneAuthProvider();
@@ -144,6 +143,7 @@ async function main(): Promise<void> {
         await provider.initialize();
         const status = provider.getStatus();
         printStatus(status);
+        printSummary(status, provider.supportsPersistence());
 
         console.log('\nYou can now run: npm run server or npm run cli');
         process.exit(0);
