@@ -23,6 +23,7 @@ import type {
     Turn,
 } from './types.js';
 import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
+import { getCommandsConfig } from '../app/config.js';
 
 export interface LumoClientOptions {
     enableExternalTools?: boolean;
@@ -179,13 +180,19 @@ export class LumoClient {
         } `);
 
         // NOTE: commands and command results will be present in turns
-        if(turn.content && isCommand(turn.content)){
-            const result = await executeCommand(turn.content, commandContext);
-            logger.info(`Command received: ${turn.content}, response: ${result}`);
+        if (turn.content && isCommand(turn.content)) {
+            const commandsConfig = getCommandsConfig();
+            if (commandsConfig.enabled) {
+                const result = await executeCommand(turn.content, commandContext);
+                logger.info(`Command received: ${turn.content}, response: ${result}`);
 
-            if(onChunk)
-                onChunk(result);
-            return { response: result };
+                if (onChunk)
+                    onChunk(result);
+                return { response: result };
+            } else {
+                logger.debug({ command: turn.content }, 'Command ignored (commands.enabled=false)');
+                // Fall through - treat as regular message, send to Lumo
+            }
         }
 
         const tools: ToolName[] = enableExternalTools

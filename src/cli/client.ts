@@ -11,7 +11,7 @@
 import * as readline from 'readline';
 import { randomUUID } from 'crypto';
 import { logger } from '../app/logger.js';
-import { getInstructionsConfig, getToolsConfig } from '../app/config.js';
+import { getInstructionsConfig, getToolsConfig, getCommandsConfig } from '../app/config.js';
 import { isCommand, executeCommand, type CommandContext } from '../app/commands.js';
 import type { AppContext } from '../app/index.js';
 import type { Turn } from '../lumo-client/index.js';
@@ -120,6 +120,7 @@ export class CLIClient {
 
   private async interactiveMode(): Promise<void> {
     const store = this.app.getConversationStore();
+    const commandsConfig = getCommandsConfig();
 
     const rl = readline.createInterface({
       input: process.stdin,
@@ -138,7 +139,8 @@ export class CLIClient {
     // Welcome message
     process.stdout.write('\n');
     process.stdout.write('Welcome to Lumo Bridge CLI\n');
-    process.stdout.write('Type /help for commands, /quit to exit.\n');
+    if(commandsConfig.enabled)
+      process.stdout.write('Type /help for commands, /quit to exit.\n');
     process.stdout.write('\n');
 
     while (true) {
@@ -150,19 +152,19 @@ export class CLIClient {
 
       // Handle commands (e.g., /save, /sync, /deleteallspaces, /title)
       if (isCommand(input)) {
-        const commandContext: CommandContext = {
-          syncInitialized: this.app.isSyncInitialized(),
-          conversationId: this.conversationId,
-          authManager: this.app.getAuthManager(),
-        };
-        try {
+        if (commandsConfig.enabled) {
+          const commandContext: CommandContext = {
+            syncInitialized: this.app.isSyncInitialized(),
+            conversationId: this.conversationId,
+            authManager: this.app.getAuthManager(),
+          };
           const result = await executeCommand(input, commandContext);
           process.stdout.write(result + '\n\n');
-        } catch (error) {
-          // Unknown command - show help
-          process.stdout.write(`Unknown command. Available: /save, /title, /quit\n\n`);
+          continue;
+        } else {
+          logger.debug({ input }, 'Command ignored (commands.enabled=false)');
+          // Fall through to treat as regular message
         }
-        continue;
       }
 
       if (!input.trim()) {
@@ -285,8 +287,8 @@ export class CLIClient {
 
     rl.close();
 
-    // Sync on exit if available
-    if (this.app.isSyncInitialized()) {
+    // Sync on exit if available and commands enabled
+    if (this.app.isSyncInitialized() && getCommandsConfig().enabled) {
       process.stdout.write('Syncing conversations before exit...\n');
       const commandContext: CommandContext = { syncInitialized: true };
       try {

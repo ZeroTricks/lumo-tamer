@@ -65,6 +65,12 @@ tools:
   # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
   enableWebSearch: true
 
+# Shared Commands Configuration (can be overridden in server/cli sections)
+commands:
+  # Enable slash commands (/save, /help, /logout, etc.)
+  # When disabled, commands are ignored and treated as regular messages.
+  enabled: true
+
 # Shared Instructions configuration (can be overridden in server/cli sections)
 instructions:
   # Default instructions when no system/developer message provided
