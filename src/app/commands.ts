@@ -4,6 +4,7 @@
  */
 
 import { logger } from './logger.js';
+import { getCommandsConfig } from './config.js';
 import { getSyncService, getConversationStore, getAutoSyncService } from '../conversations/index.js';
 import type { AuthManager } from '../auth/index.js';
 
@@ -37,6 +38,12 @@ export async function executeCommand(
   command: string,
   context?: CommandContext
 ): Promise<string> {
+    const commandsConfig = getCommandsConfig();
+    if (!commandsConfig.enabled) {
+        logger.debug({ command }, 'Command ignored (commands.enabled=false)');
+        return 'Commands are disabled.';
+    }
+
     const commandText = command.startsWith('/')
       ? command.slice(1).trim()
       : command.trim();
@@ -82,7 +89,7 @@ export async function executeCommand(
 
       default:
         logger.warn(`Unknown command: /${commandName}`);
-        throw new Error(`Unknown command: /${commandName}`);
+        return `Unknown command: /${commandName}\n\n${getHelpText()}`;
     }
 }
 
