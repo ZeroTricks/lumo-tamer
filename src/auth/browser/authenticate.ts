@@ -633,7 +633,7 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
         // The REFRESH-{uid} cookie contains the refresh token in JSON format
         // Cookie is set on account.proton.me with path /api/auth/refresh
         const allRefreshCookies = relevantCookies.filter(c => c.name.startsWith('REFRESH-'));
-        logger.debug({
+        logger.trace({
             count: allRefreshCookies.length,
             cookies: allRefreshCookies.map(c => ({ name: c.name, domain: c.domain }))
         }, 'Found REFRESH cookies');

@@ -38,6 +38,19 @@ make logs       # Watch logs
 make prod-up    # Production mode
 ```
 
+**Run auth or CLI in Docker:**
+```bash
+# Interactive authentication
+docker compose run --rm -it app-dev npm run auth
+# Or use: make auth-docker
+
+# Run CLI with a prompt
+docker compose run --rm app-dev npm run cli -- "your prompt"
+
+# Override default command for production image
+docker run -it --rm -v ./sessions:/app/sessions lumo-bridge npm run auth
+```
+
 Browser GUI: http://localhost:3001 (noVNC)
 
 See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for all commands.

@@ -13,7 +13,8 @@
     "server": "node dist/server.js",
     "cli": "node dist/cli.js",
     "clean": "rm -rf dist",
-    "auth": "tsx src/auth/authenticate.ts",
+    "dev:auth": "tsx src/auth/authenticate.ts",
+    "auth": "node dist/auth/authenticate.js",
     "auth-status": "tsx src/auth/status.ts",
     "sync-upstream": "./scripts/sync-upstream.sh"
   },

@@ -67,7 +67,7 @@ const authAutoRefreshConfigSchema = z.object({
 }).prefault({});
 
 const authBrowserConfigSchema = z.object({
-  cdpEndpoint: z.string().optional(),
+  cdpEndpoint: z.string().default('http://localhost:9222'),
 }).optional();
 
 const authLoginConfigSchema = z.object({

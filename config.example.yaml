@@ -14,7 +14,9 @@ auth:
   # Browser-specific config (only used when method: browser)
   browser:
     # Chrome DevTools Protocol endpoint for remote browser
-    cdpEndpoint: "http://browser-dev:9223"
+    cdpEndpoint: "http://localhost:9222"
+    # use this if you're running the browser docker image:
+    # cdpEndpoint: "http://browser:9223"
   # Login-specific config (only used when method: login)
   # All fields have defaults - override only if needed
   # login:
