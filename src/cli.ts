@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Install console shim early, before importing upstream modules
 import { installConsoleShim } from './proton-shims/console.js';
 installConsoleShim();
