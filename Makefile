@@ -33,7 +33,7 @@ docker-auth: ## Run authentication (interactive)
 	docker compose run --rm -it app npm run auth
 
 docker-server: ## Run server
-	docker compose run app npm run server
+	docker compose up app
 
 docker-cli: ## Run cli
 	docker compose run app npm run cli
