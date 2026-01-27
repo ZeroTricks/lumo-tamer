@@ -174,10 +174,10 @@ async function handleStreamingRequest(
   res.setHeader('Connection', 'keep-alive');
 
   // Determine if external tools (web_search, etc.) should be enabled
-  const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
+  const enableExternalTools = toolsConfig.enableWebSearch;
 
-  // Check if request has custom tools (legacy mode)
-  const hasCustomTools = request.tools && request.tools.length > 0;
+  // Check if request has custom tools AND tools are enabled
+  const hasCustomTools = toolsConfig.enabled && request.tools && request.tools.length > 0;
 
   await deps.queue.add(async () => {
     const id = `chatcmpl-${randomUUID()}`;
@@ -357,10 +357,10 @@ async function handleNonStreamingRequest(
   conversationId: ConversationId
 ): Promise<void> {
   // Determine if external tools (web_search, etc.) should be enabled
-  const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
+  const enableExternalTools = toolsConfig.enableWebSearch;
 
-  // Check if request has custom tools (legacy mode)
-  const hasCustomTools = request.tools && request.tools.length > 0;
+  // Check if request has custom tools AND tools are enabled
+  const hasCustomTools = toolsConfig.enabled && request.tools && request.tools.length > 0;
 
   // Build command context for /save and other commands
   const commandContext: CommandContext = {

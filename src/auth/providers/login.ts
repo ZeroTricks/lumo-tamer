@@ -21,9 +21,6 @@ export class LoginAuthProvider extends BaseAuthProvider {
 
     constructor() {
         super(resolveProjectPath(authConfig.tokenPath));
-        if (!authConfig.login?.binaryPath) {
-            throw new Error('auth.login.binaryPath is required for login authentication');
-        }
         this.binaryPath = resolveProjectPath(authConfig.login.binaryPath);
     }
 

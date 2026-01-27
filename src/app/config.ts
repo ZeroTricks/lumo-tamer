@@ -12,7 +12,7 @@ const logConfigSchema = z.object({
   level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   target: z.enum(['stdout', 'file']).default('stdout'),
   filePath: z.string().default('logs/lumo-bridge.log'),
-}).optional();
+}).prefault({});
 
 const protonConfigSchema = z.object({
   appVersion: z.string().min(1, 'proton.appVersion is required'),
@@ -20,13 +20,14 @@ const protonConfigSchema = z.object({
 
 const instructionsConfigSchema = z.object({
   default: z.string().optional(),
-  append: z.boolean().optional().default(false),
+  append: z.boolean().default(false),
   forTools: z.string().optional(),
-}).optional();
+}).prefault({});
 
 const toolsConfigSchema = z.object({
-  enableWebSearch: z.boolean().optional().default(false),
-}).optional();
+  enabled: z.boolean().default(false),
+  enableWebSearch: z.boolean().default(false),
+}).prefault({});
 
 const syncConfigSchema = z.object({
   enabled: z.boolean().default(false),
@@ -34,17 +35,13 @@ const syncConfigSchema = z.object({
   spaceName: z.string().min(1).default('lumo-bridge'),
   includeSystemMessages: z.boolean().default(false),
   autoSync: z.boolean().default(false),
-}).optional();
+}).prefault({});
 
-const conversationsDefaults = {
-  maxInMemory: 100,
-  deriveIdFromFirstMessage: false
-};
 const conversationsConfigSchema = z.object({
-  maxInMemory: z.number().default(conversationsDefaults.maxInMemory),
-  deriveIdFromFirstMessage: z.boolean().default(conversationsDefaults.deriveIdFromFirstMessage),
+  maxInMemory: z.number().default(100),
+  deriveIdFromFirstMessage: z.boolean().default(false),
   sync: syncConfigSchema,
-}).default(conversationsDefaults);
+}).prefault({});
 
 const authAutoRefreshConfigSchema = z.object({
   enabled: z.boolean().default(true),
@@ -58,11 +55,11 @@ const authBrowserConfigSchema = z.object({
 }).optional();
 
 const authLoginConfigSchema = z.object({
-  binaryPath: z.string(),
+  binaryPath: z.string().default('./bin/proton-auth'),
   // Headers to avoid CAPTCHA - only used by proton-auth binary
-  appVersion: z.string().optional(),
-  userAgent: z.string().optional(),
-}).optional();
+  appVersion: z.string().default('macos-drive@1.0.0-alpha.1+rclone'),
+  userAgent: z.string().default('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'),
+}).prefault({});
 
 export const authMethodSchema = z.enum(['login', 'browser', 'rclone']);
 

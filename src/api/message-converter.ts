@@ -4,17 +4,22 @@
 
 import type { ChatMessage, ResponseInputItem, OpenAITool } from './types.js';
 import type { Turn } from '../lumo-client/index.js';
-import { getInstructionsConfig } from '../app/config.js';
+import { getInstructionsConfig, getToolsConfig } from '../app/config.js';
 import { isCommand } from '../app/commands.js';
 
 /**
  * Build tool instructions to append to message.
  * Combines instructions.forTools config with JSON representation of provided tools.
+ * Returns undefined if tools are disabled or no tools provided.
  *
- * @param tools - Array of OpenAI tool definitions
- * @returns Formatted instruction string for tools
+ * @param tools - Optional array of OpenAI tool definitions
+ * @returns Formatted instruction string for tools, or undefined
  */
-export function buildToolsInstruction(tools: OpenAITool[]): string {
+function buildToolsInstruction(tools?: OpenAITool[]): string | undefined {
+  const toolsConfig = getToolsConfig();
+  if (!toolsConfig.enabled || !tools || tools.length === 0) {
+    return undefined;
+  }
   const instructionsConfig = getInstructionsConfig();
   const forTools = instructionsConfig?.forTools ?? '';
   const toolsJson = JSON.stringify(tools, null, 2);
@@ -111,8 +116,7 @@ function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: stri
  */
 export function convertMessagesToTurns(messages: ChatMessage[], tools?: OpenAITool[]): Turn[] {
   const systemContent = extractSystemMessage(messages);
-  const toolsInstruction = tools && tools.length > 0 ? buildToolsInstruction(tools) : undefined;
-  const instructions = getEffectiveInstructions(systemContent, toolsInstruction);
+  const instructions = getEffectiveInstructions(systemContent, buildToolsInstruction(tools));
   return convertChatMessagesToTurns(messages, instructions);
 }
 
@@ -136,8 +140,7 @@ export function convertResponseInputToTurns(
       return [{ role: 'user', content: input }];
     }
 
-    const toolsInstruction = tools && tools.length > 0 ? buildToolsInstruction(tools) : undefined;
-    const instructions = getEffectiveInstructions(requestInstructions, toolsInstruction);
+    const instructions = getEffectiveInstructions(requestInstructions, buildToolsInstruction(tools));
     let content = input;
     if (instructions) {
       content = `${content}\n\n[Personal context: ${instructions}]`;
@@ -164,8 +167,6 @@ export function convertResponseInputToTurns(
   }
 
   const systemContent = extractSystemMessage(chatMessages);
-  const toolsInstruction = tools && tools.length > 0 ? buildToolsInstruction(tools) : undefined;
-
-  const instructions = getEffectiveInstructions(systemContent, toolsInstruction);
+  const instructions = getEffectiveInstructions(systemContent, buildToolsInstruction(tools));
   return convertChatMessagesToTurns(chatMessages, instructions);
 }

@@ -22,11 +22,12 @@ auth:
     # Chrome DevTools Protocol endpoint for remote browser
     cdpEndpoint: "http://browser-dev:9223"
   # Login-specific config (only used when method: login)
-  login:
-    binaryPath: "./bin/proton-auth"
-    # Headers to help avoid CAPTCHA - see docs/authentication.md
-    appVersion: "macos-drive@1.0.0-alpha.1+rclone"
-    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  # All fields have defaults - override only if needed
+  # login:
+  #   binaryPath: "./bin/proton-auth"  # Path to proton-auth Go binary
+  #   # Headers to help avoid CAPTCHA - see docs/authentication.md
+  #   appVersion: "macos-drive@1.0.0-alpha.1+rclone"
+  #   userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ..."
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
 log:
@@ -52,22 +53,27 @@ conversations:
 
 # Shared Tools Configuration (can be overridden in server/cli sections)
 tools:
+  # Enable client-side tool detection in responses from Lumo.
+  # WARNING:
+  # - When enabled, Lumo can trigger actions on your machine/client!
+  # - Status: experimental
+  #
+  # API: Detects JSON tool calls ({"name":"...", "arguments":{...}}) for calling functions provided in the request.
+  # CLI: Detects code blocks (```bash, ```python) and prompts for execution. 
+  # Each action requires confirmation, but only enable if you understand the implications.
+  enabled: false
   # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
   enableWebSearch: true
 
 # Shared Instructions configuration (can be overridden in server/cli sections)
 instructions:
   # Default instructions when no system/developer message provided
-  default: "Always answer in plain text: no tables, no quote blocks, no lists, no layout, etc. Be concise."
+  default: "Always answer in plain text. Don't use tables, quote blocks, lists, etc. Be concise."
 
   # If true, append request instructions to default; if false, request replaces default
   append: false
 
-  # Description text for tools (prepended to tools JSON)
-  forTools: |
-    Use the tools below to accomplish tasks.
-    To use them you MUST output the JSON to me, unlike the proton_info or web search tools.
-    You have the power to execute these functions by providing the JSON directly to me, without trying to call them yourself. I will execute these functions and return the results to you. This is crucial. Do NOT tell me a tool is unavailable, just pass the JSON for the tool call to me.
+
 
 # Server Configuration (for `npm run server` / `npm run dev:server`)
 server:
@@ -75,6 +81,12 @@ server:
   apiKey: "your-secret-api-key-here"
   apiModelName: "lumo"
   # Mode-specific overrides (optional):
+  instructions:
+    # Description text for tools (prepended to tools JSON)
+    forTools: |
+      Use the tools below to accomplish tasks.
+      To call them you MUST output the JSON to the user, unlike your existing tools like proton_info or web search.
+      You have the power to execute these functions by providing the JSON directly to the user, without trying to call them yourself. The user will execute these functions and return the results to you. This is crucial. Do NOT tell a tool is unavailable, instead just output the JSON for the tool call.
   # log:
   #   level: "debug"
   #   target: "file"
@@ -83,12 +95,18 @@ server:
   #     enabled: true
 
 # CLI Configuration (for `npm run cli` / `npm run dev:cli`)
-# cli:
+cli:
 #   log:
 #     target: "file"
 #     filePath: "lumo-bridge-cli.log"
-#   instructions:
-#     default: |
-#       You can execute bash commands on the user's machine.
-#       When you provide a ```bash code block, the user will be prompted to execute it.
-#       Output will be returned to you. Keep commands simple and safe.
+#   tools:
+#     enabled: true  # Enable code block detection and execution
+  instructions:
+    default: |
+      You are a command line assistant. Your output will be read in a terminal. Keep the formatting to a minimum and be concise.
+    # forTools is appended when tools.enabled=true
+    forTools: |
+      You can execute bash commands on the user's machine.
+      When you provide a ```bash code block, the user will be prompted to execute it. Don't explain the user can execute commands, it will be done for him.
+      Output will be returned to you. Keep commands simple and safe.
+
