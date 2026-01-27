@@ -33,7 +33,7 @@ lumo-bridge consists of 3 parts: API, bridge, Lumo WebClient
     - /responses and /chat/completions endpoints
     - API and CLI calls
   - Use src/logger.ts for logging
-  - Use config.ts, config.taml and config.example.yaml to add configuration parameters
+  - Use config.ts, config.yaml and config.example.yaml to add configuration parameters. Put defaults in config.ts, and keep config.example.yaml in sync manually.
   - Ignore todos within code unless you need to rewrite code anyway, or unless specifically mentioned.
 
   ## Documentation guidelines:
