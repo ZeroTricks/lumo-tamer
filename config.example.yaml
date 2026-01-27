@@ -54,11 +54,19 @@ tools:
   # - Status: experimental
   #
   # API: Detects JSON tool calls ({"name":"...", "arguments":{...}}) for calling functions provided in the request.
-  # CLI: Detects code blocks (```bash, ```python) and prompts for execution. 
+  # CLI: Detects code blocks (```bash, ```python) and prompts for execution.
   # Each action requires confirmation, but only enable if you understand the implications.
   enabled: false
   # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
   enableWebSearch: true
+  # Executors for code block execution (CLI only)
+  # Maps language tag → [command, ...args]. Code is appended as last arg.
+  # Default includes: bash, sh, zsh, powershell, ps1, cmd, python, python3, node, javascript, js, ruby, perl
+  # To actually make Lumo use these, specify them in (cli.)instructions.forTools
+  # Override to restrict or extend:
+  # executors:
+  #   bash: ["bash", "-c"]
+  #   python: ["python3", "-c"]
 
 # Shared Commands Configuration (can be overridden in server/cli sections)
 commands:
@@ -107,7 +115,7 @@ cli:
       You are a command line assistant. Your output will be read in a terminal. Keep the formatting to a minimum and be concise.
     # forTools is appended when tools.enabled=true
     forTools: |
-      You can execute bash commands on the user's machine.
-      When you provide a ```bash code block, the user will be prompted to execute it. Don't explain the user can execute commands, it will be done for him.
+      You can execute bash and python commands on the user's machine.
+      When you provide a code block like ```bash or ```python, the user will be prompted to execute it. Don't explain the user can execute commands, it will be handled automatically.
       Output will be returned to you. Keep commands simple and safe.
 

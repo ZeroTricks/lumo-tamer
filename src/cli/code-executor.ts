@@ -7,6 +7,7 @@
 import { spawn } from 'child_process';
 import type { Interface as ReadlineInterface } from 'readline';
 import type { CodeBlock } from './code-block-detector.js';
+import { getToolsConfig } from '../app/config.js';
 
 /**
  * Ask user yes/no confirmation using an existing readline interface
@@ -26,10 +27,12 @@ export interface ExecutionResult {
 }
 
 /**
- * Check if a code block language is executable
+ * Check if a code block language is executable (has a shell mapping in config)
  */
 export function isExecutable(language: string | null): boolean {
-  return language === 'bash' || language === 'sh' || language === null;
+  if (!language) return false;
+  const { executors } = getToolsConfig();
+  return language in executors;
 }
 
 /**
@@ -39,12 +42,17 @@ export async function executeBlock(
   block: CodeBlock,
   onOutput: (chunk: string) => void
 ): Promise<ExecutionResult> {
-  if (!isExecutable(block.language)) {
+  const { executors } = getToolsConfig();
+  const executor = block.language ? executors[block.language] : undefined;
+
+  if (!executor) {
     return { success: false, output: `Unsupported language: ${block.language}`, exitCode: null };
   }
 
+  const [cmd, ...args] = executor;
+
   return new Promise((resolve) => {
-    const proc = spawn('bash', ['-c', block.content], {
+    const proc = spawn(cmd, [...args, block.content], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 

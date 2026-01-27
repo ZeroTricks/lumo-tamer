@@ -21,6 +21,25 @@ const instructionsConfigSchema = z.object({
 const toolsConfigSchema = z.object({
   enabled: z.boolean().default(false),
   enableWebSearch: z.boolean().default(false),
+  // Maps code block language tag → [command, ...args]. Code is appended as last arg.
+  executors: z.record(z.string(), z.array(z.string())).default({
+    // Unix shells
+    bash: ['bash', '-c'],
+    sh: ['sh', '-c'],
+    zsh: ['zsh', '-c'],
+    // Windows shells
+    powershell: ['powershell', '-Command'],
+    ps1: ['powershell', '-Command'],
+    cmd: ['cmd', '/c'],
+    // Scripting languages
+    python: ['python3', '-c'],
+    python3: ['python3', '-c'],
+    node: ['node', '-e'],
+    javascript: ['node', '-e'],
+    js: ['node', '-e'],
+    ruby: ['ruby', '-e'],
+    perl: ['perl', '-e'],
+  }),
 }).prefault({});
 
 const commandsConfigSchema = z.object({
