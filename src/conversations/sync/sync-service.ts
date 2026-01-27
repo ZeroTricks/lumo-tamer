@@ -184,10 +184,7 @@ export class SyncService {
                     this.dataEncryptionKey = dataEncryptionKey;
                     this.idMap.spaces.set(space.id, space.remoteId);
 
-                    logger.info({
-                        spaceId: space.id,
-                        remoteId: space.remoteId,
-                    }, 'Using configured space by UUID');
+                    logger.info(`Using space by id ${space.id}: ${space.remoteId}`);
 
                     await this.loadExistingConversations();
                     return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
@@ -202,7 +199,7 @@ export class SyncService {
         }
 
         // First pass: look for a space with matching project name
-        logger.info({ totalSpaces: existingSpaces.length, lookingFor: this.spaceName }, 'Starting first pass - looking for project name match');
+        logger.info(`Looking up space by name "${this.spaceName}" (among ${existingSpaces.length} spaces)`);
         for (const space of existingSpaces) {
             if (!space.id) continue;
 
@@ -215,7 +212,7 @@ export class SyncService {
                     spaceTag: space.id,
                     hasEncrypted: !!encryptedData,
                     encryptedLength: encryptedData?.length ?? 0,
-                }, 'First pass: checking space');
+                }, 'Fetching space');
 
                 // Try to decrypt and check project name
                 if (encryptedData) {

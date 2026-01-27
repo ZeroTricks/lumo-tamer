@@ -23,7 +23,7 @@ import type {
     Turn,
 } from './types.js';
 import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
-import { getCommandsConfig } from '../app/config.js';
+import { getCommandsConfig, getLogConfig } from '../app/config.js';
 
 export interface LumoClientOptions {
     enableExternalTools?: boolean;
@@ -174,10 +174,14 @@ export class LumoClient {
         } = options;
 
         const turn = turns[turns.length - 1];
-        logger.info(`[${turn.role}] ${turn.content && turn.content.length > 200
-            ? turn.content.substring(0, 200) + '...'
-            : turn.content
-        } `);
+        const logConfig = getLogConfig();
+
+        if (logConfig.messageContent) {
+            logger.info(`[${turn.role}] ${turn.content && turn.content.length > 200
+                ? turn.content.substring(0, 200) + '...'
+                : turn.content
+            } `);
+        }
 
         // NOTE: commands and command results will be present in turns
         if (turn.content && isCommand(turn.content)) {
@@ -248,9 +252,11 @@ export class LumoClient {
             ? result.response.substring(0, 200) + '...'
             : result.response;
 
-        logger.info(`[Lumo] ${responsePreview}`);
-        if (result.title) {
-            logger.debug({ title: result.title }, 'Generated title');
+        if (logConfig.messageContent) {
+            logger.info(`[Lumo] ${responsePreview}`);
+            if (result.title) {
+                logger.debug({ title: result.title }, 'Generated title');
+            }
         }
 
         return result;

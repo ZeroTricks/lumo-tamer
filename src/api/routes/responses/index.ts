@@ -5,11 +5,9 @@ import { logger } from '../../../app/logger.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './handlers.js';
 import { createEmptyResponse } from './response-factory.js';
 import { convertResponseInputToTurns } from '../../message-converter.js';
-import { getConversationsConfig } from '../../../app/config.js';
+import { getConversationsConfig, getLogConfig } from '../../../app/config.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/index.js';
-
-const conversationsConfig = getConversationsConfig();
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session
 // This prevents 409 conflicts with deleted conversations from previous sessions
@@ -27,7 +25,11 @@ function generateDeterministicConversationId(firstUserMessage: string): Conversa
   const hash = createHash('sha256').update(`lumo-bridge:${SESSION_ID}:${firstUserMessage}`).digest('hex');
   // Format as UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
   // Use version 4 format but with deterministic bytes
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+  const uuid =  `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+
+  logger.debug(`Generated deterministic conversation ID ${uuid} from first message${getLogConfig().messageContent ? `(${firstUserMessage?.slice(0, 50)})` : ''}`);
+
+  return uuid;
 }
 
 /**
@@ -63,7 +65,7 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       } else if (request.previous_response_id) {
         // Use previous_response_id for stateless continuation
         conversationId = request.previous_response_id;
-      } else if (conversationsConfig?.deriveIdFromFirstMessage) {
+      } else if (getConversationsConfig()?.deriveIdFromFirstMessage) {
         // WORKAROUND for clients that don't provide conversation (e.g., Home Assistant).
         // Generate deterministic ID from first USER message so conversations with same start get same ID.
         // WARNING: This may incorrectly merge unrelated conversations with the same opening message!
@@ -77,7 +79,6 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
           ? generateDeterministicConversationId(firstUserMessage)
           : randomUUID();
 
-        logger.debug({ conversationId, firstUserMessage: firstUserMessage?.slice(0, 50) }, 'Generated deterministic conversation ID from first message');
       } else {
         // Default: generate random UUID for each new conversation
         conversationId = randomUUID();

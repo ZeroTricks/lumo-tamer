@@ -60,10 +60,7 @@ export function createFetchAdapter(protonApi: ProtonApi): typeof globalThis.fetc
             }
         }
 
-        logger.debug(
-            { url: apiUrl, method, hasBody: !!data },
-            'Fetch adapter: routing request through Api'
-        );
+        logger.debug(`API: ${apiUrl}`);
 
         try {
             const result = await protonApi({
