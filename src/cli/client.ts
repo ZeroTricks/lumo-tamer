@@ -17,7 +17,18 @@ import type { AppContext } from '../app/index.js';
 import type { Turn } from '../lumo-client/index.js';
 import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
 import { CodeBlockDetector, type CodeBlock } from './code-block-detector.js';
-import { executeBlock, isExecutable, confirm } from './code-executor.js';
+import { executeBlock, isExecutable, confirm, type ExecutionResult } from './code-executor.js';
+
+interface LumoResponse {
+  response: string;
+  blocks: CodeBlock[];
+  title?: string;
+}
+
+interface BlockResult {
+  block: CodeBlock;
+  result: ExecutionResult;
+}
 
 /**
  * Build effective instructions for CLI.
@@ -71,9 +82,11 @@ function clearBusyIndicator(): void {
 
 export class CLIClient {
   private conversationId: string;
+  private store;
 
   constructor(private app: AppContext) {
     this.conversationId = randomUUID();
+    this.store = app.getConversationStore();
   }
 
   async run(): Promise<void> {
@@ -84,6 +97,103 @@ export class CLIClient {
     } else {
       await this.interactiveMode();
     }
+  }
+
+  /**
+   * Send current conversation to Lumo and get response with detected code blocks.
+   * Handles streaming, detection, and display.
+   */
+  private async sendToLumo(options: { requestTitle?: boolean } = {}): Promise<LumoResponse> {
+    const toolsConfig = getToolsConfig();
+    const detector = toolsConfig.enabled ? new CodeBlockDetector() : null;
+    const blocks: CodeBlock[] = [];
+    let chunkCount = 0;
+
+    process.stdout.write('Lumo: ' + BUSY_INDICATOR);
+
+    const turns = injectInstructions(this.store.toTurns(this.conversationId));
+    const result = await this.app.getLumoClient().chatWithHistory(
+      turns,
+      (chunk) => {
+        if (chunkCount === 0) clearBusyIndicator();
+        if (detector) {
+          const { text, blocks: newBlocks } = detector.processChunk(chunk);
+          process.stdout.write(text);
+          blocks.push(...newBlocks);
+        } else {
+          process.stdout.write(chunk);
+        }
+        chunkCount++;
+      },
+      { enableEncryption: true, enableExternalTools: false, requestTitle: options.requestTitle }
+    );
+
+    // Finalize detection
+    if (detector) {
+      const final = detector.finalize();
+      if (chunkCount === 0) clearBusyIndicator();
+      process.stdout.write(final.text);
+      blocks.push(...final.blocks);
+    } else {
+      if (chunkCount === 0) clearBusyIndicator();
+    }
+    process.stdout.write('\n\n');
+
+    // Handle title
+    if (result.title) {
+      const processedTitle = postProcessTitle(result.title);
+      this.store.setTitle(this.conversationId, processedTitle);
+    }
+
+    return { response: result.response, blocks, title: result.title };
+  }
+
+  /**
+   * Execute code blocks with user confirmation.
+   * Returns results for blocks that were executed (not skipped).
+   */
+  private async executeBlocks(rl: readline.Interface, blocks: CodeBlock[]): Promise<BlockResult[]> {
+    const results: BlockResult[] = [];
+
+    for (const block of blocks) {
+      if (!isExecutable(block.language)) {
+        continue;
+      }
+
+      const lang = block.language || 'code';
+      process.stdout.write(`[Code block detected: ${lang}]\n`);
+      process.stdout.write('─'.repeat(40) + '\n');
+      process.stdout.write(block.content + '\n');
+      process.stdout.write('─'.repeat(40) + '\n');
+
+      if (await confirm(rl, 'Execute this code?')) {
+        process.stdout.write('[Executing...]\n\n');
+
+        const result = await executeBlock(block, (chunk) => {
+          process.stdout.write(chunk);
+        });
+
+        process.stdout.write(`\n[Exit code: ${result.exitCode}]\n\n`);
+        results.push({ block, result });
+      } else {
+        process.stdout.write('[Skipped]\n\n');
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Format execution results as a message to send back to Lumo.
+   */
+  private formatResultsMessage(results: BlockResult[]): string {
+    return results.map(({ block, result }) => {
+      const lang = block.language || 'code';
+      const status = result.success
+        ? `${lang} executed successfully (exit code 0)`
+        : `${lang} failed (exit code ${result.exitCode})`;
+      return `${status}:\n\`\`\`\n${result.output}\`\`\``;
+    }).join('\n\n');
   }
 
   private async singleQuery(query: string): Promise<void> {
@@ -119,7 +229,6 @@ export class CLIClient {
   }
 
   private async interactiveMode(): Promise<void> {
-    const store = this.app.getConversationStore();
     const commandsConfig = getCommandsConfig();
 
     const rl = readline.createInterface({
@@ -139,7 +248,7 @@ export class CLIClient {
     // Welcome message
     process.stdout.write('\n');
     process.stdout.write('Welcome to Lumo Bridge CLI\n');
-    if(commandsConfig.enabled)
+    if (commandsConfig.enabled)
       process.stdout.write('Type /help for commands, /quit to exit.\n');
     process.stdout.write('\n');
 
@@ -171,116 +280,35 @@ export class CLIClient {
         continue;
       }
 
-      // Append user message to conversation store
-      store.appendUserMessage(this.conversationId, input);
-
-      process.stdout.write('Lumo: ' + BUSY_INDICATOR);
-      let chunkCount = 0;
-
       try {
-        const turns = injectInstructions(store.toTurns(this.conversationId));
+        // Append user message and get response
+        this.store.appendUserMessage(this.conversationId, input);
 
         // Request title for new conversations (first message)
-        const existingConv = store.get(this.conversationId);
+        const existingConv = this.store.get(this.conversationId);
         const requestTitle = existingConv?.title === 'New Conversation';
 
-        // Code block detection during streaming (only if tools enabled)
-        const toolsConfig = getToolsConfig();
-        const detector = toolsConfig.enabled ? new CodeBlockDetector() : null;
-        const pendingBlocks: CodeBlock[] = [];
+        let { response, blocks } = await this.sendToLumo({ requestTitle });
+        this.store.appendAssistantResponse(this.conversationId, response);
 
-        const result = await this.app.getLumoClient().chatWithHistory(
-          turns,
-          (chunk) => {
-            if (chunkCount === 0) clearBusyIndicator();
-            if (detector) {
-              const { text, blocks } = detector.processChunk(chunk);
-              process.stdout.write(text);
-              pendingBlocks.push(...blocks);
-            } else {
-              process.stdout.write(chunk);
-            }
-            chunkCount++;
-          },
-          { enableEncryption: true, enableExternalTools: false, requestTitle }
-        );
+        // Execute blocks until none remain (or user skips all)
+        while (blocks.length > 0) {
+          const results = await this.executeBlocks(rl, blocks);
+          if (results.length === 0) break; // user skipped all
 
-        // Finalize detection and display remaining text
-        if (detector) {
-          const final = detector.finalize();
-          if (chunkCount === 0) clearBusyIndicator();
-          process.stdout.write(final.text);
-          pendingBlocks.push(...final.blocks);
-        } else {
-          if (chunkCount === 0) clearBusyIndicator();
-        }
-        process.stdout.write('\n\n');
+          // Send batch results back to Lumo
+          process.stdout.write('─── Sending results to Lumo ───\n\n');
+          const batchMessage = this.formatResultsMessage(results);
+          this.store.appendUserMessage(this.conversationId, batchMessage);
 
-        // Save generated title if present
-        if (result.title) {
-          const processedTitle = postProcessTitle(result.title);
-          store.setTitle(this.conversationId, processedTitle);
-        }
-
-        // Append assistant response to store
-        store.appendAssistantResponse(this.conversationId, result.response);
-
-        // Execute detected bash blocks with confirmation
-        for (const block of pendingBlocks) {
-          if (!isExecutable(block.language)) {
-            continue; // Skip non-bash blocks
-          }
-
-          const lang = block.language || 'shell';
-          process.stdout.write(`[Code block detected: ${lang}]\n`);
-          process.stdout.write('─'.repeat(40) + '\n');
-          process.stdout.write(block.content + '\n');
-          process.stdout.write('─'.repeat(40) + '\n');
-
-          if (await confirm(rl, 'Execute this code?')) {
-            process.stdout.write('[Executing...]\n\n');
-
-            const execResult = await executeBlock(block, (chunk) => {
-              process.stdout.write(chunk);
-            });
-
-            // Send result back to Lumo as follow-up
-            const resultMessage = execResult.success
-              ? `Command executed successfully (exit code 0):\n\`\`\`\n${execResult.output}\`\`\``
-              : `Command failed (exit code ${execResult.exitCode}):\n\`\`\`\n${execResult.output}\`\`\``;
-
-            store.appendUserMessage(this.conversationId, resultMessage);
-
-            process.stdout.write(`\n[Exit code: ${execResult.exitCode}]\n`);
-
-            // Get Lumo's reaction to the result
-            process.stdout.write('\nLumo: ' + BUSY_INDICATOR);
-            let followUpChunks = 0;
-
-            const followUpResult = await this.app.getLumoClient().chatWithHistory(
-              injectInstructions(store.toTurns(this.conversationId)),
-              (chunk) => {
-                if (followUpChunks === 0) clearBusyIndicator();
-                process.stdout.write(chunk);
-                followUpChunks++;
-              },
-              { enableEncryption: true, enableExternalTools: false }
-            );
-
-            if (followUpChunks === 0) clearBusyIndicator();
-            process.stdout.write('\n\n');
-            store.appendAssistantResponse(this.conversationId, followUpResult.response);
-          } else {
-            process.stdout.write('[Skipped]\n\n');
-          }
+          ({ response, blocks } = await this.sendToLumo());
+          this.store.appendAssistantResponse(this.conversationId, response);
         }
       } catch (error) {
         clearBusyIndicator();
         process.stdout.write('\n');
         logger.error({ error }, 'Request failed');
         this.handleError(error);
-        // Remove failed user message from store by starting a new conversation
-        // (ConversationStore doesn't have a pop method, so we just note the error)
       }
     }
 
