@@ -19,34 +19,34 @@ export class LoginAuthProvider extends BaseAuthProvider {
         super(resolveProjectPath(authConfig.tokenPath));
     }
 
-    async initialize(): Promise<void> {
-        // Load tokens from file (throws if missing)
-        const cached = this.loadTokensFromFile();
-
-        // Accept tokens without method field (created by Go binary) or with method: 'login'
-        const isLoginTokens = !cached.method || cached.method === 'login';
+    // Accept tokens without method field (created by Go binary) or with method: 'login'
+    protected override validateMethod(): void {
+        const isLoginTokens = !this.tokens?.method || this.tokens.method === 'login';
         if (!isLoginTokens) {
             throw new Error(
-                `Token file is not from login auth (method: ${cached.method}).\n` +
+                `Token file is not from login auth (method: ${this.tokens?.method}).\n` +
                 'Run: npm run auth and select login'
             );
         }
+        // Normalize: ensure method is set for consistency
+        if (this.tokens) {
+            this.tokens.method = 'login';
+        }
+    }
 
-        if (this.isExpired(cached)) {
+    protected override async onAfterLoad(): Promise<void> {
+        if (this.isExpired(this.tokens!)) {
             throw new Error(
                 'Login tokens have expired.\n' +
                 'Run: npm run auth and select login'
             );
         }
 
-        // Ensure method is set for consistency
-        this.tokens = { ...cached, method: 'login' };
         logger.info(
-            { expiresAt: cached.expiresAt },
+            { expiresAt: this.tokens!.expiresAt },
             'Loaded cached login auth tokens'
         );
 
-        // Fetch keys if not already cached
         await this.fetchAndCacheKeys();
     }
 

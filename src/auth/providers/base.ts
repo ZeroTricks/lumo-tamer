@@ -2,13 +2,17 @@
  * BaseAuthProvider - Abstract base class for all auth providers
  *
  * Provides common implementations for:
+ * - initialize() - Load tokens, validate method, call hooks
  * - Token getters (uid, accessToken, keyPassword, cached keys)
  * - API creation
  * - Token file I/O
  * - Token refresh (with customizable hook)
  *
- * Subclasses implement provider-specific:
- * - initialize() - Load/authenticate
+ * Subclasses customize via hooks:
+ * - validateMethod() - Override for custom method matching
+ * - onAfterLoad() - Override for post-load setup
+ *
+ * Subclasses implement:
  * - isValid() / isNearExpiry() - Validity checking
  * - getStatus() - Status reporting
  * - supportsPersistence() - Persistence capability
@@ -39,11 +43,45 @@ export abstract class BaseAuthProvider implements AuthProvider {
 
     // === Abstract methods (provider-specific) ===
 
-    abstract initialize(): Promise<void>;
     abstract isValid(): boolean;
     abstract isNearExpiry(): boolean;
     abstract getStatus(): AuthProviderStatus;
     abstract supportsPersistence(): boolean;
+
+    // === Initialize (common flow with hooks) ===
+
+    /**
+     * Initialize the provider by loading and validating tokens.
+     * Subclasses customize via validateMethod() and onAfterLoad() hooks.
+     */
+    async initialize(): Promise<void> {
+        this.tokens = this.loadTokensFromFile();
+        this.validateMethod();
+        this.validateTokens();
+        await this.onAfterLoad();
+    }
+
+    /**
+     * Validate that the loaded tokens match this provider's method.
+     * Override in subclass for custom matching (e.g., login accepts missing method).
+     * @throws Error if method doesn't match
+     */
+    protected validateMethod(): void {
+        if (this.tokens?.method !== this.method) {
+            throw new Error(
+                `Token file is not from ${this.method} auth (method: ${this.tokens?.method}).\n` +
+                'Run: npm run auth'
+            );
+        }
+    }
+
+    /**
+     * Hook called after tokens are loaded and validated.
+     * Override in subclass for additional setup (e.g., decrypt keyPassword).
+     */
+    protected async onAfterLoad(): Promise<void> {
+        // Default: no-op
+    }
 
     // === Concrete implementations (shared by all) ===
 
