@@ -6,7 +6,7 @@ services:
     ports:
       - "3003:3003"
     volumes:
-      - ./config.yaml:/app/config.yaml:ro
+      - ./config.yaml:/app/config.yaml
       - ./sessions:/app/sessions
     environment:
       - NODE_ENV=production
