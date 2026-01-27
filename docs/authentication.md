@@ -1,6 +1,6 @@
 # Authentication
 
-lumo-bridge supports three authentication methods. Run `npm run auth` to authenticate interactively.
+lumo-tamer supports three authentication methods. Run `npm run auth` to authenticate interactively.
 
 ## Quick Start
 

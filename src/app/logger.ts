@@ -3,14 +3,12 @@ import type { LogConfig } from './config.js';
 import { resolveProjectPath } from './paths.js';
 
 // Determine transport based on config
-function getTransport(config?: LogConfig): pino.TransportSingleOptions {
-  const target = config?.target ?? 'stdout';
-
-  if (target === 'file') {
+function getTransport(config: LogConfig): pino.TransportSingleOptions {
+  if (config.target === 'file') {
     return {
       target: 'pino/file',
       options: {
-        destination: resolveProjectPath(config?.filePath ?? 'lumo-bridge.log'),
+        destination: resolveProjectPath(config.filePath),
         mkdir: true,
       },
     };
@@ -28,31 +26,36 @@ function getTransport(config?: LogConfig): pino.TransportSingleOptions {
 }
 
 // Create logger instance with given config
-export function createLogger(config?: LogConfig): pino.Logger {
+export function createLogger(config: LogConfig): pino.Logger {
   return pino({
-    level: config?.level ?? 'info',
+    level: config.level,
     transport: getTransport(config),
   });
 }
 
-// Module-level logger instance, initialized lazily or via initLogger()
-let _logger: pino.Logger | null = null;
+// Module-level logger instance
+// Must be initialized via initLogger() before use
+let _logger: pino.Logger;
 
 // Initialize the global logger with mode-specific config
 // Must be called early in entry point, before other modules use logger
-export function initLogger(config?: LogConfig): void {
+export function initLogger(config: LogConfig): void {
   _logger = createLogger(config);
 }
 
 // Get the global logger instance
-// Falls back to default config if not initialized
-export const logger: pino.Logger = new Proxy({} as pino.Logger, {
+export function getLogger(): pino.Logger {
+  if (!_logger) {
+    throw new Error('Logger not initialized. Call initLogger() first.');
+  }
+  return _logger;
+}
+
+// Export logger as a getter for convenience
+// Will throw if accessed before initLogger()
+export const logger = new Proxy({} as pino.Logger, {
   get(_target, prop) {
-    if (!_logger) {
-      // Lazy init with default config if not explicitly initialized
-      _logger = createLogger();
-    }
-    return (_logger as unknown as Record<string | symbol, unknown>)[prop];
+    return (getLogger() as unknown as Record<string | symbol, unknown>)[prop];
   },
 });
 

@@ -1,5 +1,5 @@
 /**
- * Proton domain constants (lumo-bridge specific)
+ * Proton domain constants (lumo-tamer specific)
  *
  * These are fixed production URLs for Proton services.
  * Unlike proton-upstream/ shims, this file is NOT synced from WebClients.

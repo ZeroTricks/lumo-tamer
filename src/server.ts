@@ -16,7 +16,7 @@ async function main() {
   // Validate server config early - will throw if missing
   getServerConfig();
 
-  logger.info('Starting Lumo Bridge API Server...');
+  logger.info('Starting lumo-tamer API Server...');
 
   const app = await Application.create();
   const apiServer = new APIServer(app);

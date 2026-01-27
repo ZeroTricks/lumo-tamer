@@ -22,7 +22,7 @@ const SESSION_ID = randomUUID();
  * Includes SESSION_ID so IDs are deterministic within a session but unique across sessions.
  */
 function generateDeterministicConversationId(firstUserMessage: string): ConversationId {
-  const hash = createHash('sha256').update(`lumo-bridge:${SESSION_ID}:${firstUserMessage}`).digest('hex');
+  const hash = createHash('sha256').update(`lumo-tamer:${SESSION_ID}:${firstUserMessage}`).digest('hex');
   // Format as UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
   // Use version 4 format but with deterministic bytes
   const uuid =  `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;

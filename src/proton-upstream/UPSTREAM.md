@@ -73,7 +73,7 @@ and their source is in WebClients under `packages/`.
 Tree shaking would reduce bundle size but doesn't solve the fundamental issues:
 - `@proton/crypto` uses `pmcrypto` with WebWorker architecture (browser-only)
 - `@proton/shared` has deep dependency chains on other `@proton/*` packages
-- Both assume browser environment; lumo-bridge runs in Node.js
+- Both assume browser environment; lumo-tamer runs in Node.js
 - We'd be locked to npm versions instead of tracking specific WebClients commits
 
 Shimming gives us precise control: we implement only what we need, using Node.js

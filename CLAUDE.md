@@ -1,8 +1,8 @@
-# lumo-bridge
+# lumo-tamer
 This project creates an OpenAI-compatible API on top of Proton's conversation agent Lumo.
 
 ## Architecture
-lumo-bridge consists of 3 parts: API, bridge, Lumo WebClient
+lumo-tamer consists of following parts: API, bridge, Lumo WebClient
 
 - API:
   2 main API endpoints:
@@ -11,7 +11,7 @@ lumo-bridge consists of 3 parts: API, bridge, Lumo WebClient
 
 
 - The bridge:
-  See src/lumo-client, contains our own code connecting the API to Proton's Lumo WebClient. It provides:
+  See src/lumo-client, src/conversations. Our own code connecting the API to Proton's Lumo WebClient. It provides:
   - Things we can't reuse from The Lumo WebClient itself, ie. authentication
   - Own functionality: command parsing (user want to do something), tool parsing (Lumo calls tool/function), etc.
 

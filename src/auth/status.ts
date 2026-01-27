@@ -50,7 +50,7 @@ export function printSummary(status: AuthProviderStatus, supportsPersistence: bo
 }
 
 async function main(): Promise<void> {
-    console.log('=== Lumo Bridge Auth Status ===');
+    console.log('=== lumo-tamer auth status ===');
 
     const method = authConfig.method;
     console.log(`\nConfigured method: ${method}`);

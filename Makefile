@@ -1,4 +1,4 @@
-# Lumo Bridge Makefile
+# lumo-tamer Makefile
 
 .PHONY: help auth server cli build clean docker-build docker-auth docker-server docker-cli
 

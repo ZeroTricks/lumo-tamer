@@ -1,7 +1,7 @@
 {
-  "name": "lumo-bridge",
+  "name": "lumo-tamer",
   "version": "1.0.0",
-  "description": "OpenAI-compatible API bridge for web chatboxes using Playwright",
+  "description": "Use Proton's Lumo AI through OpenAI-compatible API and CLI",
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
@@ -19,11 +19,11 @@
     "sync-upstream": "./scripts/sync-upstream.sh"
   },
   "keywords": [
+    "lumo",
+    "proton",
+    "bridge",
     "openai",
-    "api",
-    "playwright",
-    "chatbox",
-    "bridge"
+    "api"
   ],
   "author": "",
   "license": "MIT",

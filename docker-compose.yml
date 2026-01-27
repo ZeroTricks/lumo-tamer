@@ -2,7 +2,7 @@ services:
 
   app:
     build: .
-    container_name: lumo-bridge-app
+    container_name: lumo-tamer-app
     ports:
       - "3003:3003"
     volumes:
@@ -18,7 +18,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.browser
-    container_name: lumo-bridge-browser
+    container_name: lumo-tamer-browser
     environment:
       - PUID=1000
       - PGID=1000

@@ -1,6 +1,6 @@
 # Conversation Persistence
 
-This document covers conversation persistence: how Proton's Lumo WebClient does it, and how lumo-bridge implements compatible persistence.
+This document covers conversation persistence: how Proton's Lumo WebClient does it, and how lumo-tamer implements compatible persistence.
 
 ---
 
@@ -129,7 +129,7 @@ All encrypted content uses associated data to bind ciphertext to its context, pr
 
 ---
 
-# Part 2: Lumo-Bridge Implementation
+# Part 2: lumo-tamer Implementation
 
 ## Why Not Reuse Proton's Layers?
 
@@ -160,7 +160,7 @@ API Clients (OpenAI format)
         → SyncService → Lumo API (/api/lumo/v1/)
 ```
 
-Goal: Share conversations between lumo-bridge and Proton WebClient.
+Goal: Share conversations between lumo-tamer and Proton WebClient.
 
 ## Configuration
 
@@ -170,7 +170,7 @@ conversations:
   deriveIdFromFirstMessage: false  # For stateless clients (Home Assistant)
   sync:
     enabled: true
-    spaceName: lumo-bridge      # Space name (created if doesn't exist)
+    spaceName: lumo-tamer      # Space name (created if doesn't exist)
     # spaceId: "uuid"           # Or use specific space UUID
     includeSystemMessages: false  # Only sync user/assistant messages
     autoSync: false             # Or use /save command

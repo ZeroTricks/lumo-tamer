@@ -13,7 +13,7 @@ import { Application } from './app/index.js';
 import { CLIClient } from './cli/client.js';
 
 async function main() {
-  logger.info('Starting Lumo Bridge CLI...');
+  logger.info('Starting lumo-tamer cli...');
 
   const app = await Application.create();
   const cliClient = new CLIClient(app);
