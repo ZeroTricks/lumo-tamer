@@ -12,10 +12,6 @@ const logConfigSchema = z.object({
   messageContent: z.boolean().default(false),
 }).prefault({});
 
-const protonConfigSchema = z.object({
-  appVersion: z.string().default('web-lumo@5.0.0'),
-}).prefault({});
-
 const instructionsConfigSchema = z.object({
   default: z.string().optional(),
   append: z.boolean().default(false),
@@ -80,7 +76,6 @@ const modeOverridesSchema = z.object({
 });
 
 const mergedConfigSchema = modeOverridesSchema.extend({
-  proton: protonConfigSchema,
   auth: authConfigSchema,
 });
 
@@ -110,7 +105,7 @@ function loadMergedConfig(mode: ConfigMode): MergedConfig | ServerMergedConfig {
     const modeConfig = (mode === 'server' ? raw.server : raw.cli) as Record<string, unknown> | undefined;
 
     // Deep merge mode-overridable keys before Zod parsing
-    const merged: Record<string, unknown> = { proton: raw.proton, auth: raw.auth };
+    const merged: Record<string, unknown> = { auth: raw.auth };
     for (const key of MODE_KEYS) {
       merged[key] = merge({}, raw[key], modeConfig?.[key]);
     }
@@ -166,12 +161,10 @@ export function getServerConfig(): ServerMergedConfig {
 }
 
 // Legacy exports (for scripts before initConfig)
-export const protonConfig = protonConfigSchema.parse(loadRawYaml().proton);
 export const authConfig = authConfigSchema.parse(loadRawYaml().auth);
 
 // Types
 export type ServerConfig = z.infer<typeof serverFieldsSchema>;
-export type ProtonConfig = z.infer<typeof protonConfigSchema>;
 export type ToolsConfig = z.infer<typeof toolsConfigSchema>;
 export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;
 export type ConversationsConfig = z.infer<typeof conversationsConfigSchema>;

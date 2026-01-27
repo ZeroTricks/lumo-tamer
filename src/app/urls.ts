@@ -1,8 +1,10 @@
 /**
- * Proton domain constants
+ * Proton domain constants (lumo-bridge specific)
  *
- * These are fixed production URLs. Changing them requires code changes
- * since different auth methods and API endpoints are domain-specific.
+ * These are fixed production URLs for Proton services.
+ * Unlike proton-upstream/ shims, this file is NOT synced from WebClients.
+ * URLs are intentionally not configurable - different environments would probably
+ * require code changes to auth and API logic.
  */
 
 export const PROTON_URLS = {

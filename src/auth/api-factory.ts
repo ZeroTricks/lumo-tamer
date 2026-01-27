@@ -5,7 +5,7 @@
  */
 
 import type { ProtonApi, ProtonApiOptions } from '../lumo-client/types.js';
-import { protonConfig } from '../app/config.js';
+import { APP_VERSION_HEADER } from '../proton-upstream/config.js';
 import { PROTON_URLS } from '../app/urls.js';
 import { logger } from '../app/logger.js';
 
@@ -32,7 +32,6 @@ export function createProtonApi(options: ApiFactoryOptions): ProtonApi {
     let { uid, accessToken } = options;
     const { cookies, onAuthError } = options;
     const baseUrl = PROTON_URLS.LUMO_API;
-    const appVersion = protonConfig.appVersion;
 
     /**
      * Update credentials after a refresh
@@ -53,7 +52,7 @@ export function createProtonApi(options: ApiFactoryOptions): ProtonApi {
             const headers: Record<string, string> = {
                 'Content-Type': 'application/json',
                 'x-pm-uid': currentUid,
-                'x-pm-appversion': appVersion,
+                'x-pm-appversion': APP_VERSION_HEADER,
                 'Authorization': `Bearer ${currentAccessToken}`,
             };
 

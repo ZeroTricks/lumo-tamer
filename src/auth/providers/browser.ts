@@ -6,7 +6,8 @@
  */
 
 import { logger } from '../../app/logger.js';
-import { authConfig, protonConfig, getConversationsConfig } from '../../app/config.js';
+import { authConfig, getConversationsConfig } from '../../app/config.js';
+import { APP_VERSION_HEADER } from '../../proton-upstream/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { decryptPersistedSession } from '../../conversations/session-keys.js';
@@ -161,7 +162,7 @@ export class BrowserAuthProvider extends BaseAuthProvider {
             headers: {
                 'Content-Type': 'application/json',
                 'x-pm-uid': this.tokens.uid,
-                'x-pm-appversion': protonConfig.appVersion,
+                'x-pm-appversion': APP_VERSION_HEADER,
                 'Cookie': refreshCookie,
             },
         });
