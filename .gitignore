@@ -4,5 +4,4 @@ config.yaml
 *.log
 .DS_Store
 sessions/auth-tokens.json
-bin/
 extra-docs/

@@ -54,18 +54,18 @@ Uses Proton's official SRP authentication via a Go binary wrapper:
 
 ```bash
 # Build the Go binary (requires Go 1.24+)
-cd go-auth && go build -o ../bin/proton-auth
+make go-auth-build
 
 # Run authentication (interactive prompts)
-./bin/proton-auth -o sessions/auth-tokens.json
+./dist/proton-auth -o sessions/auth-tokens.json
 ```
 
 Configure in `config.yaml`:
 ```yaml
 auth:
-  method: srp
-  binaryPath: "./bin/proton-auth"
-  tokenCachePath: "sessions/auth-tokens.json"
+  method: login
+  login:
+    binaryPath: "./dist/proton-auth"
 ```
 
 ### Browser Token Extraction

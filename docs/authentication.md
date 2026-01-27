@@ -69,7 +69,7 @@ Uses Proton's SRP (Secure Remote Password) protocol via a Go binary built from [
 
 ```bash
 # 1. Build the Go binary (requires Go 1.24+)
-cd go-auth && go build -o ../bin/proton-auth
+make go-auth-build
 
 # 2. Run authentication
 npm run auth
@@ -83,7 +83,7 @@ npm run auth
 auth:
   method: login
   login:
-    binaryPath: "./bin/proton-auth"
+    binaryPath: "./dist/proton-auth"
     # Headers to help avoid CAPTCHA
     appVersion: "macos-drive@1.0.0-alpha.1+rclone"
     userAgent: "Mozilla/5.0 ..."
@@ -216,7 +216,7 @@ Shows:
 ### Login
 
 **"proton-auth binary not found"**
-- Build it: `cd go-auth && go build -o ../bin/proton-auth`
+- Build it: `make go-auth-build`
 
 **"Authentication failed"**
 - Verify username/password

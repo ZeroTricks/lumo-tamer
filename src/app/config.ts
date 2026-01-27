@@ -52,7 +52,7 @@ const authBrowserConfigSchema = z.object({
 }).optional();
 
 const authLoginConfigSchema = z.object({
-  binaryPath: z.string().default('./bin/proton-auth'),
+  binaryPath: z.string().default('./dist/proton-auth'),
   appVersion: z.string().default('macos-drive@1.0.0-alpha.1+rclone'),
   userAgent: z.string().default('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'),
 }).prefault({});
