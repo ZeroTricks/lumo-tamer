@@ -1,7 +1,7 @@
 /**
  * LumoApi Adapter
  *
- * Wraps upstream LumoApi with lumo-bridge's authenticated Api.
+ * Wraps upstream LumoApi with lumo-tamer's authenticated Api.
  *
  * Usage:
  *   const lumoApi = createLumoApi(authenticatedApi, uid);
@@ -18,16 +18,16 @@ let fetchAdapterInstalled = false;
 let cleanupFetchAdapter: (() => void) | null = null;
 
 /**
- * Creates a LumoApi instance that uses lumo-bridge's authenticated Api.
+ * Creates a LumoApi instance that uses lumo-tamer's authenticated Api.
  *
  * This function:
  * 1. Installs a global fetch adapter that routes to our Api
  * 2. Creates a LumoApi instance with the given UID
  *
  * Note: The fetch adapter remains installed for the lifetime of the process.
- * This is acceptable since lumo-bridge is a server-side application.
+ * This is acceptable since lumo-tamer is a server-side application.
  *
- * @param api - The authenticated Api function from lumo-bridge
+ * @param api - The authenticated Api function from lumo-tamer
  * @param uid - The user ID for x-pm-uid header (used by upstream but handled by our Api)
  * @returns A configured LumoApi instance
  */

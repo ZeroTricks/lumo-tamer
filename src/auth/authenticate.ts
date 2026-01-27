@@ -89,7 +89,7 @@ async function authenticateBrowser(): Promise<BrowserAuthResult> {
 }
 
 async function main(): Promise<void> {
-    console.log('=== Lumo Bridge Authentication ===\n');
+    console.log('=== lumo-tamer authentication ===\n');
 
     // Prompt for method (with config value as default)
     const defaultMethod = authConfig.method;

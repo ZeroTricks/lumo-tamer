@@ -677,7 +677,6 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
 
         return { tokens, warnings, cdpEndpoint };
     } finally {
-        // Don't close the browser - it's shared with lumo-bridge
         logger.debug('Browser connection closed, browser continues running');
     }
 }

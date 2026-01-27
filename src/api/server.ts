@@ -56,7 +56,7 @@ export class APIServer {
     return new Promise((resolve) => {
       this.expressApp.listen(this.serverConfig.port, () => {
         logger.info('========================================');
-        logger.info('Lumo Bridge is ready!');
+        logger.info('lumo-tamer is ready!');
         logger.info(`  base_url: http://localhost:${this.serverConfig.port}/v1`);
         logger.info(`  api_key:  ${this.serverConfig.apiKey.substring(0, 3)}...`);
         logger.info('========================================\n');

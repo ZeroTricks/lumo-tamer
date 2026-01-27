@@ -1,6 +1,8 @@
-# Lumo Bridge
+# lumo-tamer
 
-OpenAI-compatible API for web chatboxes using Playwright automation.
+Use Proton's Lumo AI through OpenAI-compatible API and CLI
+
+
 
 ## Quick Start
 
@@ -47,8 +49,6 @@ docker compose run --rm -it app-dev npm run auth
 # Run CLI with a prompt
 docker compose run --rm app-dev npm run cli -- "your prompt"
 
-# Override default command for production image
-docker run -it --rm -v ./sessions:/app/sessions lumo-bridge npm run auth
 ```
 
 Browser GUI: http://localhost:3001 (noVNC)

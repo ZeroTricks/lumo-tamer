@@ -29,7 +29,7 @@ auth:
 log:
   level: "info"  # Levels: trace, debug, info, warn, error, fatal
   target: "stdout"  # "stdout" or "file"
-  filePath: "lumo-bridge.log"  # Used when target is "file"
+  filePath: "lumo-tamer.log"  # Used when target is "file"
   messageContent: false  # Log user/assistant message content (disabled by default for privacy)
 
 # Shared Conversations Configuration (can be overridden in server/cli sections)
@@ -43,7 +43,7 @@ conversations:
   # Sync: persist conversations to Proton servers (requires browser auth)
   sync:
     enabled: false          # Enable syncing to Proton servers
-    spaceName: lumo-bridge  # Space name for conversations (created if doesn't exist)
+    spaceName: lumo-tamer  # Space name for conversations (created if doesn't exist)
     # spaceId: "uuid"       # Optional: use specific space UUID instead of name matching
     includeSystemMessages: false  # Include system/tool messages in sync (default: user/assistant only)
     autoSync: false         # Auto-sync vs manual /save command
@@ -109,7 +109,7 @@ server:
 cli:
 #   log:
 #     target: "file"
-#     filePath: "lumo-bridge-cli.log"
+#     filePath: "lumo-tamer-cli.log"
 #   tools:
 #     enabled: true  # Enable code block detection and execution
   instructions:

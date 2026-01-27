@@ -6,7 +6,7 @@
  * Original uses pmcrypto (Proton's OpenPGP fork) with worker-based architecture.
  * This shim uses the standard openpgp package directly.
  *
- * Implements only the methods used by lumo-bridge:
+ * Implements only the methods used by lumo-tamer:
  * - importPublicKey() - original lines 87-89
  * - importPrivateKey() - original lines 91-106
  * - encryptMessage() - original lines 108-147

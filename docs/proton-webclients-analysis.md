@@ -1,6 +1,6 @@
 # Proton WebClients Codebase Analysis
 
-This document captures learnings from analyzing Proton's WebClients repository for the lumo-bridge API integration.
+This document captures learnings from analyzing Proton's WebClients repository for the lumo-tamer API integration.
 
 **Source Repository:** https://github.com/ProtonMail/WebClients
 **Analyzed Commit:** 2cd8b155ca61863382855906dd6f56f73b2558f7

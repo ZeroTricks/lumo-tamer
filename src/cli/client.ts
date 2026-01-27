@@ -247,7 +247,7 @@ export class CLIClient {
 
     // Welcome message
     process.stdout.write('\n');
-    process.stdout.write('Welcome to Lumo Bridge CLI\n');
+    process.stdout.write('Welcome to lumo-tamer cli\n');
     if (commandsConfig.enabled)
       process.stdout.write('Type /help for commands, /quit to exit.\n');
     process.stdout.write('\n');

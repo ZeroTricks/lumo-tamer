@@ -90,10 +90,10 @@ tools:
 
 ### Overview
 
-For tools not provided by Lumo, lumo-bridge supports a legacy approach where:
+For tools not provided by Lumo, lumo-tamer supports a legacy approach where:
 1. Tool definitions are sent as JSON in the instructions
 2. Lumo outputs tool calls as JSON in `<pre>` tags
-3. lumo-bridge parses the response and extracts tool calls
+3. lumo-tamer parses the response and extracts tool calls
 
 ### How It Works
 
@@ -105,7 +105,7 @@ When the OpenAI request includes a `tools` array:
    I'll check the weather for you.
    <pre>{"name": "get_weather", "arguments": {"city": "Paris"}}</pre>
    ```
-3. **lumo-bridge extracts** tool calls and returns them in OpenAI format
+3. **lumo-tamer extracts** tool calls and returns them in OpenAI format
 
 ### Request Format (OpenAI)
 

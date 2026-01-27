@@ -9,7 +9,7 @@
  * Key difference: Original calls getAppVersionStr() which adds '-dev' suffix
  * in non-production. Shim takes parameters directly without env detection.
  *
- * Not shimmed (not used by lumo-bridge):
+ * Not shimmed (not used by lumo-tamer):
  * - mergeHeaders(), getAppVersionStr(), getAppVersionHeader()
  * - getUIDHeaders(), getAuthHeaders(), and others (lines 13-92)
  */

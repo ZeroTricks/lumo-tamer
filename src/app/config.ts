@@ -8,7 +8,7 @@ import { resolveProjectPath } from './paths.js';
 const logConfigSchema = z.object({
   level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   target: z.enum(['stdout', 'file']).default('stdout'),
-  filePath: z.string().default('logs/lumo-bridge.log'),
+  filePath: z.string().default('logs/lumo-tamer.log'),
   messageContent: z.boolean().default(false),
 }).prefault({});
 
@@ -49,7 +49,7 @@ const commandsConfigSchema = z.object({
 const syncConfigSchema = z.object({
   enabled: z.boolean().default(false),
   spaceId: z.string().uuid().optional(),
-  spaceName: z.string().min(1).default('lumo-bridge'),
+  spaceName: z.string().min(1).default('lumo-tamer'),
   includeSystemMessages: z.boolean().default(false),
   autoSync: z.boolean().default(false),
 }).prefault({});

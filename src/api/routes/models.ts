@@ -13,7 +13,7 @@ export function createModelsRouter(): Router {
           id: serverConfig.apiModelName,
           object: 'model',
           created: Date.now(),
-          owned_by: 'lumo-bridge',
+          owned_by: 'proton',
         },
       ],
     });

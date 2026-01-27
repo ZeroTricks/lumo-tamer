@@ -7,7 +7,7 @@
  * - utf8StringToUint8Array(): lines 9-11 → original lines 53-57
  * - uint8ArrayToUtf8String(): lines 13-15 → original lines 66-70
  *
- * Not shimmed (not used by lumo-bridge):
+ * Not shimmed (not used by lumo-tamer):
  * - uint8ArrayToBinaryString() - original lines 16-26
  * - binaryStringToUint8Array() - original lines 35-45
  */

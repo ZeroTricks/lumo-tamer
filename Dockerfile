@@ -1,6 +1,5 @@
-# Lightweight Dockerfile for the app service (no browser dependencies)
-# Connects to remote browser via CDP instead of bundling Chrome
-# Usage: docker build -t lumo-bridge .
+# Lightweight Dockerfile for lumo-tamer (no browser dependencies)
+# If needed, connects to remote browser via CDP, instead of bundling Chrome
 
 # ============================================================================
 # Base stage - minimal Node.js dependencies only

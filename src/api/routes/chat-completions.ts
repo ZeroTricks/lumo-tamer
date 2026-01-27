@@ -19,7 +19,7 @@ const SESSION_ID = randomUUID();
  * Used when deriveIdFromFirstMessage is enabled (e.g., for clients that re-send full history).
  */
 function generateDeterministicConversationId(firstUserMessage: string): ConversationId {
-  const hash = createHash('sha256').update(`lumo-bridge:${SESSION_ID}:${firstUserMessage}`).digest('hex');
+  const hash = createHash('sha256').update(`lumo-tamer:${SESSION_ID}:${firstUserMessage}`).digest('hex');
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
 }
 
