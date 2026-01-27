@@ -21,7 +21,7 @@ function buildToolsInstruction(tools?: OpenAITool[]): string | undefined {
     return undefined;
   }
   const instructionsConfig = getInstructionsConfig();
-  const forTools = instructionsConfig?.forTools ?? '';
+  const forTools = instructionsConfig.forTools;
   const toolsJson = JSON.stringify(tools, null, 2);
   return `${forTools}\n\nAvailable tools:\n${toolsJson}`;
 }
@@ -43,7 +43,7 @@ function getEffectiveInstructions(
 ): string | undefined {
   const instructionsConfig = getInstructionsConfig();
   const defaultInstructions = instructionsConfig?.default;
-  const append = instructionsConfig?.append ?? false;
+  const append = instructionsConfig.append;
 
   let result: string | undefined;
 

@@ -48,7 +48,7 @@ export { runProtonAuth } from './login/proton-auth-cli.js';
  * @returns Initialized AuthProvider
  */
 export async function createAuthProvider(): Promise<AuthProvider> {
-    const method: AuthMethod = (authConfig?.method as AuthMethod) ?? 'browser';
+    const method: AuthMethod = authConfig.method;
 
     logger.debug({ method }, 'Creating auth provider');
 

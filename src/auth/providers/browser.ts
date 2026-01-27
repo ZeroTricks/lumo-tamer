@@ -109,7 +109,7 @@ export class BrowserAuthProvider extends BaseAuthProvider {
 
         // Check keyPassword availability (only warn if sync is enabled)
         status.details.hasKeyPassword = !!this.keyPassword;
-        const syncEnabled = getConversationsConfig()?.sync?.enabled ?? false;
+        const syncEnabled = getConversationsConfig().sync.enabled;
         if (!this.keyPassword && syncEnabled) {
             if (!this.tokens.persistedSession?.blob) {
                 status.warnings.push('No persisted session blob found');

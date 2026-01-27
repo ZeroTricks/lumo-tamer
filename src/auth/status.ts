@@ -33,7 +33,7 @@ export function printSummary(status: AuthProviderStatus, supportsPersistence: bo
     console.log('\n--- Summary ---');
     if (status.valid) {
         console.log('\x1b[32mAuthentication is configured and valid.\x1b[0m');
-        const syncEnabled = getConversationsConfig()?.sync?.enabled ?? false;
+        const syncEnabled = getConversationsConfig().sync.enabled;
         if (!syncEnabled) {
             console.log('Conversation persistence: \x1b[33mdisabled\x1b[0m (config)');
         } else if (!supportsPersistence) {
@@ -52,7 +52,7 @@ export function printSummary(status: AuthProviderStatus, supportsPersistence: bo
 async function main(): Promise<void> {
     console.log('=== Lumo Bridge Auth Status ===');
 
-    const method = authConfig?.method || 'browser';
+    const method = authConfig.method;
     console.log(`\nConfigured method: ${method}`);
 
     try {
