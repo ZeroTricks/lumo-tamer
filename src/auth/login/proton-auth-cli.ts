@@ -36,12 +36,8 @@ export async function runProtonAuth(
 
         // Pass SRP-specific headers to the Go binary (to avoid CAPTCHA)
         // These are separate from protonConfig.appVersion used for API calls
-        if (authConfig.login?.appVersion) {
-            args.push('--app-version', authConfig.login.appVersion);
-        }
-        if (authConfig.login?.userAgent) {
-            args.push('--user-agent', authConfig.login.userAgent);
-        }
+        args.push('--app-version', authConfig.login.appVersion);
+        args.push('--user-agent', authConfig.login.userAgent);
 
         // Spawn the process with stdio inherited for interactive prompts
         // but capture stdout for JSON output

@@ -62,10 +62,10 @@ export async function handleStreamingRequest(
       // Determine if external tools (web_search, etc.) should be enabled
       const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
 
-      // Check if request has custom tools (legacy mode)
-      const hasCustomTools = request.tools && request.tools.length > 0;
+      // Check if request has custom tools AND tools are enabled
+      const hasCustomTools = toolsConfig.enabled && request.tools && request.tools.length > 0;
 
-      // Create detector if custom tools are provided
+      // Create detector if custom tools are enabled
       const detector = hasCustomTools ? new StreamingToolDetector() : null;
       const toolCallsEmitted: OpenAIToolCall[] = [];
       let toolCallIndex = 0;

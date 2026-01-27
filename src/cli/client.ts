@@ -11,7 +11,7 @@
 import * as readline from 'readline';
 import { randomUUID } from 'crypto';
 import { logger } from '../app/logger.js';
-import { getInstructionsConfig } from '../app/config.js';
+import { getInstructionsConfig, getToolsConfig } from '../app/config.js';
 import { isCommand, executeCommand, type CommandContext } from '../app/commands.js';
 import type { AppContext } from '../app/index.js';
 import type { Turn } from '../lumo-client/index.js';
@@ -20,11 +20,31 @@ import { CodeBlockDetector, type CodeBlock } from './code-block-detector.js';
 import { executeBlock, isExecutable, confirm } from './code-executor.js';
 
 /**
+ * Build effective instructions for CLI.
+ * Combines default instructions with forTools when tools are enabled.
+ */
+function buildEffectiveInstructions(): string | undefined {
+  const instructionsConfig = getInstructionsConfig();
+  const toolsConfig = getToolsConfig();
+
+  let instructions = instructionsConfig?.default;
+
+  // Append forTools instructions when tools enabled
+  if (toolsConfig.enabled && instructionsConfig?.forTools) {
+    instructions = instructions
+      ? `${instructions}\n\n${instructionsConfig.forTools}`
+      : instructionsConfig.forTools;
+  }
+
+  return instructions;
+}
+
+/**
  * Inject instructions into the first user message of turns.
  * Uses the same pattern as API: [Personal context: ...]
  */
 function injectInstructions(turns: Turn[]): Turn[] {
-  const instructions = getInstructionsConfig()?.default;
+  const instructions = buildEffectiveInstructions();
   if (!instructions) return turns;
 
   return turns.map((turn, index) => {
@@ -162,27 +182,36 @@ export class CLIClient {
         const existingConv = store.get(this.conversationId);
         const requestTitle = existingConv?.title === 'New Conversation';
 
-        // Code block detection during streaming
-        const detector = new CodeBlockDetector();
+        // Code block detection during streaming (only if tools enabled)
+        const toolsConfig = getToolsConfig();
+        const detector = toolsConfig.enabled ? new CodeBlockDetector() : null;
         const pendingBlocks: CodeBlock[] = [];
 
         const result = await this.app.getLumoClient().chatWithHistory(
           turns,
           (chunk) => {
             if (chunkCount === 0) clearBusyIndicator();
-            const { text, blocks } = detector.processChunk(chunk);
-            process.stdout.write(text);
-            pendingBlocks.push(...blocks);
+            if (detector) {
+              const { text, blocks } = detector.processChunk(chunk);
+              process.stdout.write(text);
+              pendingBlocks.push(...blocks);
+            } else {
+              process.stdout.write(chunk);
+            }
             chunkCount++;
           },
           { enableEncryption: true, enableExternalTools: false, requestTitle }
         );
 
         // Finalize detection and display remaining text
-        const final = detector.finalize();
-        if (chunkCount === 0) clearBusyIndicator();
-        process.stdout.write(final.text);
-        pendingBlocks.push(...final.blocks);
+        if (detector) {
+          const final = detector.finalize();
+          if (chunkCount === 0) clearBusyIndicator();
+          process.stdout.write(final.text);
+          pendingBlocks.push(...final.blocks);
+        } else {
+          if (chunkCount === 0) clearBusyIndicator();
+        }
         process.stdout.write('\n\n');
 
         // Save generated title if present
