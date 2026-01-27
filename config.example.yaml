@@ -18,7 +18,7 @@ auth:
   # Login-specific config (only used when method: login)
   # All fields have defaults - override only if needed
   # login:
-  #   binaryPath: "./bin/proton-auth"  # Path to proton-auth Go binary
+  #   binaryPath: "./dist/proton-auth"  # Path to proton-auth Go binary
   #   # Headers to help avoid CAPTCHA - see docs/authentication.md
   #   appVersion: "macos-drive@1.0.0-alpha.1+rclone"
   #   userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ..."

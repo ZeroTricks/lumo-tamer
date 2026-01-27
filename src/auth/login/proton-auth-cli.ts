@@ -23,7 +23,7 @@ export async function runProtonAuth(
     if (!existsSync(binaryPath)) {
         throw new Error(
             `proton-auth binary not found at ${binaryPath}. ` +
-            `Build it with: cd go-auth && go build -o ../bin/proton-auth`
+            `Build it with: make go-auth-build`
         );
     }
 

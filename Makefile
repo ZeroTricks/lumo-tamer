@@ -24,10 +24,10 @@ clean: ## Clean build artifacts
 
 # Authentication (go-proton-api)
 go-auth-build: ## Build the Go authentication binary
-	cd go-auth && go build -o ../bin/proton-auth
+	cd src/auth/login/go && go build -o ../../../../dist/proton-auth
 
-go-auth: auth-build ## Run SRP authentication (interactive)
-	./bin/proton-auth -o sessions/auth-tokens.json
+go-auth: go-auth-build ## Run SRP authentication (interactive)
+	./dist/proton-auth -o sessions/auth-tokens.json
 
 # Docker development
 dev-docker: ## Start development container
