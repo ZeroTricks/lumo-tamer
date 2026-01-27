@@ -1,122 +1,116 @@
 # lumo-tamer
 
-Use Proton's Lumo AI through OpenAI-compatible API and CLI
+Use Proton's Lumo AI through an OpenAI-compatible API and CLI.
 
+## Features
 
+- OpenAI-compatible API (`/v1/chat/completions`, `/v1/responses`)
+- Interactive CLI mode
+- Conversation sync with Proton's Lumo WebClient
+- Multiple authentication methods
 
 ## Quick Start
 
-```bash
-# Setup
-cp config.example.yaml config.yaml  # Edit with your chatbox URL and selectors
-npm install
-npm run dev
+### 1. Install dependencies
 
-# Or with Docker
-make dev-build        # Browser GUI at http://localhost:3001
+```bash
+git clone https://github.com/ZeroTricks/lumo-tamer.git
+cd lumo-tamer
+npm install
 ```
 
-**API Usage:**
+### 2. Build
+
+```bash
+npm run build
+```
+
+**Optional:** Build Go binary for SRP login authentication:
+
+```bash
+# Requires Go 1.24+
+cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
+```
+
+### 3. Configure
+
+```bash
+cp config.example.yaml config.yaml
+# Edit config.yaml if needed (defaults work for most setups)
+```
+
+### 4. Authenticate
+
+```bash
+npm run auth
+```
+
+Choose one of three methods:
+
+- **browser** - Extract tokens from a logged-in browser session (recommended)
+- **login** - Enter Proton credentials (requires Go binary from step 2)
+- **manual** - Paste tokens directly
+
+### 5. Run
+
+```bash
+# Interactive CLI
+npm run cli
+
+# Or start the API server
+npm run server
+```
+
+## Usage
+
+### CLI
+
+```bash
+npm run cli -- "Hello!"
+
+# Or install globally
+npm link
+tamer "What is 2+2?"
+```
+
+### API
+
 ```python
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:3000/v1",
+    base_url="http://localhost:3003/v1",
     api_key="your-api-key"
 )
 
 response = client.chat.completions.create(
-    model="your-model-name",
+    model="lumo",
     messages=[{"role": "user", "content": "Hello!"}],
     stream=True
 )
 ```
 
-## Docker
+### Docker
 
 ```bash
-make dev-build  # Start with hot reload
-make logs       # Watch logs
-make prod-up    # Production mode
+docker compose up app                        # Run server
+docker compose run --rm app tamer "Hello!"   # Run CLI
+docker compose run --rm -it app tamer-auth   # Authenticate
 ```
 
-**Run auth or CLI in Docker:**
-```bash
-# Interactive authentication
-docker compose run --rm -it app-dev npm run auth
-# Or use: make auth-docker
+## API Endpoints
 
-# Run CLI with a prompt
-docker compose run --rm app-dev npm run cli -- "your prompt"
+| Endpoint | Description |
+|----------|-------------|
+| `POST /v1/chat/completions` | OpenAI chat completions |
+| `POST /v1/responses` | OpenAI responses API |
+| `GET /v1/models` | List available models |
+| `GET /health` | Health check |
 
-```
+## Documentation
 
-Browser GUI: http://localhost:3001 (noVNC)
-
-See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for all commands.
-
-## Authentication
-
-### rclone
-
-TODO
-
-### SRP Authentication
-
-Uses Proton's official SRP authentication via a Go binary wrapper:
-
-```bash
-# Build the Go binary (requires Go 1.24+)
-make go-auth-build
-
-# Run authentication (interactive prompts)
-./dist/proton-auth -o sessions/auth-tokens.json
-```
-
-Configure in `config.yaml`:
-```yaml
-auth:
-  method: login
-  login:
-    binaryPath: "./dist/proton-auth"
-```
-
-### Browser Token Extraction
-
-Extract tokens from an existing browser session. See `scripts/extract-auth-token.ts`.
-
-## Configuration
-
-**Find DOM selectors** using DevTools:
-1. Right-click element → Inspect
-2. Test in console: `document.querySelector('your-selector')`
-3. Add to `config.yaml` file
-
-For complex sites, modify [src/browser/chatbox.ts](src/browser/chatbox.ts).
-
-## Endpoints
-
-- `POST /v1/chat/completions` - OpenAI-compatible chat (streaming/non-streaming)
-- `GET /v1/models` - List models
-- `GET /health` - Health check
-- `GET /login/status` - Login status
-
-See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design.
-
-## Troubleshooting
-
-- **Selectors not working**: Verify in DevTools, check for dynamic IDs/shadow DOM
-- **Response timeout**: Increase timeout in [src/browser/chatbox.ts](src/browser/chatbox.ts)
-- **Browser not connecting**: Check `browser.cdpEndpoint` in `config.yaml`, verify port 9222
-
-See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for development workflow.
-
-## Docs
-
-- [DEVELOPMENT.md](docs/DEVELOPMENT.md) - Dev workflow & commands
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - Two-service design
-- [CLAUDE.md](docs/CLAUDE.md) - Project overview for AI
+See [docs/](docs/) for detailed documentation.
 
 ## License
 
-MIT - Educational/personal use. Respect target site ToS.
+GPLv3 - See [LICENSE](LICENSE). Includes code from [Proton WebClients](https://github.com/ProtonMail/WebClients).
