@@ -1,10 +1,8 @@
 node_modules/
 dist/
 config.yaml
-browser-data/
 *.log
 .DS_Store
-todo.md
 sessions/auth-tokens.json
 bin/
 extra-docs/
