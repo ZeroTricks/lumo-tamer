@@ -21,7 +21,7 @@ const protonConfigSchema = z.object({
 const instructionsConfigSchema = z.object({
   default: z.string().optional(),
   append: z.boolean().default(false),
-  forTools: z.string().optional(),
+  forTools: z.string().default(''),
 }).prefault({});
 
 const toolsConfigSchema = z.object({
@@ -47,7 +47,7 @@ const authAutoRefreshConfigSchema = z.object({
   enabled: z.boolean().default(true),
   intervalHours: z.number().min(1).max(24).default(20),
   onError: z.boolean().default(true),
-}).optional();
+}).prefault({});
 
 // Auth method-specific config schemas
 const authBrowserConfigSchema = z.object({

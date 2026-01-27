@@ -58,7 +58,7 @@ export class LoginAuthProvider extends BaseAuthProvider {
     }
 
     private async fetchAndCacheKeys(): Promise<void> {
-        if (!getConversationsConfig()?.sync?.enabled) return;
+        if (!getConversationsConfig().sync.enabled) return;
         if (!this.supportsPersistence()) return;  // Login tokens lack lumo scope for spaces API
         if (!this.tokens) return;
         if (this.tokens.userKeys && this.tokens.masterKeys) {

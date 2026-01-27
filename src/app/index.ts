@@ -43,15 +43,15 @@ export class Application implements AppContext {
 
     // Create AuthManager with auto-refresh configuration
     const tokenCachePath = resolveProjectPath(authConfig.tokenPath);
-    const autoRefreshConfig = authConfig?.autoRefresh;
+    const autoRefreshConfig = authConfig.autoRefresh;
 
     this.authManager = new AuthManager({
       provider: this.authProvider,
       tokenCachePath,
       autoRefresh: {
-        enabled: autoRefreshConfig?.enabled ?? true,
-        intervalHours: autoRefreshConfig?.intervalHours ?? 20,
-        onError: autoRefreshConfig?.onError ?? true,
+        enabled: autoRefreshConfig.enabled,
+        intervalHours: autoRefreshConfig.intervalHours,
+        onError: autoRefreshConfig.onError,
       },
     });
 

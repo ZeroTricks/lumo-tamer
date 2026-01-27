@@ -74,7 +74,7 @@ async function authenticateBrowser(): Promise<BrowserAuthResult> {
     }
 
     // Summary
-    const syncEnabled = getConversationsConfig()?.sync?.enabled ?? false;
+    const syncEnabled = getConversationsConfig().sync.enabled;
     if (!syncEnabled) {
         logger.info('Sync disabled - encryption keys not fetched');
     } else if (result.tokens.persistedSession?.blob && result.tokens.persistedSession?.clientKey) {

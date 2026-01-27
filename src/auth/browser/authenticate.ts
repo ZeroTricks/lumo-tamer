@@ -709,7 +709,7 @@ export async function runBrowserAuthentication(outputPath: string): Promise<Extr
     const configEndpoint = authConfig.browser?.cdpEndpoint;
     const cdpEndpoint = await promptForCdpEndpoint(configEndpoint);
 
-    const syncEnabled = getConversationsConfig()?.sync?.enabled ?? false;
+    const syncEnabled = getConversationsConfig().sync.enabled;
 
     const result = await extractBrowserTokens({
         cdpEndpoint,
