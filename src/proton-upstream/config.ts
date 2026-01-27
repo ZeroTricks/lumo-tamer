@@ -11,7 +11,7 @@ export const APP_NAME = 'proton-lumo' as const;
 export const APP_VERSION = '5.0.0';
 export const API_URL = '/api';
 
-// Convenience export for x-pm-appversion header
-export const APP_VERSION_HEADER = `${APP_NAME}@${APP_VERSION}`;
+// app version we need to use in our api calls (x-pm-appversion header)
+export const APP_VERSION_HEADER = `web-lumo@${APP_VERSION}`;
 
 export default { APP_NAME, APP_VERSION, API_URL };
