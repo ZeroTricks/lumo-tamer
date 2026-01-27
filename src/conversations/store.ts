@@ -25,6 +25,7 @@ import type {
     ConversationStoreConfig,
     SpaceId,
 } from './types.js';
+import { getLogConfig } from 'app/config.js';
 
 /**
  * In-memory conversation store
@@ -258,6 +259,7 @@ export class ConversationStore {
             this.markDirty(state);
             state.metadata.updatedAt = Date.now();
         }
+        logger.debug(`Set title for ${id}${getLogConfig().messageContent ? `: ${title}` : ''}`);
     }
 
     /**

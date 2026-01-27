@@ -126,7 +126,6 @@ function handleTitleCommand(params: string, context?: CommandContext): string {
   // Enforce max length (same as postProcessTitle)
   const title = params.trim().substring(0, 100);
   store.setTitle(context.conversationId, title);
-  logger.info({ conversationId: context.conversationId, title }, 'Title set via /title command');
   return `Title set to: ${title}`;
 }
 

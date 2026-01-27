@@ -34,6 +34,7 @@ log:
   level: "info"  # Levels: trace, debug, info, warn, error, fatal
   target: "stdout"  # "stdout" or "file"
   filePath: "lumo-bridge.log"  # Used when target is "file"
+  messageContent: false  # Log user/assistant message content (disabled by default for privacy)
 
 # Shared Conversations Configuration (can be overridden in server/cli sections)
 # Note: In-memory conversation storage is always active regardless of sync settings

@@ -12,11 +12,11 @@
  */
 
 // Initialize config mode and logger before other imports
-import { initConfig } from '../app/config.js';
+import { initConfig, getLogConfig } from '../app/config.js';
 initConfig('cli');
 
 import { initLogger, logger } from '../app/logger.js';
-initLogger({ level: 'info', target: 'stdout', filePath: '' });
+initLogger({...getLogConfig(), target: 'stdout'});
 
 import * as readline from 'readline';
 import { authConfig, authMethodSchema, getConversationsConfig } from '../app/config.js';

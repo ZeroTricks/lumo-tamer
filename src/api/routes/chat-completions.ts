@@ -3,10 +3,6 @@ import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse, OpenAIToolCall } from '../types.js';
 import { getServerConfig, getToolsConfig, getConversationsConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
-
-const serverConfig = getServerConfig();
-const toolsConfig = getToolsConfig();
-const conversationsConfig = getConversationsConfig();
 import { convertMessagesToTurns } from '../message-converter.js';
 import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../tool-parser.js';
 import { StreamingToolDetector } from '../streaming-tool-detector.js';
@@ -49,13 +45,12 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       // Chat Completions has no conversation parameter per OpenAI spec.
       // We use deriveIdFromFirstMessage to track conversations for Proton sync.
       let conversationId: ConversationId;
-      if (conversationsConfig?.deriveIdFromFirstMessage) {
+      if (getConversationsConfig()?.deriveIdFromFirstMessage) {
         // Generate deterministic ID from first user message
         const firstUserMessage = request.messages.find(m => m.role === 'user');
         conversationId = firstUserMessage
           ? generateDeterministicConversationId(firstUserMessage.content)
           : randomUUID();
-        logger.debug({ conversationId, firstUserMessage: firstUserMessage?.content.slice(0, 50) }, 'Generated deterministic conversation ID');
       } else {
         // Random UUID per request (creates separate conversations)
         conversationId = randomUUID();
@@ -108,7 +103,7 @@ function handleCommandStreamingResponse(
     id,
     object: 'chat.completion.chunk',
     created,
-    model: request.model || serverConfig.apiModelName,
+    model: request.model || getServerConfig().apiModelName,
     choices: [
       {
         index: 0,
@@ -124,7 +119,7 @@ function handleCommandStreamingResponse(
     id,
     object: 'chat.completion.chunk',
     created,
-    model: request.model || serverConfig.apiModelName,
+    model: request.model || getServerConfig().apiModelName,
     choices: [
       {
         index: 0,
@@ -147,7 +142,7 @@ function handleCommandNonStreamingResponse(
     id: `chatcmpl-${randomUUID()}`,
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
-    model: request.model || serverConfig.apiModelName,
+    model: request.model || getServerConfig().apiModelName,
     choices: [
       {
         index: 0,
@@ -174,10 +169,10 @@ async function handleStreamingRequest(
   res.setHeader('Connection', 'keep-alive');
 
   // Determine if external tools (web_search, etc.) should be enabled
-  const enableExternalTools = toolsConfig.enableWebSearch;
+  const enableExternalTools = getToolsConfig().enableWebSearch;
 
   // Check if request has custom tools AND tools are enabled
-  const hasCustomTools = toolsConfig.enabled && request.tools && request.tools.length > 0;
+  const hasCustomTools = getToolsConfig().enabled && request.tools && request.tools.length > 0;
 
   await deps.queue.add(async () => {
     const id = `chatcmpl-${randomUUID()}`;
@@ -198,7 +193,7 @@ async function handleStreamingRequest(
         id,
         object: 'chat.completion.chunk',
         created,
-        model: request.model || serverConfig.apiModelName,
+        model: request.model || getServerConfig().apiModelName,
         choices: [
           {
             index: 0,
@@ -216,7 +211,7 @@ async function handleStreamingRequest(
         id,
         object: 'chat.completion.chunk',
         created,
-        model: request.model || serverConfig.apiModelName,
+        model: request.model || getServerConfig().apiModelName,
         choices: [
           {
             index: 0,
@@ -310,7 +305,6 @@ async function handleStreamingRequest(
       if (result.title && deps.conversationStore) {
         const processedTitle = postProcessTitle(result.title);
         deps.conversationStore.setTitle(conversationId, processedTitle);
-        logger.debug({ conversationId, title: processedTitle }, 'Set generated title');
       }
 
       // Persist assistant response
@@ -324,7 +318,7 @@ async function handleStreamingRequest(
         id,
         object: 'chat.completion.chunk',
         created,
-        model: request.model || serverConfig.apiModelName,
+        model: request.model || getServerConfig().apiModelName,
         choices: [
           {
             index: 0,
@@ -357,10 +351,10 @@ async function handleNonStreamingRequest(
   conversationId: ConversationId
 ): Promise<void> {
   // Determine if external tools (web_search, etc.) should be enabled
-  const enableExternalTools = toolsConfig.enableWebSearch;
+  const enableExternalTools = getToolsConfig().enableWebSearch;
 
   // Check if request has custom tools AND tools are enabled
-  const hasCustomTools = toolsConfig.enabled && request.tools && request.tools.length > 0;
+  const hasCustomTools = getToolsConfig().enabled && request.tools && request.tools.length > 0;
 
   // Build command context for /save and other commands
   const commandContext: CommandContext = {
@@ -387,7 +381,6 @@ async function handleNonStreamingRequest(
   if (chatResult.title && deps.conversationStore) {
     const processedTitle = postProcessTitle(chatResult.title);
     deps.conversationStore.setTitle(conversationId, processedTitle);
-    logger.debug({ conversationId, title: processedTitle }, 'Set generated title');
   }
 
   // Parse tool calls from response if custom tools were provided
@@ -424,7 +417,7 @@ async function handleNonStreamingRequest(
     id: `chatcmpl-${randomUUID()}`,
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
-    model: request.model || serverConfig.apiModelName,
+    model: request.model || getServerConfig().apiModelName,
     choices: [
       {
         index: 0,

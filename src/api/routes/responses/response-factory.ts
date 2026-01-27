@@ -2,8 +2,6 @@ import { randomUUID } from 'crypto';
 import { OpenAIResponseRequest, OpenAIResponse, OutputItem } from '../../types.js';
 import { getServerConfig } from '../../../app/config.js';
 
-const serverConfig = getServerConfig();
-
 export function createEmptyResponse(request: OpenAIResponseRequest): OpenAIResponse {
   const id = `resp-${randomUUID()}`;
   const itemId = `item-${randomUUID()}`;
@@ -19,7 +17,7 @@ export function createEmptyResponse(request: OpenAIResponseRequest): OpenAIRespo
     incomplete_details: null,
     instructions: request.instructions || null,
     max_output_tokens: request.max_output_tokens || null,
-    model: request.model || serverConfig.apiModelName,
+    model: request.model || getServerConfig().apiModelName,
     output: [
       {
         type: 'message',
@@ -74,7 +72,7 @@ export function createCompletedResponse(
     incomplete_details: null,
     instructions: request.instructions || null,
     max_output_tokens: request.max_output_tokens || null,
-    model: request.model || serverConfig.apiModelName,
+    model: request.model || getServerConfig().apiModelName,
     output,
     parallel_tool_calls: false,
     previous_response_id: null,

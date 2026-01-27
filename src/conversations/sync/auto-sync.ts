@@ -91,7 +91,7 @@ export class AutoSyncService {
         const throttleDelay = Math.max(0, MIN_INTERVAL_MS - timeSinceLastSync);
         const delay = Math.max(DEBOUNCE_MS, throttleDelay);
 
-        logger.debug({
+        logger.trace({
             delay,
             throttleDelay,
             debounceMs: DEBOUNCE_MS,

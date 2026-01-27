@@ -220,7 +220,6 @@ export class CLIClient {
         if (result.title) {
           const processedTitle = postProcessTitle(result.title);
           store.setTitle(this.conversationId, processedTitle);
-          logger.debug({ title: processedTitle }, 'Set generated title');
         }
 
         // Append assistant response to store

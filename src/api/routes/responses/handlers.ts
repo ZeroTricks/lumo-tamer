@@ -3,9 +3,6 @@ import { randomUUID } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest, OpenAIToolCall } from '../../types.js';
 import { getServerConfig, getToolsConfig } from '../../../app/config.js';
 import { logger } from '../../../app/logger.js';
-
-const serverConfig = getServerConfig();
-const toolsConfig = getToolsConfig();
 import { ResponseEventEmitter } from './events.js';
 import { buildOutputItems } from './output-builder.js';
 import { createCompletedResponse } from './response-factory.js';
@@ -39,7 +36,7 @@ export async function handleStreamingRequest(
 
     try {
       // Event 1: response.created
-      emitter.emitResponseCreated(id, createdAt, request.model || serverConfig.apiModelName);
+      emitter.emitResponseCreated(id, createdAt, request.model || getServerConfig().apiModelName);
 
       // Event 2: response.in_progress
       emitter.emitResponseInProgress(id, createdAt);
@@ -60,10 +57,10 @@ export async function handleStreamingRequest(
       emitter.emitContentPartAdded(itemId, 0, 0);
 
       // Determine if external tools (web_search, etc.) should be enabled
-      const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
+      const enableExternalTools = getToolsConfig()?.enableWebSearch ?? false;
 
       // Check if request has custom tools AND tools are enabled
-      const hasCustomTools = toolsConfig.enabled && request.tools && request.tools.length > 0;
+      const hasCustomTools = getToolsConfig().enabled && request.tools && request.tools.length > 0;
 
       // Create detector if custom tools are enabled
       const detector = hasCustomTools ? new StreamingToolDetector() : null;
@@ -135,7 +132,6 @@ export async function handleStreamingRequest(
       if (result.title && deps.conversationStore) {
         const processedTitle = postProcessTitle(result.title);
         deps.conversationStore.setTitle(conversationId, processedTitle);
-        logger.debug({ conversationId, title: processedTitle }, 'Set generated title');
       }
 
       // Update accumulated text from result (in case of discrepancy)
@@ -177,7 +173,7 @@ export async function handleNonStreamingRequest(
   conversationId: ConversationId
 ): Promise<void> {
   // Determine if external tools (web_search, etc.) should be enabled
-  const enableExternalTools = toolsConfig?.enableWebSearch ?? false;
+  const enableExternalTools = getToolsConfig()?.enableWebSearch ?? false;
 
   // Build command context for /save and other commands
   const commandContext: CommandContext = {
@@ -209,7 +205,6 @@ export async function handleNonStreamingRequest(
   if (result.title && deps.conversationStore) {
     const processedTitle = postProcessTitle(result.title);
     deps.conversationStore.setTitle(conversationId, processedTitle);
-    logger.debug({ conversationId, title: processedTitle }, 'Set generated title');
   }
 
   // TODO: call tools

@@ -9,6 +9,7 @@ const logConfigSchema = z.object({
   level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   target: z.enum(['stdout', 'file']).default('stdout'),
   filePath: z.string().default('logs/lumo-bridge.log'),
+  messageContent: z.boolean().default(false),
 }).prefault({});
 
 const protonConfigSchema = z.object({
