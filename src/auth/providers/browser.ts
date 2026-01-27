@@ -28,21 +28,28 @@ export class BrowserAuthProvider extends BaseAuthProvider {
         super(resolveProjectPath(authConfig.tokenPath));
     }
 
-    async initialize(): Promise<void> {
-        this.tokens = this.loadTokensFromFile();
-        this.validateTokens();
+    // Browser tokens may not have method field - accept any or 'browser'
+    protected override validateMethod(): void {
+        if (this.tokens?.method && this.tokens.method !== 'browser') {
+            throw new Error(
+                `Token file is not from browser auth (method: ${this.tokens.method}).\n` +
+                'Run: npm run auth and select browser'
+            );
+        }
+    }
 
+    protected override async onAfterLoad(): Promise<void> {
         const tokenAge = this.getTokenAgeHours();
         logger.debug({
-            extractedAt: this.tokens.extractedAt,
+            extractedAt: this.tokens!.extractedAt,
             ageHours: tokenAge.toFixed(1),
-            uid: this.tokens.uid.slice(0, 8) + '...',
+            uid: this.tokens!.uid.slice(0, 8) + '...',
         }, 'Browser tokens loaded');
 
         // Try to extract keyPassword from persisted session
-        if (this.tokens.persistedSession?.blob && this.tokens.persistedSession?.clientKey) {
+        if (this.tokens!.persistedSession?.blob && this.tokens!.persistedSession?.clientKey) {
             try {
-                const decrypted = await decryptPersistedSession(this.tokens.persistedSession);
+                const decrypted = await decryptPersistedSession(this.tokens!.persistedSession);
                 this.keyPassword = decrypted.keyPassword;
                 logger.debug('Extracted keyPassword from browser session');
             } catch (err) {
@@ -51,8 +58,8 @@ export class BrowserAuthProvider extends BaseAuthProvider {
         }
 
         logger.debug({
-            hasUserKeys: this.tokens.userKeys?.length ?? 0,
-            hasMasterKeys: this.tokens.masterKeys?.length ?? 0,
+            hasUserKeys: this.tokens!.userKeys?.length ?? 0,
+            hasMasterKeys: this.tokens!.masterKeys?.length ?? 0,
         }, 'Browser provider initialized');
     }
 

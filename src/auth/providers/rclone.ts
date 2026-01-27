@@ -18,23 +18,20 @@ export class RcloneAuthProvider extends BaseAuthProvider {
         super(resolveProjectPath(authConfig.tokenPath));
     }
 
-    async initialize(): Promise<void> {
-        this.tokens = this.loadTokensFromFile();
-
-        // Validate we have rclone tokens
-        if (this.tokens.method !== 'rclone') {
+    protected override validateMethod(): void {
+        if (this.tokens?.method !== 'rclone') {
             throw new Error(
-                `Token file is not from rclone extraction (method: ${this.tokens.method}).\n` +
-                'Run: npm run extract-rclone'
+                `Token file is not from rclone extraction (method: ${this.tokens?.method}).\n` +
+                'Run: npm run auth and select rclone'
             );
         }
+    }
 
-        this.validateTokens();
-
+    protected override async onAfterLoad(): Promise<void> {
         logger.debug({
-            uid: this.tokens.uid.slice(0, 12) + '...',
-            hasKeyPassword: !!this.tokens.keyPassword,
-            extractedAt: this.tokens.extractedAt,
+            uid: this.tokens!.uid.slice(0, 12) + '...',
+            hasKeyPassword: !!this.tokens!.keyPassword,
+            extractedAt: this.tokens!.extractedAt,
         }, 'Rclone tokens loaded');
     }
 
