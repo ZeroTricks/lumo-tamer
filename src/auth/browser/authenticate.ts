@@ -13,7 +13,8 @@ import { dirname } from 'path';
 import { promises as dns, ADDRCONFIG } from 'dns';
 import type { PersistedSessionData } from '../../lumo-client/types.js';
 import type { StoredTokens } from '../types.js';
-import { authConfig, protonConfig, getConversationsConfig } from '../../app/config.js';
+import { authConfig, getConversationsConfig } from '../../app/config.js';
+import { APP_VERSION_HEADER } from '../../proton-upstream/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { logger } from '../../app/logger.js';
 import { decryptPersistedSession } from '../../conversations/session-keys.js';
@@ -715,7 +716,7 @@ export async function runBrowserAuthentication(outputPath: string): Promise<Extr
         cdpEndpoint,
         targetUrl: PROTON_URLS.LUMO_BASE,
         fetchPersistenceKeys: syncEnabled,
-        appVersion: protonConfig.appVersion,
+        appVersion: APP_VERSION_HEADER,
     });
 
     // Ensure output directory exists

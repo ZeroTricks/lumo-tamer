@@ -35,7 +35,7 @@ export async function runProtonAuth(
         }
 
         // Pass SRP-specific headers to the Go binary (to avoid CAPTCHA)
-        // These are separate from protonConfig.appVersion used for API calls
+        // These are separate from APP_VERSION_HEADER used for API calls
         args.push('--app-version', authConfig.login.appVersion);
         args.push('--user-agent', authConfig.login.userAgent);
 

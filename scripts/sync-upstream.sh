@@ -48,6 +48,9 @@ declare -A UPSTREAM_FILES=(
     ["util/date.ts"]="util/date.ts"
     ["util/objects.ts"]="util/objects.ts"
     ["util/sorting.ts"]="util/sorting.ts"
+
+    # Note: config.ts is a shim - we only track it to detect APP_VERSION changes
+    ["config.ts"]="config.ts"
 )
 
 echo -e "${BLUE}=== Proton WebClients Upstream Sync ===${NC}\n"
@@ -118,6 +121,14 @@ for local_path in "${!UPSTREAM_FILES[@]}"; do
         MISSING_FILES+=("$local_path")
     fi
 done
+
+# Check APP_VERSION specifically (important for x-pm-appversion header)
+UPSTREAM_VERSION=$(grep -oP "APP_VERSION\s*=\s*'\\K[^']+" "${TEMP_DIR}/config.ts" 2>/dev/null || echo "")
+LOCAL_VERSION=$(grep -oP "APP_VERSION\s*=\s*'\\K[^']+" "${UPSTREAM_DIR}/config.ts" 2>/dev/null || echo "")
+if [ -n "$UPSTREAM_VERSION" ] && [ "$UPSTREAM_VERSION" != "$LOCAL_VERSION" ]; then
+    echo -e "\n${YELLOW}⚠ APP_VERSION changed upstream: ${LOCAL_VERSION} -> ${UPSTREAM_VERSION}${NC}"
+    echo -e "  Update src/proton-upstream/config.ts if needed."
+fi
 
 # Interactive menu
 show_menu() {

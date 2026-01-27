@@ -1,9 +1,3 @@
-# Proton API configuration
-# URLs are hardcoded to production (lumo.proton.me, account.proton.me) - see src/app/urls.ts
-proton:
-  # App version sent with API requests (matches Proton WebClients)
-  appVersion: "web-lumo@5.0.0"
-
 # Authentication configuration
 # - browser: token extraction via browser (recommended)
 # - login: enter Proton credentials via go-proton-api

@@ -7,7 +7,7 @@
  * Browser auth uses a different cookie-based approach (see BrowserAuthProvider.refresh()).
  */
 
-import { protonConfig } from '../app/config.js';
+import { APP_VERSION_HEADER } from '../proton-upstream/config.js';
 import { PROTON_URLS } from '../app/urls.js';
 import { logger } from '../app/logger.js';
 import type { StoredTokens } from './types.js';
@@ -41,7 +41,7 @@ export async function refreshWithRefreshToken(tokens: StoredTokens): Promise<Par
         headers: {
             'Content-Type': 'application/json',
             'x-pm-uid': tokens.uid,
-            'x-pm-appversion': protonConfig.appVersion,
+            'x-pm-appversion': APP_VERSION_HEADER,
         },
         body: JSON.stringify({
             UID: tokens.uid,
