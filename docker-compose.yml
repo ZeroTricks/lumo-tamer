@@ -1,56 +1,24 @@
 services:
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile.app
-      target: production
+    build: .
     container_name: lumo-bridge-app
     ports:
       - "3003:3003"
     volumes:
       - ./config.yaml:/app/config.yaml:ro
+      - ./sessions:/app/sessions
     environment:
       - NODE_ENV=production
-    depends_on:
-      - browser-dev
     restart: unless-stopped
-
-
-  # App service - lightweight Node.js app with hot reload
-  app-dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.app
-      target: development
-    container_name: lumo-bridge-app-dev
-    ports:
-      - "3003:3003"
-      - "9229:9229"  # Node.js debugger port
-    environment:
-      - NODE_ENV=development
-    volumes:
-      # Configuration file
-      - ./config.yaml:/app/config.yaml:ro
-      # Mount source code for live editing and hot reload
-      - ./src:/app/src:rw
-      - ./package.json:/app/package.json:ro
-      - ./tsconfig.json:/app/tsconfig.json:ro
-      # Persist node_modules (performance optimization)
-      - node_modules:/app/node_modules
-    depends_on:
-      - browser-dev
-    restart: unless-stopped
-    stdin_open: true
-    tty: true
 
   # Browser service - runs Chromium with CDP enabled (headed mode for dev)
-  browser-dev:
+  browser:
     # image: lscr.io/linuxserver/chromium:latest
     build:
       context: .
       dockerfile: Dockerfile.browser
-    container_name: lumo-bridge-browser-dev
+    container_name: lumo-bridge-browser
     environment:
       - PUID=1000
       - PGID=1000
@@ -76,16 +44,13 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - OPENAI_API_BASE_URLS=http://app-dev:3003/v1
+      - OPENAI_API_BASE_URLS=http://app:3003/v1
       - OPENAI_API_KEYS=
       - ENABLE_OPENAI_API=true
     volumes:
       - open-webui-data:/app/backend/data
     restart: unless-stopped
-    depends_on:
-      - app-dev
 
 
 volumes:
-  node_modules:
   open-webui-data:
