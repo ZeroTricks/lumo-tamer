@@ -5,22 +5,20 @@
  * Used by CLI (npm run auth) for login authentication method.
  */
 
-import { writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
 import { authConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { runProtonAuth } from './proton-auth-cli.js';
+import { writeVault, type VaultKeyConfig } from '../vault/index.js';
 import type { StoredTokens } from '../types.js';
 
 /**
  * Run login authentication
  *
- * Runs the Go binary for SRP authentication and saves tokens.
+ * Runs the Go binary for SRP authentication and saves tokens to encrypted vault.
  */
 export async function runLoginAuthentication(): Promise<void> {
     const binaryPath = resolveProjectPath(authConfig.login.binaryPath);
-    const outputPath = resolveProjectPath(authConfig.tokenPath);
 
     // Run the Go binary (interactive prompts for credentials)
     const result = await runProtonAuth(binaryPath);
@@ -36,13 +34,16 @@ export async function runLoginAuthentication(): Promise<void> {
         extractedAt: new Date().toISOString(),
     };
 
-    // Ensure output directory exists
-    mkdirSync(dirname(outputPath), { recursive: true });
+    // Write tokens to encrypted vault
+    const vaultPath = resolveProjectPath(authConfig.vault.path);
+    const keyConfig: VaultKeyConfig = {
+        keychain: authConfig.vault.keychain,
+        keyFilePath: authConfig.vault.keyFilePath,
+    };
 
-    // Write tokens
-    writeFileSync(outputPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+    await writeVault(vaultPath, tokens, keyConfig);
 
-    logger.info({ outputPath }, 'Tokens saved');
+    logger.info({ vaultPath }, 'Tokens saved to encrypted vault');
     logger.info({
         uid: tokens.uid.slice(0, 12) + '...',
         hasKeyPassword: !!tokens.keyPassword,

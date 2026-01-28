@@ -11,12 +11,22 @@ import { APP_VERSION_HEADER } from '../../proton-upstream/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { decryptPersistedSession } from '../../conversations/session-keys.js';
-import { BaseAuthProvider } from './base.js';
+import { BaseAuthProvider, type ProviderConfig } from './base.js';
 import type { AuthProviderStatus } from '../types.js';
 
 interface RefreshResponse {
     UID: string;
     ExpiresIn?: number;
+}
+
+function getProviderConfig(): ProviderConfig {
+    return {
+        vaultPath: resolveProjectPath(authConfig.vault.path),
+        keyConfig: {
+            keychain: authConfig.vault.keychain,
+            keyFilePath: authConfig.vault.keyFilePath,
+        },
+    };
 }
 
 export class BrowserAuthProvider extends BaseAuthProvider {
@@ -25,7 +35,7 @@ export class BrowserAuthProvider extends BaseAuthProvider {
     private keyPassword?: string;
 
     constructor() {
-        super(resolveProjectPath(authConfig.tokenPath));
+        super(getProviderConfig());
     }
 
     // Browser tokens may not have method field - accept any or 'browser'
@@ -85,15 +95,15 @@ export class BrowserAuthProvider extends BaseAuthProvider {
     getStatus(): AuthProviderStatus {
         const status: AuthProviderStatus = {
             method: 'browser',
-            source: this.tokenCachePath,
+            source: this.config.vaultPath,
             valid: false,
             details: {},
             warnings: [],
         };
 
         if (!this.tokens) {
-            status.warnings.push(`Token file not found: ${this.tokenCachePath}`);
-            status.warnings.push('Run: npm run extract-tokens');
+            status.warnings.push(`Vault not found: ${this.config.vaultPath}`);
+            status.warnings.push('Run: npm run auth');
             return status;
         }
 
@@ -232,7 +242,7 @@ export class BrowserAuthProvider extends BaseAuthProvider {
             extractedAt: new Date().toISOString(), // Reset age on refresh
         };
 
-        this.saveTokensToFile();
+        await this.saveTokensToVault();
 
         logger.info({
             method: this.method,

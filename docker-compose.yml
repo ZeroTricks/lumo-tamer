@@ -8,6 +8,8 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml
       - ./sessions:/app/sessions
+    secrets:
+      - lumo-vault-key
     environment:
       - NODE_ENV=production
     restart: unless-stopped
@@ -51,6 +53,10 @@ services:
       - open-webui-data:/app/backend/data
     restart: unless-stopped
 
+secrets:
+  # WARNING: use Docker Swarm or another secrets management tool for production environments
+  lumo-vault-key:
+    file: ./secrets/lumo-vault-key
 
 volumes:
   open-webui-data:

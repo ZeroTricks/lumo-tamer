@@ -7,15 +7,12 @@
  */
 
 import * as readline from 'readline';
-import { writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
 import { parseRcloneSection } from './parser.js';
 import { authConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
 import { resolveProjectPath } from '../../app/paths.js';
+import { writeVault, type VaultKeyConfig } from '../vault/index.js';
 import type { StoredTokens } from '../types.js';
-
-const outputPath = resolveProjectPath(authConfig.tokenPath);
 
 /**
  * Read multi-line input from stdin until an empty line is entered
@@ -55,7 +52,7 @@ async function readMultilineInput(): Promise<string> {
 /**
  * Run rclone authentication
  *
- * Prompts for rclone config paste, parses tokens, and saves to file.
+ * Prompts for rclone config paste, parses tokens, and saves to encrypted vault.
  */
 export async function runRcloneAuthentication(): Promise<void> {
     const content = await readMultilineInput();
@@ -77,13 +74,16 @@ export async function runRcloneAuthentication(): Promise<void> {
         extractedAt: new Date().toISOString(),
     };
 
-    // Ensure output directory exists
-    mkdirSync(dirname(outputPath), { recursive: true });
+    // Write tokens to encrypted vault
+    const vaultPath = resolveProjectPath(authConfig.vault.path);
+    const keyConfig: VaultKeyConfig = {
+        keychain: authConfig.vault.keychain,
+        keyFilePath: authConfig.vault.keyFilePath,
+    };
 
-    // Write tokens
-    writeFileSync(outputPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+    await writeVault(vaultPath, tokens, keyConfig);
 
-    logger.info({ outputPath }, 'Tokens saved');
+    logger.info({ vaultPath }, 'Tokens saved to encrypted vault');
     logger.info({
         uid: tokens.uid.slice(0, 12) + '...',
         hasKeyPassword: !!tokens.keyPassword,

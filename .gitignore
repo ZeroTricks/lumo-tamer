@@ -3,5 +3,6 @@ dist/
 config.yaml
 *.log
 .DS_Store
-sessions/auth-tokens.json
+sessions/
 extra-docs/
+secrets/
