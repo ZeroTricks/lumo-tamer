@@ -721,8 +721,8 @@ export async function runBrowserAuthentication(outputPath: string): Promise<Extr
     // Ensure output directory exists
     mkdirSync(dirname(outputPath), { recursive: true });
 
-    // Write tokens
-    writeFileSync(outputPath, JSON.stringify(result.tokens, null, 2));
+    // Write tokens with restricted permissions (owner read/write only)
+    writeFileSync(outputPath, JSON.stringify(result.tokens, null, 2), { mode: 0o600 });
     logger.info({ outputPath }, 'Tokens saved');
 
     return result;
