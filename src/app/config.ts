@@ -1,92 +1,75 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { load } from 'js-yaml';
 import { z } from 'zod';
 import merge from 'lodash/merge.js';
 import { resolveProjectPath } from './paths.js';
 
-// Schemas
+// Load defaults from YAML (single source of truth)
+const configDefaults = load(readFileSync(resolveProjectPath('config.defaults.yaml'), 'utf8')) as Record<string, unknown>;
+
+// Config loading
+export type ConfigMode = 'server' | 'cli';
+// Shared keys that can be overridden per mode (instructions is mode-specific only)
+const SHARED_KEYS = ['log', 'conversations', 'tools', 'commands'] as const;
+
+// Schemas (validation only, no defaults - defaults come from config.defaults.yaml)
 const logConfigSchema = z.object({
-  level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
-  target: z.enum(['stdout', 'file']).default('stdout'),
-  filePath: z.string().default('logs/lumo-tamer.log'),
-  messageContent: z.boolean().default(false),
-}).prefault({});
+  level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']),
+  target: z.enum(['stdout', 'file']),
+  filePath: z.string(),
+  messageContent: z.boolean(),
+});
 
 const instructionsConfigSchema = z.object({
-  default: z.string().optional(),
-  append: z.boolean().default(false),
-  forTools: z.string().default(''),
-}).prefault({});
+  default: z.string(),
+  append: z.boolean(),
+  forTools: z.string(),
+});
 
 const toolsConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  enableWebSearch: z.boolean().default(false),
+  enabled: z.boolean(),
+  enableWebSearch: z.boolean(),
   // Maps code block language tag → [command, ...args]. Code is appended as last arg.
-  executors: z.record(z.string(), z.array(z.string())).default({
-    // Unix shells
-    bash: ['bash', '-c'],
-    sh: ['sh', '-c'],
-    zsh: ['zsh', '-c'],
-    // Windows shells
-    powershell: ['powershell', '-Command'],
-    ps1: ['powershell', '-Command'],
-    cmd: ['cmd', '/c'],
-    // Scripting languages
-    python: ['python3', '-c'],
-    python3: ['python3', '-c'],
-    node: ['node', '-e'],
-    javascript: ['node', '-e'],
-    js: ['node', '-e'],
-    ruby: ['ruby', '-e'],
-    perl: ['perl', '-e'],
-  }),
-}).prefault({});
+  executors: z.record(z.string(), z.array(z.string())),
+});
 
 const commandsConfigSchema = z.object({
-  enabled: z.boolean().default(true),
-}).prefault({});
-
-const syncConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  spaceId: z.string().uuid().optional(),
-  spaceName: z.string().min(1).default('lumo-tamer'),
-  includeSystemMessages: z.boolean().default(false),
-  autoSync: z.boolean().default(false),
-}).prefault({});
+  enabled: z.boolean(),
+});
 
 const conversationsConfigSchema = z.object({
-  maxInMemory: z.number().default(100),
-  deriveIdFromFirstMessage: z.boolean().default(false),
-  sync: syncConfigSchema,
-}).prefault({});
-
-const authAutoRefreshConfigSchema = z.object({
-  enabled: z.boolean().default(true),
-  intervalHours: z.number().min(1).max(24).default(20),
-  onError: z.boolean().default(true),
-}).prefault({});
-
-const authBrowserConfigSchema = z.object({
-  cdpEndpoint: z.string().default('http://localhost:9222'),
-}).optional();
-
-const authLoginConfigSchema = z.object({
-  binaryPath: z.string().default('./dist/proton-auth'),
-  appVersion: z.string().default('macos-drive@1.0.0-alpha.1+rclone'),
-  userAgent: z.string().default('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'),
-}).prefault({});
+  maxInMemory: z.number(),
+  deriveIdFromFirstMessage: z.boolean(),
+  sync: z.object({
+    enabled: z.boolean(),
+    spaceId: z.string().uuid().optional(),
+    spaceName: z.string().min(1),
+    includeSystemMessages: z.boolean(),
+    autoSync: z.boolean(),
+  }),
+});
 
 export const authMethodSchema = z.enum(['login', 'browser', 'rclone']);
 
 const authConfigSchema = z.object({
-  method: authMethodSchema.default('browser'),
-  tokenPath: z.string().default('sessions/auth-tokens.json'),
-  autoRefresh: authAutoRefreshConfigSchema,
-  browser: authBrowserConfigSchema,
-  login: authLoginConfigSchema,
-}).prefault({});
+  method: authMethodSchema,
+  tokenPath: z.string(),
+  autoRefresh: z.object({
+    enabled: z.boolean(),
+    intervalHours: z.number().min(1).max(24),
+    onError: z.boolean(),
+  }),
+  browser: z.object({
+    cdpEndpoint: z.string(),
+  }),
+  login: z.object({
+    binaryPath: z.string(),
+    appVersion: z.string(),
+    userAgent: z.string(),
+  }),
+});
 
-const modeOverridesSchema = z.object({
+const modeConfigSchema = z.object({
   log: logConfigSchema,
   conversations: conversationsConfigSchema,
   instructions: instructionsConfigSchema,
@@ -94,56 +77,65 @@ const modeOverridesSchema = z.object({
   commands: commandsConfigSchema,
 });
 
-const mergedConfigSchema = modeOverridesSchema.extend({
+const mergedConfigSchema = modeConfigSchema.extend({
   auth: authConfigSchema,
 });
 
 const serverFieldsSchema = z.object({
-  port: z.number().int().positive().default(3003),
+  port: z.number().int().positive(),
   apiKey: z.string().min(1, 'server.apiKey is required'),
-  apiModelName: z.string().min(1).default('lumo'),
+  apiModelName: z.string().min(1),
 });
 
 const serverMergedConfigSchema = mergedConfigSchema.extend(serverFieldsSchema.shape);
 
 type MergedConfig = z.infer<typeof mergedConfigSchema>;
 type ServerMergedConfig = z.infer<typeof serverMergedConfigSchema>;
-type ModeOverrides = z.infer<typeof modeOverridesSchema>;
 
-// Config loading
-export type ConfigMode = 'server' | 'cli';
-const MODE_KEYS: (keyof ModeOverrides)[] = ['log', 'conversations', 'instructions', 'tools', 'commands'];
 
-function loadRawYaml(): Record<string, unknown> {
-  return load(readFileSync(resolveProjectPath('config.yaml'), 'utf8')) as Record<string, unknown>;
+
+// Cache user config (loaded once)
+let userConfigCache: Record<string, unknown> | null = null;
+function loadUserYaml(): Record<string, unknown> {
+  if (userConfigCache !== null) return userConfigCache;
+
+  const configPath = resolveProjectPath('config.yaml');
+  if (!existsSync(configPath)) {
+    // using console here as logger is not initialized yet
+    console.log('No config.yaml found, using defaults from config.defaults.yaml');
+    userConfigCache = {};
+  } else {
+    userConfigCache = load(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+  }
+  return userConfigCache;
 }
 
 function loadMergedConfig(mode: ConfigMode): MergedConfig | ServerMergedConfig {
   try {
-    const raw = loadRawYaml();
-    const modeConfig = (mode === 'server' ? raw.server : raw.cli) as Record<string, unknown> | undefined;
+    const userConfig = loadUserYaml();
+    const defaultModeConfig = (mode === 'server' ? configDefaults.server : configDefaults.cli) as Record<string, unknown>;
+    const userModeConfig = (mode === 'server' ? userConfig.server : userConfig.cli) as Record<string, unknown> | undefined;
 
-    // Deep merge mode-overridable keys before Zod parsing
-    const merged: Record<string, unknown> = { auth: raw.auth };
-    for (const key of MODE_KEYS) {
-      merged[key] = merge({}, raw[key], modeConfig?.[key]);
-    }
+    // Stage 1: defaults → user (for all keys including mode-specific)
+    const merged = merge({}, configDefaults, defaultModeConfig, userConfig, userModeConfig);
 
-    // Copy mode-specific fields (anything not in MODE_KEYS)
-    if (modeConfig) {
-      for (const key of Object.keys(modeConfig)) {
-        if (!MODE_KEYS.includes(key as keyof ModeOverrides)) {
-          merged[key] = modeConfig[key];
-        }
+    // Stage 2: apply user mode overrides for shared keys only
+    for (const key of SHARED_KEYS) {
+      if (userModeConfig?.[key]) {
+        merged[key] = merge({}, merged[key], userModeConfig[key]);
       }
     }
+
+    // Remove server/cli sections from final config
+    delete merged.server;
+    delete merged.cli;
 
     return (mode === 'server' ? serverMergedConfigSchema : mergedConfigSchema).parse(merged);
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.error('Configuration validation failed:');
       error.issues.forEach((e) => console.error(`  - ${e.path.join('.')}: ${e.message}`));
-      throw new Error('Invalid configuration. Please check config.yaml');
+      throw new Error('Invalid configuration. Please check config.yaml and config.defaults.yaml');
     }
     throw error;
   }
@@ -179,18 +171,18 @@ export function getServerConfig(): ServerMergedConfig {
   return config as ServerMergedConfig;
 }
 
-// Legacy exports (for scripts before initConfig)
-export const authConfig = authConfigSchema.parse(loadRawYaml().auth);
+// Legacy export (for scripts before initConfig (auth))
+export const authConfig = ((): z.infer<typeof authConfigSchema> => {
+  const userConfig = loadUserYaml();
+  const merged = merge({}, configDefaults.auth, userConfig.auth);
+  return authConfigSchema.parse(merged);
+})();
 
 // Types
+export type AuthConfig = z.infer<typeof authConfigSchema>;
 export type ServerConfig = z.infer<typeof serverFieldsSchema>;
+export type CliConfig = z.infer<typeof modeConfigSchema>;
+export type LogConfig = z.infer<typeof logConfigSchema>;
 export type ToolsConfig = z.infer<typeof toolsConfigSchema>;
 export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;
 export type ConversationsConfig = z.infer<typeof conversationsConfigSchema>;
-export type SyncConfig = z.infer<typeof syncConfigSchema>;
-export type AuthConfig = z.infer<typeof authConfigSchema>;
-export type AuthBrowserConfig = z.infer<typeof authBrowserConfigSchema>;
-export type AuthLoginConfig = z.infer<typeof authLoginConfigSchema>;
-export type AuthAutoRefreshConfig = z.infer<typeof authAutoRefreshConfigSchema>;
-export type CliConfig = z.infer<typeof modeOverridesSchema>;
-export type LogConfig = z.infer<typeof logConfigSchema>;

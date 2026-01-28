@@ -18,12 +18,11 @@ auth:
     # use this if you're running the browser docker image:
     # cdpEndpoint: "http://browser:9223"
   # Login-specific config (only used when method: login)
-  # All fields have defaults - override only if needed
-  # login:
-  #   binaryPath: "./dist/proton-auth"  # Path to proton-auth Go binary
-  #   # Headers to help avoid CAPTCHA - see docs/authentication.md
-  #   appVersion: "macos-drive@1.0.0-alpha.1+rclone"
-  #   userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ..."
+  login:
+    binaryPath: "./dist/proton-auth"  # Path to proton-auth Go binary
+    # Headers to help avoid CAPTCHA - see docs/authentication.md
+    appVersion: "macos-drive@1.0.0-alpha.1+rclone"
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
 log:
@@ -63,12 +62,25 @@ tools:
   enableWebSearch: true
   # Executors for code block execution (CLI only)
   # Maps language tag → [command, ...args]. Code is appended as last arg.
-  # Default includes: bash, sh, zsh, powershell, ps1, cmd, python, python3, node, javascript, js, ruby, perl
-  # To actually make Lumo use these, specify them in (cli.)instructions.forTools
-  # Override to restrict or extend:
-  # executors:
-  #   bash: ["bash", "-c"]
-  #   python: ["python3", "-c"]
+  # To actually make Lumo use these, specify them in cli.instructions.forTools
+  # Override in config.yaml to restrict or extend
+  executors:
+    # Unix shells
+    bash: ["bash", "-c"]
+    sh: ["sh", "-c"]
+    zsh: ["zsh", "-c"]
+    # Windows shells
+    powershell: ["powershell", "-Command"]
+    ps1: ["powershell", "-Command"]
+    cmd: ["cmd", "/c"]
+    # Scripting languages
+    python: ["python3", "-c"]
+    python3: ["python3", "-c"]
+    node: ["node", "-e"]
+    javascript: ["node", "-e"]
+    js: ["node", "-e"]
+    ruby: ["ruby", "-e"]
+    perl: ["perl", "-e"]
 
 # Shared Commands Configuration (can be overridden in server/cli sections)
 commands:
@@ -76,24 +88,18 @@ commands:
   # When disabled, commands are ignored and treated as regular messages.
   enabled: true
 
-# Shared Instructions configuration (can be overridden in server/cli sections)
-instructions:
-  # Default instructions when no system/developer message provided
-  default: "Always answer in plain text. Don't use tables, quote blocks, lists, etc. Be concise."
-
-  # If true, append request instructions to default; if false, request replaces default
-  append: false
-
-
-
 # Server Configuration (for `npm run server` / `npm run dev:server`)
 server:
   port: 3003
   apiKey: "your-secret-api-key-here"
   apiModelName: "lumo"
-  # Mode-specific overrides (optional):
   instructions:
-    # Description text for tools (prepended to tools JSON)
+    # Default instructions when no system/developer message is provided in the request
+    default: "Always answer in plain text. Don't use tables, quote blocks, lists, etc. Be concise."
+    # If true, append request instructions to default; if false, request replaces default
+    append: false
+    # Description text for tools
+    # (prepended to stringified tools JSON if tools.enabled and tools are provided in the request)
     forTools: |
       Use the tools below to accomplish tasks.
       To call them you MUST output the JSON to the user, unlike your existing tools like proton_info or web search.
@@ -107,17 +113,18 @@ server:
 
 # CLI Configuration (for `npm run cli` / `npm run dev:cli`)
 cli:
-#   log:
-#     target: "file"
-#     filePath: "lumo-tamer-cli.log"
-#   tools:
-#     enabled: true  # Enable code block detection and execution
   instructions:
     default: |
       You are a command line assistant. Your output will be read in a terminal. Keep the formatting to a minimum and be concise.
+    append: false
     # forTools is appended when tools.enabled=true
     forTools: |
       You can execute bash and python commands on the user's machine.
       When you provide a code block like ```bash or ```python, the user will be prompted to execute it. Don't explain the user can execute commands, it will be handled automatically.
       Output will be returned to you. Keep commands simple and safe.
+  # log:
+  #   target: "file"
+  #   filePath: "lumo-tamer-cli.log"
+  # tools:
+  #   enabled: true  # Enable code block detection and execution
 

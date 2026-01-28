@@ -1,6 +1,7 @@
 import pino from 'pino';
 import type { LogConfig } from './config.js';
 import { resolveProjectPath } from './paths.js';
+import { installConsoleShim } from '../proton-shims/console.js';
 
 // Determine transport based on config
 function getTransport(config: LogConfig): pino.TransportSingleOptions {
@@ -41,6 +42,7 @@ let _logger: pino.Logger;
 // Must be called early in entry point, before other modules use logger
 export function initLogger(config: LogConfig): void {
   _logger = createLogger(config);
+  installConsoleShim();
 }
 
 // Get the global logger instance

@@ -1,9 +1,5 @@
 #!/usr/bin/env node
-// Install console shim early, before importing upstream modules
-import { installConsoleShim } from './proton-shims/console.js';
-installConsoleShim();
-
-// Initialize config mode and logger before other imports
+// Initialize config and logger before other imports
 import { initConfig, getLogConfig, getServerConfig } from './app/config.js';
 initConfig('server');
 
