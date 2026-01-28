@@ -6,3 +6,4 @@ config.yaml
 sessions/
 extra-docs/
 secrets/
+browser-data/
