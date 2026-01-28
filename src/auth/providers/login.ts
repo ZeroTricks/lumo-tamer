@@ -9,14 +9,24 @@ import { logger } from '../../app/logger.js';
 import { authConfig, getConversationsConfig } from '../../app/config.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { fetchKeys } from '../fetch-keys.js';
-import { BaseAuthProvider } from './base.js';
+import { BaseAuthProvider, type ProviderConfig } from './base.js';
 import type { AuthProviderStatus, StoredTokens } from '../types.js';
+
+function getProviderConfig(): ProviderConfig {
+    return {
+        vaultPath: resolveProjectPath(authConfig.vault.path),
+        keyConfig: {
+            keychain: authConfig.vault.keychain,
+            keyFilePath: authConfig.vault.keyFilePath,
+        },
+    };
+}
 
 export class LoginAuthProvider extends BaseAuthProvider {
     readonly method = 'login' as const;
 
     constructor() {
-        super(resolveProjectPath(authConfig.tokenPath));
+        super(getProviderConfig());
     }
 
     // Accept tokens without method field (created by Go binary) or with method: 'login'
@@ -64,7 +74,7 @@ export class LoginAuthProvider extends BaseAuthProvider {
             const keys = await fetchKeys(this.createApi());
             if (keys.userKeys) this.tokens.userKeys = keys.userKeys;
             if (keys.masterKeys) this.tokens.masterKeys = keys.masterKeys;
-            this.saveTokensToFile();
+            await this.saveTokensToVault();
             logger.info('Keys cached successfully');
         } catch (err) {
             logger.warn({ err }, 'Failed to fetch keys - persistence may not work');
@@ -90,7 +100,7 @@ export class LoginAuthProvider extends BaseAuthProvider {
     getStatus(): AuthProviderStatus {
         const status: AuthProviderStatus = {
             method: 'login',
-            source: this.tokenCachePath,
+            source: this.config.vaultPath,
             valid: false,
             details: {},
             warnings: [],

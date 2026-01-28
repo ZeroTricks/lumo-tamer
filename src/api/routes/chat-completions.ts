@@ -241,7 +241,6 @@ async function handleStreamingRequest(
         syncInitialized: deps.syncInitialized ?? false,
         conversationId,
         authManager: deps.authManager,
-        tokenCachePath: deps.tokenCachePath,
       };
 
       // Request title for new conversations (title still has default value)
@@ -361,7 +360,6 @@ async function handleNonStreamingRequest(
     syncInitialized: deps.syncInitialized ?? false,
     conversationId,
     authManager: deps.authManager,
-    tokenCachePath: deps.tokenCachePath,
   };
 
   // Request title for new conversations (title still has default value)

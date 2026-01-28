@@ -3,15 +3,15 @@
  *
  * Implements proper logout by:
  * 1. Calling Proton's session revocation API (DELETE /core/v4/auth)
- * 2. Deleting the local token cache file
+ * 2. Deleting the local encrypted vault
  *
  * Based on Proton WebClients implementation in:
  * packages/shared/lib/api/auth.ts - revoke()
  * packages/shared/lib/authentication/logout.ts - handleLogout()
  */
 
-import { existsSync, unlinkSync } from 'fs';
 import { logger } from '../app/logger.js';
+import { deleteVault } from './vault/index.js';
 import type { ProtonApi } from './types.js';
 
 /**
@@ -40,27 +40,22 @@ export async function revokeSession(api: ProtonApi): Promise<void> {
 }
 
 /**
- * Delete the local token cache file
+ * Delete the local encrypted vault
  *
- * @param tokenCachePath - Path to the token file (e.g., sessions/auth-tokens.json)
+ * @param vaultPath - Path to the vault file (e.g., sessions/vault.enc)
  */
-export function deleteTokenCache(tokenCachePath: string): void {
-    if (existsSync(tokenCachePath)) {
-        unlinkSync(tokenCachePath);
-        logger.info({ path: tokenCachePath }, 'Token cache deleted');
-    } else {
-        logger.debug({ path: tokenCachePath }, 'Token cache does not exist');
-    }
+export async function deleteTokenCache(vaultPath: string): Promise<void> {
+    await deleteVault(vaultPath);
 }
 
 export interface LogoutOptions {
     /** ProtonApi instance for session revocation */
     api: ProtonApi;
-    /** Path to the token cache file */
-    tokenCachePath: string;
+    /** Path to the encrypted vault */
+    vaultPath: string;
     /** Whether to call the revoke API (default: true) */
     revokeRemote?: boolean;
-    /** Whether to delete the local token file (default: true) */
+    /** Whether to delete the local vault (default: true) */
     deleteLocal?: boolean;
 }
 
@@ -68,12 +63,12 @@ export interface LogoutOptions {
  * Perform a complete logout
  *
  * 1. Revokes the session on Proton's servers (optional)
- * 2. Deletes the local token cache file (optional)
+ * 2. Deletes the local encrypted vault (optional)
  *
  * @param options - Logout options
  */
 export async function logout(options: LogoutOptions): Promise<void> {
-    const { api, tokenCachePath, revokeRemote = true, deleteLocal = true } = options;
+    const { api, vaultPath, revokeRemote = true, deleteLocal = true } = options;
 
     logger.info('Starting logout...');
 
@@ -82,9 +77,9 @@ export async function logout(options: LogoutOptions): Promise<void> {
         await revokeSession(api);
     }
 
-    // 2. Delete local token cache
+    // 2. Delete local encrypted vault
     if (deleteLocal) {
-        deleteTokenCache(tokenCachePath);
+        await deleteTokenCache(vaultPath);
     }
 
     logger.info('Logout complete');

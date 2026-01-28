@@ -21,7 +21,6 @@ initLogger({...getLogConfig(), target: 'stdout'});
 
 import * as readline from 'readline';
 import { authConfig, authMethodSchema, getConversationsConfig } from '../app/config.js';
-import { resolveProjectPath } from '../app/paths.js';
 import { runBrowserAuthentication } from './browser/authenticate.js';
 import { runRcloneAuthentication } from './rclone/authenticate.js';
 import { runLoginAuthentication } from './login/authenticate.js';
@@ -66,8 +65,7 @@ interface BrowserAuthResult {
 }
 
 async function authenticateBrowser(): Promise<BrowserAuthResult> {
-    const outputPath = resolveProjectPath(authConfig.tokenPath);
-    const result = await runBrowserAuthentication(outputPath);
+    const result = await runBrowserAuthentication();
 
     // Log warnings
     for (const warning of result.warnings) {
