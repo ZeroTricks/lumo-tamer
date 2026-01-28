@@ -205,8 +205,6 @@ export async function handleNonStreamingRequest(
     deps.conversationStore.setTitle(conversationId, processedTitle);
   }
 
-  // TODO: call tools
-
   // Build output array with message item only (no tool calls)
   const output = buildOutputItems({
     text: result.response,
