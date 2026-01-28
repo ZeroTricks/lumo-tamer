@@ -10,19 +10,9 @@ RUN apt-get update && apt-get install -y socat && rm -rf /var/lib/apt/lists/*
 # Expose Chrome DevTools Protocol port
 EXPOSE 9222
 
-# Start socat to forward CDP from 0.0.0.0:9223 -> 127.0.0.1:9222
+# Start socat to forward CDP from 0.0.0.0:9222 -> 127.0.0.1:9221
 # This runs in the background before the main chromium process
 RUN mkdir -p /etc/cont-init.d && \
     echo '#!/usr/bin/with-contenv bash' > /etc/cont-init.d/99-socat && \
-    echo 'socat TCP-LISTEN:9223,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:9222 &' >> /etc/cont-init.d/99-socat && \
+    echo 'socat TCP-LISTEN:9222,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:9221 &' >> /etc/cont-init.d/99-socat && \
     chmod +x /etc/cont-init.d/99-socat
-
-# The linuxserver/chromium image already handles:
-# - Running chromium with remote debugging enabled
-# - User permissions
-# - Display configuration (supports both headless and headed via CUSTOM_PORT)
-
-# Environment variables (set via docker-compose):
-# - CUSTOM_PORT: Port for remote debugging (9222)
-# - CHROME_CLI: Additional Chrome flags
-# - PUID/PGID: User/Group ID (default 1000:1000)

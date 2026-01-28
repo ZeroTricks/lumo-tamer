@@ -25,13 +25,14 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=Etc/UTC
-      - CHROME_CLI=--remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 --remote-debugging-allowed-origins=* --disable-dev-shm-usage
+      # we use port=9221 here, socat in the image will forward 9222 to it
+      - CHROME_CLI=https://lumo.proton.me --remote-debugging-address=0.0.0.0 --remote-debugging-port=9221 --remote-debugging-allowed-origins=* --disable-dev-shm-usage
     volumes:
       # Persist browser profile and state
       - ./browser-data:/config
     ports:
-      # - "9223:9223"  # CDP endpoint (forwarded via socat)
-      - "3002:3001"  # noVNC web interface (access browser GUI)
+      - "9222:9222"  # CDP endpoint (forwarded via socat)
+      - "3001:3001"  # noVNC web interface (access browser GUI)
     shm_size: 2gb
     restart: unless-stopped
     security_opt:
