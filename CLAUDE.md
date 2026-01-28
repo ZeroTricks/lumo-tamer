@@ -16,7 +16,7 @@ lumo-tamer consists of following parts: API, bridge, Lumo WebClient
   - Own functionality: command parsing (user want to do something), tool parsing (Lumo calls tool/function), etc.
 
 - Lumo's WebClient:
-  Code from Proton's open source Lumo WebClient applications/lumo in monorepo https://github.com/ProtonMail/WebClients/ . A clone of the monorepo can be found in ~/WebClients . Use docs/proton-webclients-analysis.md as a strarting point.
+  Code from Proton's open source Lumo WebClient applications/lumo in monorepo https://github.com/ProtonMail/WebClients/ . A clone of the monorepo can be found in ~/proton/WebClients . Use docs/proton-webclients-analysis.md as a starting point.
   - src/proton-upstream: files pulled 1:1, see src/proton-upstream/UPSTREAM.md
   - src/proton-shims: partially reimplements (closed source) `@proton/crypto/*` using standard libraries
 
@@ -33,7 +33,7 @@ lumo-tamer consists of following parts: API, bridge, Lumo WebClient
     - /responses and /chat/completions endpoints
     - API and CLI calls
   - Use src/logger.ts for logging
-  - Use config.ts, config.yaml and config.example.yaml to add configuration parameters. Put defaults in config.ts, and keep config.example.yaml in sync manually.
+  - Use config.ts, config.yaml and config.defaults.yaml to add configuration parameters. Don't put defaults in config.ts or other code; config.defaults.yaml is the single source of truth.
   - Ignore todos within code unless you need to rewrite code anyway, or unless specifically mentioned.
 
   ## Documentation guidelines:

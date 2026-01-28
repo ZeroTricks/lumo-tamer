@@ -47,6 +47,9 @@ RUN npm i --only=production && npm cache clean --force
 # Copy compiled TypeScript from builder
 COPY --from=builder /app/dist ./dist
 
+# Copy config defaults (required at runtime)
+COPY config.defaults.yaml ./
+
 # Copy Go binary from go-builder
 COPY --from=go-builder /build/proton-auth ./dist/proton-auth
 
