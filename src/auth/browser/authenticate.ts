@@ -8,8 +8,6 @@
 
 import * as readline from 'readline';
 import { chromium, type Page, type BrowserContext, type Browser } from 'playwright';
-import { writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
 import { promises as dns, ADDRCONFIG } from 'dns';
 import type { PersistedSessionData } from '../../lumo-client/types.js';
 import type { StoredTokens } from '../types.js';
@@ -18,6 +16,8 @@ import { APP_VERSION_HEADER } from '../../proton-upstream/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { logger } from '../../app/logger.js';
 import { decryptPersistedSession } from '../../conversations/session-keys.js';
+import { writeVault, type VaultKeyConfig } from '../vault/index.js';
+import { resolveProjectPath } from '../../app/paths.js';
 
 export interface ExtractionOptions {
     /** CDP endpoint to connect to browser */
@@ -699,13 +699,12 @@ async function promptForCdpEndpoint(defaultEndpoint?: string): Promise<string> {
 /**
  * Run browser authentication
  *
- * Prompts for CDP endpoint, extracts tokens from browser session, and saves to file.
+ * Prompts for CDP endpoint, extracts tokens from browser session, and saves to encrypted vault.
  * Used by CLI (npm run auth) for browser authentication method.
  *
- * @param outputPath - Path to save tokens
  * @returns Extraction result
  */
-export async function runBrowserAuthentication(outputPath: string): Promise<ExtractionResult> {
+export async function runBrowserAuthentication(): Promise<ExtractionResult> {
     const configEndpoint = authConfig.browser?.cdpEndpoint;
     const cdpEndpoint = await promptForCdpEndpoint(configEndpoint);
 
@@ -718,12 +717,15 @@ export async function runBrowserAuthentication(outputPath: string): Promise<Extr
         appVersion: APP_VERSION_HEADER,
     });
 
-    // Ensure output directory exists
-    mkdirSync(dirname(outputPath), { recursive: true });
+    // Write tokens to encrypted vault
+    const vaultPath = resolveProjectPath(authConfig.vault.path);
+    const keyConfig: VaultKeyConfig = {
+        keychain: authConfig.vault.keychain,
+        keyFilePath: authConfig.vault.keyFilePath,
+    };
 
-    // Write tokens with restricted permissions (owner read/write only)
-    writeFileSync(outputPath, JSON.stringify(result.tokens, null, 2), { mode: 0o600 });
-    logger.info({ outputPath }, 'Tokens saved');
+    await writeVault(vaultPath, result.tokens, keyConfig);
+    logger.info({ vaultPath }, 'Tokens saved to encrypted vault');
 
     return result;
 }

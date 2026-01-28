@@ -18,7 +18,7 @@ export interface SRPAuthResult {
 export interface AuthConfig {
     method: 'srp' | 'browser';
     binaryPath: string;
-    tokenCachePath: string;
+    vaultPath: string;
 }
 
 // Extended auth tokens that include keyPassword

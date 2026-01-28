@@ -2,10 +2,10 @@
  * BaseAuthProvider - Abstract base class for all auth providers
  *
  * Provides common implementations for:
- * - initialize() - Load tokens, validate method, call hooks
+ * - initialize() - Load tokens from encrypted vault, validate method, call hooks
  * - Token getters (uid, accessToken, keyPassword, cached keys)
  * - API creation
- * - Token file I/O
+ * - Token vault I/O (AES-256-GCM encrypted)
  * - Token refresh (with customizable hook)
  *
  * Subclasses customize via hooks:
@@ -18,10 +18,12 @@
  * - supportsPersistence() - Persistence capability
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { logger } from '../../app/logger.js';
 import { createProtonApi } from '../api-factory.js';
 import { refreshWithRefreshToken, canRefreshWithToken } from '../token-refresh.js';
+import { readVault, writeVault } from '../vault/index.js';
+import type { VaultKeyConfig } from '../vault/index.js';
 import type {
     AuthProvider,
     AuthProviderStatus,
@@ -32,13 +34,18 @@ import type {
     CachedMasterKey,
 } from '../types.js';
 
+export interface ProviderConfig {
+    vaultPath: string;
+    keyConfig: VaultKeyConfig;
+}
+
 export abstract class BaseAuthProvider implements AuthProvider {
     abstract readonly method: AuthMethod;
     protected tokens: StoredTokens | null = null;
-    protected tokenCachePath: string;
+    protected config: ProviderConfig;
 
-    constructor(tokenCachePath: string) {
-        this.tokenCachePath = tokenCachePath;
+    constructor(config: ProviderConfig) {
+        this.config = config;
     }
 
     // === Abstract methods (provider-specific) ===
@@ -55,7 +62,7 @@ export abstract class BaseAuthProvider implements AuthProvider {
      * Subclasses customize via validateMethod() and onAfterLoad() hooks.
      */
     async initialize(): Promise<void> {
-        this.tokens = this.loadTokensFromFile();
+        this.tokens = await this.loadTokensFromVault();
         this.validateMethod();
         this.validateTokens();
         await this.onAfterLoad();
@@ -139,7 +146,7 @@ export abstract class BaseAuthProvider implements AuthProvider {
         // Hook for subclass customization (e.g., browser updates extractedAt)
         this.onAfterRefresh();
 
-        this.saveTokensToFile();
+        await this.saveTokensToVault();
 
         logger.info({
             method: this.method,
@@ -156,26 +163,32 @@ export abstract class BaseAuthProvider implements AuthProvider {
         // Default: no-op
     }
 
-    // === Protected helpers for token file I/O ===
+    // === Protected helpers for vault I/O ===
 
     /**
-     * Load tokens from the cache file.
-     * @throws Error if file doesn't exist
+     * Load tokens from the encrypted vault.
+     * @throws Error if vault doesn't exist or can't be decrypted
      */
-    protected loadTokensFromFile(): StoredTokens {
-        if (!existsSync(this.tokenCachePath)) {
-            throw new Error(`Token file not found: ${this.tokenCachePath}`);
+    protected async loadTokensFromVault(): Promise<StoredTokens> {
+        const { vaultPath, keyConfig } = this.config;
+
+        if (!existsSync(vaultPath)) {
+            throw new Error(
+                `Vault not found: ${vaultPath}\n` +
+                'Run: npm run auth'
+            );
         }
-        const data = readFileSync(this.tokenCachePath, 'utf-8');
-        return JSON.parse(data) as StoredTokens;
+
+        return readVault(vaultPath, keyConfig);
     }
 
     /**
-     * Save current tokens to the cache file.
+     * Save current tokens to the encrypted vault.
      */
-    protected saveTokensToFile(): void {
+    protected async saveTokensToVault(): Promise<void> {
         if (!this.tokens) return;
-        writeFileSync(this.tokenCachePath, JSON.stringify(this.tokens, null, 2));
+        const { vaultPath, keyConfig } = this.config;
+        await writeVault(vaultPath, this.tokens, keyConfig);
     }
 
     /**
@@ -189,5 +202,12 @@ export abstract class BaseAuthProvider implements AuthProvider {
                 'Run the appropriate extraction/auth command for your auth method.'
             );
         }
+    }
+
+    /**
+     * Get the vault path (for external use like logout).
+     */
+    getVaultPath(): string {
+        return this.config.vaultPath;
     }
 }

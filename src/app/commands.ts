@@ -21,10 +21,8 @@ export function isCommand(message: string): boolean {
 export interface CommandContext {
   syncInitialized: boolean;
   conversationId?: string;
-  /** AuthManager for logout command */
+  /** AuthManager for logout and token refresh commands */
   authManager?: AuthManager;
-  /** Token cache path for logout command */
-  tokenCachePath?: string;
 }
 
 /**

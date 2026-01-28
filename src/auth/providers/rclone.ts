@@ -8,14 +8,24 @@
 import { logger } from '../../app/logger.js';
 import { authConfig } from '../../app/config.js';
 import { resolveProjectPath } from '../../app/paths.js';
-import { BaseAuthProvider } from './base.js';
+import { BaseAuthProvider, type ProviderConfig } from './base.js';
 import type { AuthProviderStatus } from '../types.js';
+
+function getProviderConfig(): ProviderConfig {
+    return {
+        vaultPath: resolveProjectPath(authConfig.vault.path),
+        keyConfig: {
+            keychain: authConfig.vault.keychain,
+            keyFilePath: authConfig.vault.keyFilePath,
+        },
+    };
+}
 
 export class RcloneAuthProvider extends BaseAuthProvider {
     readonly method = 'rclone' as const;
 
     constructor() {
-        super(resolveProjectPath(authConfig.tokenPath));
+        super(getProviderConfig());
     }
 
     protected override validateMethod(): void {
@@ -56,15 +66,15 @@ export class RcloneAuthProvider extends BaseAuthProvider {
     getStatus(): AuthProviderStatus {
         const status: AuthProviderStatus = {
             method: 'rclone',
-            source: this.tokenCachePath,
+            source: this.config.vaultPath,
             valid: false,
             details: {},
             warnings: [],
         };
 
         if (!this.tokens) {
-            status.warnings.push(`Token file not found: ${this.tokenCachePath}`);
-            status.warnings.push('Run: npm run extract-rclone');
+            status.warnings.push(`Vault not found: ${this.config.vaultPath}`);
+            status.warnings.push('Run: npm run auth');
             return status;
         }
 

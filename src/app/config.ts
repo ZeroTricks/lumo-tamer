@@ -53,7 +53,14 @@ export const authMethodSchema = z.enum(['login', 'browser', 'rclone']);
 
 const authConfigSchema = z.object({
   method: authMethodSchema,
-  tokenPath: z.string(),
+  vault: z.object({
+    path: z.string(),
+    keychain: z.object({
+      service: z.string(),
+      account: z.string(),
+    }),
+    keyFilePath: z.string(),
+  }),
   autoRefresh: z.object({
     enabled: z.boolean(),
     intervalHours: z.number().min(1).max(24),
