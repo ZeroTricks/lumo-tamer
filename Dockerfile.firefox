@@ -1,0 +1,14 @@
+FROM jlesage/firefox:latest
+
+# Install socat for port forwarding (Chrome binds to 127.0.0.1 only)
+RUN apk add --no-cache socat
+
+# Expose Chrome DevTools Protocol port
+EXPOSE 9222
+
+# Set up socat as a service to forward CDP from 0.0.0.0:9222 -> 127.0.0.1:9221
+RUN mkdir -p /etc/services.d/socat && \
+    echo '#!/bin/sh' > /etc/services.d/socat/run && \
+    echo 'exec socat TCP-LISTEN:9222,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:9221' >> /etc/services.d/socat/run && \
+    chmod +x /etc/services.d/socat/run
+
