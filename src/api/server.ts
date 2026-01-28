@@ -40,7 +40,7 @@ export class APIServer {
   }
 
   private getDependencies(): EndpointDependencies {
-    const tokenCachePath = resolveProjectPath(authConfig.tokenPath);
+    const vaultPath = resolveProjectPath(authConfig.vault.path);
 
     return {
       queue: this.queue,
@@ -48,7 +48,7 @@ export class APIServer {
       conversationStore: this.app.getConversationStore(),
       syncInitialized: this.app.isSyncInitialized(),
       authManager: this.app.getAuthManager(),
-      tokenCachePath,
+      vaultPath,
     };
   }
 

@@ -5,7 +5,16 @@
 # See docs/authentication.md
 auth:
   method: "browser"
-  tokenPath: "sessions/auth-tokens.json"
+  # Encrypted vault for secure token storage (AES-256-GCM)
+  # Key is stored in OS keychain (desktop) or Docker secret (containers)
+  vault:
+    path: "sessions/vault.enc"
+    keychain:
+      service: "lumo-tamer"
+      account: "vault-key"
+    # Fallback key file path when OS keychain is unavailable (e.g., Docker, headless servers)
+    # WARNING: use keyFilePath with Docker Swarm secrets or another secrets management tool for production environments
+    keyFilePath: "/run/secrets/lumo-vault-key"
   # Auto-refresh: automatically refresh tokens before they expire
   autoRefresh:
     enabled: true             # Enable automatic token refresh (default: true)

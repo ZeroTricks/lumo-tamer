@@ -16,8 +16,8 @@ import type { AuthProvider, ProtonApi } from './types.js';
 export interface AuthManagerOptions {
     /** Auth provider instance */
     provider: AuthProvider;
-    /** Path to token cache file */
-    tokenCachePath: string;
+    /** Path to the encrypted vault file */
+    vaultPath: string;
     /** Auto-refresh configuration */
     autoRefresh?: {
         /** Enable scheduled refresh */
@@ -31,7 +31,7 @@ export interface AuthManagerOptions {
 
 export class AuthManager {
     private provider: AuthProvider;
-    private tokenCachePath: string;
+    private vaultPath: string;
     private autoRefreshConfig: NonNullable<AuthManagerOptions['autoRefresh']>;
     private refreshTimer?: NodeJS.Timeout;
     private protonApi?: ProtonApiWithRefresh;
@@ -39,7 +39,7 @@ export class AuthManager {
 
     constructor(options: AuthManagerOptions) {
         this.provider = options.provider;
-        this.tokenCachePath = options.tokenCachePath;
+        this.vaultPath = options.vaultPath;
         this.autoRefreshConfig = {
             enabled: options.autoRefresh?.enabled ?? false,
             intervalHours: options.autoRefresh?.intervalHours ?? 20,
@@ -199,7 +199,7 @@ export class AuthManager {
         // Revoke session and delete tokens
         await performLogout({
             api,
-            tokenCachePath: this.tokenCachePath,
+            vaultPath: this.vaultPath,
             revokeRemote: true,
             deleteLocal: true,
         });

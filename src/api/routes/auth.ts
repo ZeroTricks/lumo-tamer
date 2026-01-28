@@ -26,7 +26,7 @@ export function createAuthRouter(deps: EndpointDependencies): Router {
    */
   router.post('/v1/auth/logout', async (req: Request, res: Response) => {
     try {
-      if (!deps.authManager || !deps.tokenCachePath) {
+      if (!deps.authManager || !deps.vaultPath) {
         res.status(500).json({
           error: {
             message: 'Auth manager not available',

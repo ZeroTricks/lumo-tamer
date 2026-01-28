@@ -93,9 +93,17 @@ response = client.chat.completions.create(
 ### Docker
 
 ```bash
-docker compose up app                        # Run server
-docker compose run --rm app tamer "Hello!"   # Run CLI
-docker compose run --rm -it app tamer-auth   # Authenticate
+# Setup: create vault encryption key
+mkdir -p secrets && chmod 700 secrets
+openssl rand -base64 32 > secrets/lumo-vault-key
+chmod 600 secrets/lumo-vault-key
+
+# Authenticate (interactive)
+docker compose run --rm -it app tamer-auth
+
+# Run
+docker compose up app                        # API server
+docker compose run --rm app tamer "Hello!"   # CLI
 ```
 
 ## API Endpoints

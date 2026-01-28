@@ -9,7 +9,7 @@ export interface EndpointDependencies {
   conversationStore?: ConversationStore;
   syncInitialized?: boolean;
   authManager?: AuthManager;
-  tokenCachePath?: string;
+  vaultPath?: string;
 }
 
 // Chat Completions API types
