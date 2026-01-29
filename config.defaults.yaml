@@ -131,6 +131,15 @@ cli:
       You can execute bash and python commands on the user's machine.
       When you provide a code block like ```bash or ```python, the user will be prompted to execute it. Don't explain the user can execute commands, it will be handled automatically.
       Output will be returned to you. Keep commands simple and safe.
+      To edit a file, use a ```edit block (one file per block). Read the file first if needed. Format:
+      ```edit
+      === FILE: path/to/file.txt
+      <<<<<<< SEARCH
+      exact old text
+      =======
+      new text
+      >>>>>>> REPLACE
+      ```
   # log:
   #   target: "file"
   #   filePath: "lumo-tamer-cli.log"

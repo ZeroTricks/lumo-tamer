@@ -5,25 +5,26 @@
  */
 
 import { spawn } from 'child_process';
-import type { Interface as ReadlineInterface } from 'readline';
 import type { CodeBlock } from './code-block-detector.js';
 import { getToolsConfig } from '../app/config.js';
 
-/**
- * Ask user yes/no confirmation using an existing readline interface
- */
-export async function confirm(rl: ReadlineInterface, prompt: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    rl.question(`${prompt} [y/N]: `, (answer) => {
-      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-    });
-  });
-}
-
 export interface ExecutionResult {
+  type: 'execution';
   success: boolean;
   output: string; // stdout + stderr combined
   exitCode: number | null;
+}
+
+/**
+ * One-line summary of an executable block for streaming display.
+ * e.g. "[bash: echo hello\n... (10 lines)]"
+ */
+export function summarizeExecutableBlock(language: string | null, content: string): string {
+  const lines = content.split('\n');
+  const preview = lines.length <= 3
+    ? content
+    : lines.slice(0, 3).join('\n') + `\n... (${lines.length} lines)`;
+  return `[${language || 'code'}: ${preview}]\n`;
 }
 
 /**
@@ -46,7 +47,11 @@ export async function executeBlock(
   const executor = block.language ? executors[block.language] : undefined;
 
   if (!executor) {
-    return { success: false, output: `Unsupported language: ${block.language}`, exitCode: null };
+    return {
+      type: 'execution',
+      success: false,
+      output: `Unsupported language: ${block.language}`, exitCode: null
+    };
   }
 
   const [cmd, ...args] = executor;
@@ -71,11 +76,19 @@ export async function executeBlock(
     });
 
     proc.on('close', (code) => {
-      resolve({ success: code === 0, output, exitCode: code });
+      resolve({
+        type: 'execution',
+        success: code === 0,
+        output, exitCode: code
+      });
     });
 
     proc.on('error', (err) => {
-      resolve({ success: false, output: err.message, exitCode: null });
+      resolve({
+        type: 'execution',
+        success: false,
+        output: err.message, exitCode: null
+      });
     });
   });
 }

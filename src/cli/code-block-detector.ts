@@ -5,6 +5,9 @@
  * Simpler than API's StreamingToolDetector - no JSON parsing needed.
  */
 
+import { summarizeEditBlock } from './edit-applier.js';
+import { summarizeExecutableBlock } from './code-executor.js';
+
 export interface CodeBlock {
   language: string | null; // "bash", "python", null for untagged
   content: string;
@@ -17,11 +20,21 @@ export interface DetectorResult {
 
 type State = 'normal' | 'in_block';
 
+function summarizeBlock(language: string | null, content: string): string {
+  if (language === 'edit') return summarizeEditBlock(content);
+  return summarizeExecutableBlock(language, content);
+}
+
 export class CodeBlockDetector {
   private state: State = 'normal';
   private buffer = '';
   private language: string | null = null;
   private pendingText = '';
+  private isActionable: (language: string | null) => boolean;
+
+  constructor(isActionable?: (language: string | null) => boolean) {
+    this.isActionable = isActionable ?? (() => true);
+  }
 
   /**
    * Process a streaming chunk.
@@ -130,11 +143,13 @@ export class CodeBlockDetector {
       this.pendingText = this.pendingText.slice(endIndex + 3);
       this.state = 'normal';
 
-      // Emit completed block
-      result.blocks.push({
-        language: this.language,
-        content: this.buffer.trim(),
-      });
+      const trimmed = this.buffer.trim();
+      if (this.isActionable(this.language)) {
+        result.text += summarizeBlock(this.language, trimmed);
+        result.blocks.push({ language: this.language, content: trimmed });
+      } else {
+        result.text += `\`\`\`${this.language || ''}\n${trimmed}\n\`\`\``;
+      }
 
       this.buffer = '';
       this.language = null;

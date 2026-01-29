@@ -17,7 +17,9 @@ import type { AppContext } from '../app/index.js';
 import type { Turn } from '../lumo-client/index.js';
 import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
 import { CodeBlockDetector, type CodeBlock } from './code-block-detector.js';
-import { executeBlock, isExecutable, confirm, type ExecutionResult } from './code-executor.js';
+import { executeBlock, isExecutable, type ExecutionResult } from './code-executor.js';
+import { isEditBlock, applyEditBlock, type EditResult } from './edit-applier.js';
+import { confirm } from './confirm.js';
 
 interface LumoResponse {
   response: string;
@@ -27,7 +29,7 @@ interface LumoResponse {
 
 interface BlockResult {
   block: CodeBlock;
-  result: ExecutionResult;
+  result: ExecutionResult | EditResult;
 }
 
 /**
@@ -105,7 +107,9 @@ export class CLIClient {
    */
   private async sendToLumo(options: { requestTitle?: boolean } = {}): Promise<LumoResponse> {
     const toolsConfig = getToolsConfig();
-    const detector = toolsConfig.enabled ? new CodeBlockDetector() : null;
+    const detector = toolsConfig.enabled
+      ? new CodeBlockDetector((lang) => isEditBlock({ language: lang, content: '' }) || isExecutable(lang))
+      : null;
     const blocks: CodeBlock[] = [];
     let chunkCount = 0;
 
@@ -155,18 +159,58 @@ export class CLIClient {
   private async executeBlocks(rl: readline.Interface, blocks: CodeBlock[]): Promise<BlockResult[]> {
     const results: BlockResult[] = [];
 
+    // Count actionable blocks for skip-all message
+    const actionableCount = blocks.filter(b => isEditBlock(b) || isExecutable(b.language)).length;
+    let processed = 0;
+
     for (const block of blocks) {
+      if (isEditBlock(block)) {
+        processed++;
+        process.stdout.write(`[Edit block detected]\n`);
+        process.stdout.write('─'.repeat(40) + '\n');
+        process.stdout.write(block.content + '\n');
+        process.stdout.write('─'.repeat(40) + '\n');
+
+        const answer = await confirm(rl, 'Apply this edit?');
+        if (answer === 'skip_all') {
+          const remaining = actionableCount - processed;
+          process.stdout.write(`[Skipped this and ${remaining} remaining block${remaining === 1 ? '' : 's'}]\n\n`);
+          break;
+        }
+        if (answer === 'yes') {
+          process.stdout.write('[Applying...]\n\n');
+          try {
+            const result = await applyEditBlock(block);
+            process.stdout.write(result.output + '\n\n');
+            results.push({ block, result });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            process.stdout.write(`[Patch error: ${msg}]\n\n`);
+          }
+        } else {
+          process.stdout.write('[Skipped]\n\n');
+        }
+        continue;
+      }
+
       if (!isExecutable(block.language)) {
         continue;
       }
 
+      processed++;
       const lang = block.language || 'code';
       process.stdout.write(`[Code block detected: ${lang}]\n`);
       process.stdout.write('─'.repeat(40) + '\n');
       process.stdout.write(block.content + '\n');
       process.stdout.write('─'.repeat(40) + '\n');
 
-      if (await confirm(rl, 'Execute this code?')) {
+      const answer = await confirm(rl, 'Execute this code?');
+      if (answer === 'skip_all') {
+        const remaining = actionableCount - processed;
+        process.stdout.write(`[Skipped this and ${remaining} remaining block${remaining === 1 ? '' : 's'}]\n\n`);
+        break;
+      }
+      if (answer === 'yes') {
         process.stdout.write('[Executing...]\n\n');
 
         const result = await executeBlock(block, (chunk) => {
@@ -188,6 +232,13 @@ export class CLIClient {
    */
   private formatResultsMessage(results: BlockResult[]): string {
     return results.map(({ block, result }) => {
+      if (result.type === 'edit') {
+        const status = result.success
+          ? `Edit applied successfully to: ${result.files.join(', ')}`
+          : `Edit failed`;
+        return `${status}:\n${result.output}`;
+      }
+      // ExecutionResult
       const lang = block.language || 'code';
       const status = result.success
         ? `${lang} executed successfully (exit code 0)`
