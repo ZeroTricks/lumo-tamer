@@ -11,15 +11,14 @@
 import * as readline from 'readline';
 import { randomUUID } from 'crypto';
 import { logger } from '../app/logger.js';
-import { getInstructionsConfig, getToolsConfig, getCommandsConfig } from '../app/config.js';
+import { getToolsConfig, getCommandsConfig } from '../app/config.js';
 import { isCommand, executeCommand, type CommandContext } from '../app/commands.js';
 import type { AppContext } from '../app/index.js';
-import type { Turn } from '../lumo-client/index.js';
 import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
 import { CodeBlockDetector, type CodeBlock } from './code-block-detector.js';
-import { executeBlock, isExecutable, type ExecutionResult } from './code-executor.js';
-import { isEditBlock, applyEditBlock, type EditResult } from './edit-applier.js';
-import { confirm } from './confirm.js';
+import { blockHandlers, type BlockResult } from './block-handlers.js';
+import { confirmAndApply } from './confirm.js';
+import { injectInstructions } from './message-converter.js';
 
 interface LumoResponse {
   response: string;
@@ -27,52 +26,9 @@ interface LumoResponse {
   title?: string;
 }
 
-interface BlockResult {
+interface HandledBlock {
   block: CodeBlock;
-  result: ExecutionResult | EditResult;
-}
-
-/**
- * Build effective instructions for CLI.
- * Combines default instructions with forTools when tools are enabled.
- */
-function buildEffectiveInstructions(): string | undefined {
-  const instructionsConfig = getInstructionsConfig();
-  const toolsConfig = getToolsConfig();
-
-  let instructions = instructionsConfig?.default;
-
-  // Append forTools instructions when tools enabled
-  if (toolsConfig.enabled && instructionsConfig?.forTools) {
-    instructions = instructions
-      ? `${instructions}\n\n${instructionsConfig.forTools}`
-      : instructionsConfig.forTools;
-  }
-
-  return instructions;
-}
-
-/**
- * Inject instructions into the first user message of turns.
- * Uses the same pattern as API: [Personal context: ...]
- */
-function injectInstructions(turns: Turn[]): Turn[] {
-  const instructions = buildEffectiveInstructions();
-  if (!instructions) return turns;
-
-  return turns.map((turn, index) => {
-    // Find first user message that isn't a command
-    const isFirstUser = turn.role === 'user' &&
-      !turns.slice(0, index).some(t => t.role === 'user' && !isCommand(t.content || ''));
-
-    if (isFirstUser && turn.content && !isCommand(turn.content)) {
-      return {
-        ...turn,
-        content: `${turn.content}\n\n[Personal context: ${instructions}]`,
-      };
-    }
-    return turn;
-  });
+  result: BlockResult;
 }
 
 const BUSY_INDICATOR = '...';
@@ -108,7 +64,9 @@ export class CLIClient {
   private async sendToLumo(options: { requestTitle?: boolean } = {}): Promise<LumoResponse> {
     const toolsConfig = getToolsConfig();
     const detector = toolsConfig.enabled
-      ? new CodeBlockDetector((lang) => isEditBlock({ language: lang, content: '' }) || isExecutable(lang))
+      ? new CodeBlockDetector((lang) =>
+          blockHandlers.some(h => h.matches({ language: lang, content: '' }))
+        )
       : null;
     const blocks: CodeBlock[] = [];
     let chunkCount = 0;
@@ -156,71 +114,42 @@ export class CLIClient {
    * Execute code blocks with user confirmation.
    * Returns results for blocks that were executed (not skipped).
    */
-  private async executeBlocks(rl: readline.Interface, blocks: CodeBlock[]): Promise<BlockResult[]> {
-    const results: BlockResult[] = [];
+  private async executeBlocks(rl: readline.Interface, blocks: CodeBlock[]): Promise<HandledBlock[]> {
+    const results: HandledBlock[] = [];
 
-    // Count actionable blocks for skip-all message
-    const actionableCount = blocks.filter(b => isEditBlock(b) || isExecutable(b.language)).length;
+    // Count actionable blocks for skip-all message (silent blocks don't count)
+    const actionableCount = blocks.filter(b => {
+      const h = blockHandlers.find(h => h.matches(b));
+      return h?.requiresConfirmation;
+    }).length;
     let processed = 0;
 
     for (const block of blocks) {
-      if (isEditBlock(block)) {
-        processed++;
-        process.stdout.write(`[Edit block detected]\n`);
-        process.stdout.write('─'.repeat(40) + '\n');
-        process.stdout.write(block.content + '\n');
-        process.stdout.write('─'.repeat(40) + '\n');
+      const handler = blockHandlers.find(h => h.matches(block));
+      if (!handler) continue;
 
-        const answer = await confirm(rl, 'Apply this edit?');
-        if (answer === 'skip_all') {
-          const remaining = actionableCount - processed;
-          process.stdout.write(`[Skipped this and ${remaining} remaining block${remaining === 1 ? '' : 's'}]\n\n`);
-          break;
-        }
-        if (answer === 'yes') {
-          process.stdout.write('[Applying...]\n\n');
-          try {
-            const result = await applyEditBlock(block);
-            process.stdout.write(result.output + '\n\n');
-            results.push({ block, result });
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            process.stdout.write(`[Patch error: ${msg}]\n\n`);
-          }
-        } else {
-          process.stdout.write('[Skipped]\n\n');
-        }
-        continue;
-      }
-
-      if (!isExecutable(block.language)) {
+      if (!handler.requiresConfirmation) {
+        const result = await handler.apply(block);
+        results.push({ block, result });
         continue;
       }
 
       processed++;
-      const lang = block.language || 'code';
-      process.stdout.write(`[Code block detected: ${lang}]\n`);
-      process.stdout.write('─'.repeat(40) + '\n');
-      process.stdout.write(block.content + '\n');
-      process.stdout.write('─'.repeat(40) + '\n');
+      const opts = handler.confirmOptions(block);
+      const outcome = await confirmAndApply(rl, {
+        ...opts,
+        content: block.content,
+        apply: () => handler.apply(block),
+        formatOutput: handler.formatApplyOutput,
+      });
 
-      const answer = await confirm(rl, 'Execute this code?');
-      if (answer === 'skip_all') {
+      if (outcome === 'skip_all') {
         const remaining = actionableCount - processed;
         process.stdout.write(`[Skipped this and ${remaining} remaining block${remaining === 1 ? '' : 's'}]\n\n`);
         break;
       }
-      if (answer === 'yes') {
-        process.stdout.write('[Executing...]\n\n');
-
-        const result = await executeBlock(block, (chunk) => {
-          process.stdout.write(chunk);
-        });
-
-        process.stdout.write(`\n[Exit code: ${result.exitCode}]\n\n`);
-        results.push({ block, result });
-      } else {
-        process.stdout.write('[Skipped]\n\n');
+      if (outcome !== 'skipped') {
+        results.push({ block, result: outcome });
       }
     }
 
@@ -230,20 +159,10 @@ export class CLIClient {
   /**
    * Format execution results as a message to send back to Lumo.
    */
-  private formatResultsMessage(results: BlockResult[]): string {
+  private formatResultsMessage(results: HandledBlock[]): string {
     return results.map(({ block, result }) => {
-      if (result.type === 'edit') {
-        const status = result.success
-          ? `Edit applied successfully to: ${result.files.join(', ')}`
-          : `Edit failed`;
-        return `${status}:\n${result.output}`;
-      }
-      // ExecutionResult
-      const lang = block.language || 'code';
-      const status = result.success
-        ? `${lang} executed successfully (exit code 0)`
-        : `${lang} failed (exit code ${result.exitCode})`;
-      return `${status}:\n\`\`\`\n${result.output}\`\`\``;
+      const handler = blockHandlers.find(h => h.matches(block));
+      return handler ? handler.formatResult(block, result) : result.output;
     }).join('\n\n');
   }
 

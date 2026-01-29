@@ -15,10 +15,10 @@
  */
 
 import { readFileSync, writeFileSync } from 'fs';
-import type { CodeBlock } from './code-block-detector.js';
+import type { CodeBlock, BlockHandler } from './block-handlers.js';
 
 // Edit block delimiters. If changed, update cli.instructions.forTools in config.defaults.yaml.
-const FILE_PREFIX = '=== FILE:';
+export const FILE_PREFIX = '=== FILE:';
 const SEARCH_MARKER = '<<<<<<< SEARCH';
 const DIVIDER = '=======';
 const REPLACE_MARKER = '>>>>>>> REPLACE';
@@ -184,3 +184,24 @@ export async function applyEditBlock(block: CodeBlock): Promise<EditResult> {
     files,
   };
 }
+
+export const editHandler: BlockHandler = {
+  matches: (block) => block.language === 'edit',
+  summarize: (block) => summarizeEditBlock(block.content),
+  requiresConfirmation: true,
+  confirmOptions: () => ({
+    label: 'Edit block detected',
+    prompt: 'Apply this edit?',
+    verb: 'Applying',
+    errorLabel: 'Patch error',
+  }),
+  apply: (block) => applyEditBlock(block),
+  formatApplyOutput: (result) => result.output,
+  formatResult: (_block, result) => {
+    const r = result as EditResult;
+    const status = r.success
+      ? `Edit applied successfully to: ${r.files.join(', ')}`
+      : 'Edit failed';
+    return `${status}:\n${r.output}`;
+  },
+};

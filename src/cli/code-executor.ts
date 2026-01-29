@@ -5,7 +5,7 @@
  */
 
 import { spawn } from 'child_process';
-import type { CodeBlock } from './code-block-detector.js';
+import type { CodeBlock, BlockHandler } from './block-handlers.js';
 import { getToolsConfig } from '../app/config.js';
 
 export interface ExecutionResult {
@@ -92,3 +92,25 @@ export async function executeBlock(
     });
   });
 }
+
+export const executeHandler: BlockHandler = {
+  matches: (block) => isExecutable(block.language),
+  summarize: (block) => summarizeExecutableBlock(block.language, block.content),
+  requiresConfirmation: true,
+  confirmOptions: (block) => ({
+    label: `Code block detected: ${block.language || 'code'}`,
+    prompt: 'Execute this code?',
+    verb: 'Executing',
+    errorLabel: 'Execution error',
+  }),
+  apply: (block) => executeBlock(block, (chunk) => process.stdout.write(chunk)),
+  formatApplyOutput: (result) => `[Exit code: ${(result as ExecutionResult).exitCode}]`,
+  formatResult: (block, result) => {
+    const r = result as ExecutionResult;
+    const lang = block.language || 'code';
+    const status = r.success
+      ? `${lang} executed successfully (exit code 0)`
+      : `${lang} failed (exit code ${r.exitCode})`;
+    return `${status}:\n\`\`\`\n${r.output}\`\`\``;
+  },
+};

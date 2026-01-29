@@ -5,13 +5,9 @@
  * Simpler than API's StreamingToolDetector - no JSON parsing needed.
  */
 
-import { summarizeEditBlock } from './edit-applier.js';
-import { summarizeExecutableBlock } from './code-executor.js';
+import { blockHandlers, type CodeBlock } from './block-handlers.js';
 
-export interface CodeBlock {
-  language: string | null; // "bash", "python", null for untagged
-  content: string;
-}
+export type { CodeBlock };
 
 export interface DetectorResult {
   text: string; // Text to display (excludes code block markers)
@@ -21,8 +17,9 @@ export interface DetectorResult {
 type State = 'normal' | 'in_block';
 
 function summarizeBlock(language: string | null, content: string): string {
-  if (language === 'edit') return summarizeEditBlock(content);
-  return summarizeExecutableBlock(language, content);
+  const block = { language, content };
+  const handler = blockHandlers.find(h => h.matches(block));
+  return handler ? handler.summarize(block) : `[${language || 'code'}]\n`;
 }
 
 export class CodeBlockDetector {
