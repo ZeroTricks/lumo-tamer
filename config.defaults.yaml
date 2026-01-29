@@ -116,6 +116,8 @@ server:
       Use the tools below to accomplish tasks.
       To call them you MUST output the JSON to the user, unlike your existing tools like proton_info or web search.
       You have the power to execute these functions by providing the JSON directly to the user, without trying to call them yourself. The user will execute these functions and return the results to you. This is crucial. Do NOT tell a tool is unavailable, instead just output the JSON for the tool call.
+
+      Available tools:
   # log:
   #   level: "debug"
   #   target: "file"

@@ -23,7 +23,7 @@ function buildToolsInstruction(tools?: OpenAITool[]): string | undefined {
   const instructionsConfig = getInstructionsConfig();
   const forTools = instructionsConfig.forTools;
   const toolsJson = JSON.stringify(tools, null, 2);
-  return `${forTools}\n\nAvailable tools:\n${toolsJson}`;
+  return `${forTools}\n${toolsJson}`;
 }
 
 /**
