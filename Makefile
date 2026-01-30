@@ -18,8 +18,10 @@ cli: ## Run CLI - use: make cli ARGS="your prompt"
 	npm run cli -- $(ARGS)
 
 build: ## Build TypeScript and Go binary
-	npm run build && cd src/auth/login/go && go build -o ../../../../dist/proton-auth
+	npm run build && make auth-build
 
+auth-build: ## Build Go auth binary
+	cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
 
 # Docker
 

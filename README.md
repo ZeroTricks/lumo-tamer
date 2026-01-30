@@ -33,7 +33,7 @@ git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
 npm install
 npm run build
-# Optionally install globally, so you can use command `tamer` everywhere
+# Optionally install globally , so you can use command `tamer` everywhere
 npm link
 ```
 
@@ -64,7 +64,7 @@ A secure and lightweight option where you provide your credentials in a prompt. 
 
 ```bash
 # Requires Go 1.24+
-make build # or
+make auth-build # or
 cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
 ```
 
