@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolveProjectPath } from '../app/paths.js';
 import { logger } from '../app/logger.js';
 import { authMethodSchema } from '../app/config.js';
@@ -31,6 +31,20 @@ export function updateAuthConfig(updates: AuthConfigUpdates): void {
     }
 
     const configPath = resolveProjectPath('config.yaml');
+
+    if (!existsSync(configPath)) {
+        const stub = [
+            'auth:',
+            `  method: "${validated.method ?? 'browser'}"`,
+            '  browser:',
+            `    cdpEndpoint: "${validated.cdpEndpoint}"`,
+            '',
+        ].join('\n');
+        writeFileSync(configPath, stub);
+        logger.debug({ updates }, 'Created config.yaml with auth stub');
+        return;
+    }
+
     let content = readFileSync(configPath, 'utf8');
     let changed = false;
 
