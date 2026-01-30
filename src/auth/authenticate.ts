@@ -144,7 +144,7 @@ async function main(): Promise<void> {
         printStatus(status);
         printSummary(status, provider.supportsPersistence());
 
-        console.log('\nYou can now run: npm run server or npm run cli');
+        console.log('\nYou can now run: tamer or tamer-server');
         process.exit(0);
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

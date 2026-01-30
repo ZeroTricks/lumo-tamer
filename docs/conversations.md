@@ -137,17 +137,16 @@ Proton's persistence is tightly coupled to their stack:
 
 - **IndexedDB layer** (`DbApi`) - Clean, but requires `fake-indexeddb` polyfill for Node.js
 - **Sync orchestration** - Lives in Redux sagas, deeply coupled to generators and Redux state
-- **LumoApi** - Many dependencies on `@proton/shared` types
 
 We reuse:
 
+- **LumoApi** - Pulled [upstream](upstream.md) unchanged; integrated via a fetch adapter that routes API calls through our authenticated ProtonApi
 - **Encryption scheme** - Same key hierarchy and AEAD format (compatible with WebClient)
-- **API endpoints** - Same `/api/lumo/v1/` REST API
 
 We implement our own:
 
 - **ConversationStore** - Simple in-memory store with LRU eviction
-- **SyncService** - Direct sync without saga complexity
+- **SyncService** - Direct sync without saga complexity, delegates to LumoApi
 - **AutoSyncService** - Timer-based debounce/throttle
 
 ## Architecture
@@ -157,7 +156,7 @@ Two-tier persistence:
 ```
 API Clients (OpenAI format)
     → ConversationStore (in-memory, LRU eviction)
-        → SyncService → Lumo API (/api/lumo/v1/)
+        → SyncService → LumoApi (upstream) → Fetch Adapter → ProtonApi → /api/lumo/v1/
 ```
 
 Goal: Share conversations between lumo-tamer and Proton WebClient.
@@ -221,7 +220,7 @@ src/conversations/
 └── sync/
     ├── sync-service.ts     # Manual sync to server
     ├── auto-sync.ts        # Automatic sync scheduling
-    └── lumo-api.ts         # REST API client
+    └── lumo-api.ts         # Upstream LumoApi wrapper
 ```
 
 ## Key Files
@@ -232,6 +231,9 @@ src/conversations/
 | [src/conversations/sync/sync-service.ts](../src/conversations/sync/sync-service.ts) | Server sync |
 | [src/conversations/sync/auto-sync.ts](../src/conversations/sync/auto-sync.ts) | Auto-sync scheduling |
 | [src/conversations/encryption/key-manager.ts](../src/conversations/encryption/key-manager.ts) | Key management |
+| [src/conversations/sync/lumo-api.ts](../src/conversations/sync/lumo-api.ts) | Upstream LumoApi wrapper |
+| [src/proton-upstream/remote/api.ts](../src/proton-upstream/remote/api.ts) | LumoApi (upstream, unchanged) |
+| [src/proton-shims/fetch-adapter.ts](../src/proton-shims/fetch-adapter.ts) | Routes LumoApi fetch calls to ProtonApi |
 | [src/app/commands.ts](../src/app/commands.ts) | `/save`, `/title` commands |
 | [src/proton-shims/lumo-api-client-utils.ts](../src/proton-shims/lumo-api-client-utils.ts) | `postProcessTitle()` |
 

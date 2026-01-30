@@ -25,7 +25,7 @@ lumo-tamer consists of following parts: API, bridge, Lumo WebClient
   - Try to reuse as much from Proton's WebClients as possible, which is tested and actively maintained. To do this:
     - Pull files in src/proton-upstream without modifications.
     - Use TS aliases and shims to make them work.
-    - Update scripts/sync-upstream.sh when pulling new files.
+    - Update src/proton-upstream/sync-upstream.sh when pulling new files.
     - Always mention sources/inspiration when you write code in src/proton-shims or src/lumo-client .
   - API: /v1/responses is the most important endpoint, always implement/test this one first.
   - Write modular code, reuse common logic between:

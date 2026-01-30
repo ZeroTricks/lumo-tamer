@@ -1,48 +1,45 @@
 # Authentication
 
-lumo-tamer supports three authentication methods. Run `npm run auth` to authenticate interactively.
+Authenticating to Proton is not straightforward: different flows depending on user settings (2FA, hardware keys), CAPTCHA challenges, and auth tokens not having the necessary scopes. The good news is you only have to log in once; after that, secrets are securely saved in an encrypted vault and tokens are refreshed automatically.
 
 ## Quick Start
 
 ```bash
-npm run auth
+tamer-auth
 # Select method:
 #   1. browser - Extract from logged-in browser session (recommended)
 #   2. login   - Enter Proton credentials
 #   3. rclone  - Paste rclone config section
 ```
 
-After successful authentication, config.yaml is updated with your selected method.
+After successful authentication, `config.yaml` is updated with your selected method.
 
 ---
 
-## Browser Token Extraction (Recommended)
+## Browser (Recommended)
 
-Extracts authentication cookies and encryption keys from an existing browser session via Chrome DevTools Protocol (CDP).
+Use a Chrome browser with remote debugging enabled to log in. Tokens will be extracted once. This is the only method that supports full conversation sync, and it lets you pass a CAPTCHA in the browser if needed.
 
 ### Why Browser?
 
-- **Full persistence support**: Only method that caches userKeys and masterKeys for conversation sync
+- **Full conversation sync**: Only method that caches userKeys and masterKeys needed for conversation persistence
 - **Any 2FA method**: Works with TOTP, security keys, etc.
-- **No extra tools**: Just needs a running browser with Lumo logged in
+- **CAPTCHA support**: Handle CAPTCHAs directly in the browser
 
 ### Setup
 
-```bash
-# 1. Have a browser running with Lumo logged in (accessible via CDP)
-# 2. Run authentication
-npm run auth
-# Select: 1. browser
-# Enter CDP endpoint when prompted (default: http://localhost:9222)
-```
+1. Launch a browser with remote debugging:
+   - Use your own Chrome(-based) browser: `chrome --remote-debugging-port=9222`. You'll probably need to add more arguments, like `--user-data-dir=<custom dir> --remote-debugging-address=0.0.0.0 --remote-debugging-allowed-origins=*`. See [Chrome DevTools Protocol documentation](https://chromedevtools.github.io/devtools-protocol/) for more information.
+   - Or use the provided Docker image: `docker compose up lumo-tamer-browser` (access browser GUI at http://localhost:3001)
+2. Once the browser is running, log in to https://lumo.proton.me in it.
+3. Run `tamer-auth` and select `browser`.
+4. Enter the CDP endpoint when prompted (ie. `http://localhost:9222`, or `http://browser:9222` when running both docker images `lumo-tamer-app` and `lumo-tamer-browser`).
 
-### What It Extracts
+### Limitations
 
-- **AUTH cookies** for lumo.proton.me and account.proton.me
-- **refreshToken** from REFRESH cookie (for automatic token refresh)
-- **keyPassword** derived from persisted session blob
-- **User keys** (encrypted PGP private keys) - cached for scope bypass
-- **Master keys** (Lumo encryption keys) - cached for scope bypass
+- **CDP setup complexity**: Setting up Chrome DevTools Protocol can be tricky: getting the right command-line arguments, network access, and port forwarding to work may take some time.
+- **Browser needed again on token expiry**: If tokens can't be refreshed (e.g. session revoked), you need a running browser to re-authenticate.
+- **Docker container size**: The provided Docker browser container is ~1 GB, which is a lot just for authentication.
 
 ### Config
 
@@ -50,12 +47,33 @@ npm run auth
 auth:
   method: browser
   browser:
-    cdpEndpoint: "http://localhost:9222"  # or your remote browser
+    cdpEndpoint: "http://localhost:9222"  # or "http://browser:9222" for Docker
 ```
+
+### Troubleshooting
+
+**"No browser contexts found. Is the browser running?"**
+- Verify the browser is running and the CDP endpoint is reachable: `curl http://localhost:9222/json/version`
+- If the browser is on a different machine, you may need to forward the port, e.g. with socat: `socat TCP-LISTEN:9222,fork TCP:<remote-host>:<remote-port>`
+- Check firewall/network settings
+
+**"Login timeout. Please log in and try again."**
+- The browser was reached but you're not logged in to Lumo. Log in to https://lumo.proton.me in the browser, then re-run `tamer-auth`.
+
+**"No AUTH-\* cookie found for lumo.proton.me"**
+- The browser is on the Lumo page but has no valid auth cookies. Try logging out and back in within the browser.
+
+**"Browser session is not authenticated"**
+- The browser session exists but the AUTH cookie is missing or expired. Log in again in the browser.
+
+**`tamer-auth` succeeds but `tamer` or `tamer-server` fails**
+- There might be multiple active sessions, confusing the extraction. Log out of Proton, clear all browser data for all proton.me domains (account, root, lumo), then log in again and re-run `tamer-auth`.
 
 ---
 
-## Login Authentication
+## Login
+
+A secure and lightweight option where you provide your credentials in a prompt. Requires Go. No support for CAPTCHA or conversation sync.
 
 Uses Proton's SRP (Secure Remote Password) protocol via a Go binary built from [go-proton-api](https://github.com/henrybear327/go-proton-api).
 
@@ -67,15 +85,15 @@ Uses Proton's SRP (Secure Remote Password) protocol via a Go binary built from [
 
 ### Setup
 
-```bash
-# 1. Build the Go binary (requires Go 1.24+)
-make go-auth-build
+1. Build the Go binary:
+   ```bash
+   # Requires Go 1.24+
+   cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
+   ```
+2. Run `tamer-auth` and select `login`.
+3. Enter username, password, and TOTP code (if 2FA is enabled).
 
-# 2. Run authentication
-npm run auth
-# Select: 2. login
-# Enter username, password, TOTP (if 2FA enabled)
-```
+> **Tip:** If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first. This may clear the challenge for subsequent login attempts.
 
 ### Config
 
@@ -91,17 +109,27 @@ auth:
 
 ### Limitations
 
-- **CAPTCHA**: May trigger CAPTCHA on Proton's servers (use browser method as fallback)
-- **No persistence support**: Cannot fetch userKeys/masterKeys due to API scope restrictions
+- **CAPTCHA**: May trigger CAPTCHA on Proton's servers (see tip above)
+- **No conversation sync**: Cannot fetch userKeys/masterKeys due to API scope restrictions
 - **TOTP only**: Only supports TOTP for 2FA (no security keys)
+
+### Troubleshooting
+
+**"proton-auth binary not found"**
+- Build it: `cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -`
+
+**"Authentication failed"**
+- Verify username/password
+- Check if 2FA is enabled (will prompt for TOTP)
+- Try browser method as fallback
 
 ---
 
-## rclone Config Extraction
+## Rclone
 
-Extracts credentials from an existing [rclone](https://rclone.org/) protondrive configuration.
+Use rclone to log in and copy the tokens from its config file. No conversation sync.
 
-### Why rclone?
+### Why Rclone?
 
 - **No Go toolchain**: Just paste config from existing rclone setup
 - **CAPTCHA bypass**: rclone handles CAPTCHA during `rclone config`
@@ -109,23 +137,22 @@ Extracts credentials from an existing [rclone](https://rclone.org/) protondrive 
 
 ### Setup
 
-```bash
-# 1. Have rclone configured with a protondrive remote
-rclone config
-# Follow prompts: New remote → protondrive → authenticate
+1. Install rclone
+2. Add a "proton drive" remote named "lumo-tamer" as described here: https://rclone.org/protondrive/. If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first. See [rclone remote setup](https://rclone.org/remote_setup/) for extra ways to login into rclone.
+3. Test if rclone succeeds: `rclone about lumo-tamer:`
+4. Find your rclone config file: `~/.config/rclone/rclone.conf` (Linux/macOS) or `%APPDATA%\rclone\rclone.conf` (Windows)
+5. Copy the tokens under lumo-tamer manually or `grep -A 6 "lumo-tamer" rclone.conf`
+6. Run `tamer-auth` and select `rclone`.
+7. Paste your rclone config section when prompted.
 
-# 2. Run authentication
-npm run auth
-# Select: 3. rclone
-# Paste your rclone config section when prompted
-```
+> **Warning:** This method reuses tokens/keys that are stored insecurely by rclone. Use it as a fallback if the other two methods don't work. If you already use rclone for Proton Drive, add a separate remote for lumo-tamer, as lumo-tamer will refresh tokens and invalidate the ones used by rclone.
 
 ### Config Format
 
-Paste the INI section from `~/.config/rclone/rclone.conf`:
+Paste the INI section from your rclone config:
 
 ```ini
-[proton]
+[lumo-tamer]
 type = protondrive
 client_uid = abc123...
 client_access_token = xyz789...
@@ -135,16 +162,24 @@ client_salted_key_pass = base64encodedKeyPassword==
 
 ### Limitations
 
-- **No persistence support**: Cannot fetch userKeys/masterKeys due to API scope restrictions
+- **No conversation sync**: Cannot fetch userKeys/masterKeys due to API scope restrictions
 - **Manual paste**: Must paste config section each time (not auto-read from file)
+
+### Troubleshooting
+
+**"Remote is not a protondrive type"**
+- Ensure you're pasting a protondrive section, not another remote type
+
+**"Missing required fields"**
+- Your rclone config may need refresh: `rclone config reconnect lumo-tamer:`
 
 ---
 
 ## Comparison
 
-| Feature | Browser | Login | rclone |
+| Feature | Browser | Login | Rclone |
 |---------|---------|-------|--------|
-| Persistence support | Yes | No | No |
+| Conversation sync | Yes | No | No |
 | keyPassword | Yes | Yes | Yes |
 | Token refresh | Automatic | Automatic | Automatic |
 | 2FA support | Any | TOTP only | Any (via rclone) |
@@ -152,12 +187,12 @@ client_salted_key_pass = base64encodedKeyPassword==
 | Extra tools needed | Browser + CDP | Go binary | rclone |
 | Setup complexity | Medium | Medium | Low |
 
-### Persistence Support
+### Conversation Sync
 
-Only **browser** auth supports Proton conversation persistence because:
+Only **browser** auth supports conversation sync because:
 - Browser tokens have full API scope (including `/lumo/*` endpoints)
 - Browser extraction caches `userKeys` and `masterKeys` which bypass scope checks
-- Login and rclone tokens lack the `lumo` scope needed for spaces API
+- Login and rclone tokens lack the `lumo` scope needed for the spaces API
 
 ---
 
@@ -184,6 +219,10 @@ All methods store a `refreshToken` and use Proton's `/auth/refresh` endpoint:
 - **CLI command**: `/refreshtokens`
 - **API**: `POST /v1/auth/refresh`
 
+### Troubleshooting
+
+Don't reuse the same tokens (browser or rclone) across different machines. Refreshing tokens will invalidate tokens on other machines.
+
 ---
 
 ## Auth Status
@@ -197,47 +236,14 @@ npm run auth-status
 Shows:
 - Current auth method
 - Token validity
-- Persistence support status
+- Conversation sync support status
 - Any warnings
-
----
-
-## Troubleshooting
-
-### Browser
-
-**"No browser contexts found"**
-- Ensure browser is running and CDP endpoint is accessible
-- Check firewall/network settings
-
-**"Not logged in"**
-- Log in to Lumo in the browser first, then re-run `npm run auth`
-
-### Login
-
-**"proton-auth binary not found"**
-- Build it: `make go-auth-build`
-
-**"Authentication failed"**
-- Verify username/password
-- Check if 2FA is enabled (will prompt for TOTP)
-- Try browser method as fallback
-
-### rclone
-
-**"Remote is not a protondrive type"**
-- Ensure you're pasting a protondrive section, not another remote type
-
-**"Missing required fields"**
-- Your rclone config may need refresh: `rclone config reconnect your-remote:`
 
 ---
 
 ## Logout
 
-```bash
-# CLI
-/logout
+Use the `/logout`command in any chat (cli or api).
 
 # API
 curl -X POST http://localhost:3003/v1/auth/logout \

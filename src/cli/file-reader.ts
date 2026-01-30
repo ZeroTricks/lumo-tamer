@@ -2,8 +2,8 @@
  * File reader block handler for CLI
  *
  * Reads files from ```read blocks and returns contents to Lumo.
- * No user confirmation needed — reading is safe.
- * No output to user — avoids cluttering the terminal.
+ * No user confirmation needed
+ * No output to user, avoids cluttering the terminal.
  *
  * Format:
  *   path/to/file1.txt

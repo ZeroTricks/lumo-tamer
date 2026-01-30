@@ -21,7 +21,7 @@
     "dev:auth": "tsx src/auth/authenticate.ts",
     "auth": "node dist/auth/authenticate.js",
     "auth-status": "tsx src/auth/status.ts",
-    "sync-upstream": "./scripts/sync-upstream.sh"
+    "sync-upstream": "./src/proton-upstream/sync-upstream.sh"
   },
   "keywords": [
     "lumo",

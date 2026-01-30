@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Sync upstream changes from Proton WebClients repository
-# Usage: ./scripts/sync-upstream.sh
+# Usage: npm run sync-upstream
 #
 # Fetches files directly from GitHub without requiring a local clone.
 #
@@ -175,11 +175,11 @@ sync_all_files() {
         fi
     done
 
-    # Update UPSTREAM.md with new commit
-    if [ -f "${UPSTREAM_DIR}/UPSTREAM.md" ]; then
-        sed -i "s/\*\*Commit:\*\* [a-f0-9]*/\*\*Commit:\*\* ${LATEST_COMMIT}/" "${UPSTREAM_DIR}/UPSTREAM.md"
-        sed -i "s/\*\*Sync Date:\*\* [0-9-]*/\*\*Sync Date:\*\* $(date +%Y-%m-%d)/" "${UPSTREAM_DIR}/UPSTREAM.md"
-        echo -e "  ${GREEN}✓${NC} Updated UPSTREAM.md"
+    # Update upstream.md with new commit
+    if [ -f "docs/upstream.md" ]; then
+        sed -i "s/\*\*Commit:\*\* [a-f0-9]*/\*\*Commit:\*\* ${LATEST_COMMIT}/" "docs/upstream.md"
+        sed -i "s/\*\*Sync Date:\*\* [0-9-]*/\*\*Sync Date:\*\* $(date +%Y-%m-%d)/" "docs/upstream.md"
+        echo -e "  ${GREEN}✓${NC} Updated docs/upstream.md"
     fi
 
     echo -e "\n${GREEN}Sync complete!${NC}"

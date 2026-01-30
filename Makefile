@@ -30,7 +30,7 @@ docker-build: ## Build Docker image
 	docker compose build app
 
 docker-auth: ## Run authentication (interactive)
-	docker compose run --rm -it app npm run auth
+	docker compose run --rm -it app tamer-auth
 
 docker-server: ## Run server
 	docker compose up app

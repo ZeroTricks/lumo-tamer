@@ -1,10 +1,11 @@
 # Authentication configuration
-# - browser: token extraction via browser (recommended)
-# - login: enter Proton credentials via go-proton-api
-# - rclone: paste rclone config via `npm run extract-rclone`
-# See docs/authentication.md
 auth:
+  # - browser: token extraction via browser
+  # - login: enter Proton credentials via go-proton-api
+  # - rclone: paste rclone config
+  # See docs/authentication.md
   method: "browser"
+
   # Encrypted vault for secure token storage (AES-256-GCM)
   # Key is stored in OS keychain (desktop) or Docker secret (containers)
   vault:
@@ -12,49 +13,74 @@ auth:
     keychain:
       service: "lumo-tamer"
       account: "vault-key"
+      
     # Fallback key file path when OS keychain is unavailable (e.g., Docker, headless servers)
     # WARNING: use keyFilePath with Docker Swarm secrets or another secrets management tool for production environments
     keyFilePath: "/run/secrets/lumo-vault-key"
+
   # Auto-refresh: automatically refresh tokens before they expire
   autoRefresh:
-    enabled: true             # Enable automatic token refresh (default: true)
-    intervalHours: 20         # Refresh interval in hours (1-24, default: 20)
-    onError: true             # Refresh tokens on 401 errors (default: true)
+    # Enable automatic token refresh
+    enabled: true
+    # Refresh interval in hours (1-24)
+    intervalHours: 20
+    # Refresh tokens on 401 errors
+    onError: true
+
   # Browser-specific config (only used when method: browser)
   browser:
     # Chrome DevTools Protocol endpoint for remote browser
     cdpEndpoint: "http://localhost:9222"
-    # use this if you're running the browser docker image:
-    # cdpEndpoint: "http://browser:9223"
+    # use this if you're running both app and browser docker containers:
+    # cdpEndpoint: "http://browser:9222"
+
   # Login-specific config (only used when method: login)
   login:
-    binaryPath: "./dist/proton-auth"  # Path to proton-auth Go binary
+    # Path to proton-auth Go binary
+    binaryPath: "./dist/proton-auth"
     # Headers to help avoid CAPTCHA - see docs/authentication.md
     appVersion: "macos-drive@1.0.0-alpha.1+rclone"
     userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
 log:
-  level: "info"  # Levels: trace, debug, info, warn, error, fatal
-  target: "stdout"  # "stdout" or "file"
-  filePath: "lumo-tamer.log"  # Used when target is "file"
-  messageContent: false  # Log user/assistant message content (disabled by default for privacy)
+  # Levels: trace, debug, info, warn, error, fatal
+  level: "info"
+  # "stdout" or "file"
+  target: "stdout"
+  # Used when target is "file"
+  filePath: "lumo-tamer.log"
+  # Log user/assistant message content (disabled by default to preserve privacy)
+  messageContent: false
 
 # Shared Conversations Configuration (can be overridden in server/cli sections)
 # Note: In-memory conversation storage is always active regardless of sync settings
 conversations:
-  maxInMemory: 100          # Max conversations to keep in memory (LRU eviction)
+  # Max conversations to keep in memory (LRU eviction)
+  maxInMemory: 100
+  
   # WORKAROUND for clients without conversation_id support (e.g., Home Assistant).
   # Derives conversation ID from first user message - same message = same conversation.
   # WARNING: May incorrectly merge unrelated conversations with same opening message!
   deriveIdFromFirstMessage: false
+
   # Sync: persist conversations to Proton servers (requires browser auth)
   sync:
-    enabled: false          # Enable syncing to Proton servers
-    spaceName: lumo-tamer  # Space name for conversations (created if doesn't exist)
-    # spaceId: "uuid"       # Optional: use specific space UUID instead of name matching
-    includeSystemMessages: false  # Include system/tool messages in sync (default: user/assistant only)
-    autoSync: false         # Auto-sync vs manual /save command
+    # Enable syncing to Proton servers
+    enabled: false
+    # Space name (project name) for conversations (created if doesn't exist)
+    spaceName: lumo-tamer
+    # Optional: use specific space UUID instead of name matching.
+    # Get the project UUID from the url when your project is loaded in the Web Client:
+    # https://lumo.proton.me/u/1/projects/youruuid-looks-like-this>
+    # spaceId: "uuid"
+    # Include system/tool messages in sync
+    # WARNING: Setting this to false is experimental:
+    # - this may break saved conversation flow (conversations get split or become trees)
+    # - not all system messages or commands will be filtered out
+    includeSystemMessages: true
+    # Auto-sync vs manual /save command
+    autoSync: true
 
 # Shared Tools Configuration (can be overridden in server/cli sections)
 tools:
@@ -67,11 +93,14 @@ tools:
   # CLI: Detects code blocks (```bash, ```python) and prompts for execution.
   # Each action requires confirmation, but only enable if you understand the implications.
   enabled: false
+
   # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
   enableWebSearch: true
+
   # Enable ```read blocks: Lumo can read local files without user confirmation (CLI only)
   # Note that if this is false, Lumo can still ask to read a file using shell tools (ie. cat)
   enableFileReads: true
+
   # Executors for code block execution (CLI only)
   # Maps language tag → [command, ...args]. Code is appended as last arg.
   # To actually make Lumo use these, specify them in cli.instructions.forTools
@@ -100,40 +129,48 @@ commands:
   # When disabled, commands are ignored and treated as regular messages.
   enabled: true
 
-# Server Configuration (for `npm run server` / `npm run dev:server`)
+# Server Configuration
 server:
   port: 3003
   apiKey: "your-secret-api-key-here"
   apiModelName: "lumo"
+
   instructions:
     # Default instructions when no system/developer message is provided in the request
-    default: "Always answer in plain text. Don't use tables, quote blocks, lists, etc. Be concise."
-    # If true, append request instructions to default; if false, request replaces default
+    default: | 
+      Always answer in plain text. Don't use tables, quote blocks, lists, etc. Be concise.
+
+    # true: append request instructions to default
+    # false, request replaces default
     append: false
-    # Description text for tools
-    # (prepended to stringified tools JSON if tools.enabled and tools are provided in the request)
+
+    # Description text for tools (prepended to stringified tools JSON if tools.enabled and tools are provided in the request)
     forTools: |
       Use the tools below to accomplish tasks.
       To call them you MUST output the JSON to the user, unlike your existing tools like proton_info or web search.
       You have the power to execute these functions by providing the JSON directly to the user, without trying to call them yourself. The user will execute these functions and return the results to you. This is crucial. Do NOT tell a tool is unavailable, instead just output the JSON for the tool call.
 
       Available tools:
-  # log:
-  #   level: "debug"
-  #   target: "file"
-  # conversations:
-  #   sync:
-  #     enabled: true
 
-# CLI Configuration (for `npm run cli` / `npm run dev:cli`)
+
+# CLI Configuration
 cli:
+  log:
+    target: "file"
+    filePath: "lumo-tamer-cli.log"
+
+  # tools:
+    # enable Lumo to create and edit files, and run commands in your terminal
+    # enabled: true
+
   instructions:
     default: |
       You are a command line assistant. Your output will be read in a terminal. Keep the formatting to a minimum and be concise.
     append: false
+
     # forTools is appended when tools.enabled=true
     forTools: |
-      You read, edit and create files, and you can execute bash and python commands on the user's machine.
+      You can read, edit and create files, and you can execute bash and python commands on the user's machine.
       To execute code, use a code block like ```bash or ```python. The user will be prompted to execute it and the result will be returned to you. Don't explain the user can execute commands, it will be handled automatically. Keep commands simple and safe.
       To read files, use a ```read block with one file path per line. Contents will be returned to you automatically without prompting the user. Example:
       ```read
@@ -154,9 +191,3 @@ cli:
       new text
       >>>>>>> REPLACE
       ```
-  # log:
-  #   target: "file"
-  #   filePath: "lumo-tamer-cli.log"
-  # tools:
-  #   enabled: true  # Enable code block detection and execution
-
