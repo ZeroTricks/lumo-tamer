@@ -1,6 +1,10 @@
 # lumo-tamer
 
-Use Proton Lumo on the command line or integrate it in your favorite AI-enabled app.
+Use [Proton Lumo](https://lumo.proton.me/) on the command line or integrate it in your favorite AI-enabled app.
+
+[Lumo](https://lumo.proton.me/about) is Proton's privacy-first AI assistant, powered by open-source LLMs running exclusively on Proton-controlled servers. Your prompts and responses are never logged, stored, or used for training. See Proton's [security model](https://proton.me/blog/lumo-security-model) and [privacy policy](https://proton.me/support/lumo-privacy) for details.
+
+lumo-tamer is a lightweight local proxy that talks to Proton's Lumo API using the same protocol as the official web client. All data in transit is encrypted and subject to the same privacy protections as the official client. 
 
 ## Features
 
@@ -15,6 +19,7 @@ This is an unofficial, personal project in early stages of development, not affi
 
 ## Prerequisites
 
+- A Proton account (free works; [Lumo Plus](https://lumo.proton.me/) gives unlimited chats and faster responses)
 - Node.js 18+ & npm
 - Go 1.24+ (optional, only for the `login` auth method)
 - Docker (optional, for containerized setup)
@@ -32,13 +37,13 @@ npm run build
 npm link
 ```
 
-A [`Makefile`](Makefile) is included as a convenience wrapper. Run `make help` to see available shortcuts.
+A [`Makefile`](Makefile) is included as a convenience wrapper. Optionally, run `make help` to see available shortcuts.
 
 For Docker installation, see [Docker](#docker).
 
 ### 2. Authenticate
 
-Authenticating to Proton is not straightforward: different flows depending on user settings (2FA, hardware keys), CAPTCHA challenges, and auth tokens not having the necessary scopes. The good news is you only have to log in "once"; after that, secrets are securely saved in an encrypted vault and tokens are refreshed automatically.
+Authenticating to Proton is not straightforward: different flows depending on user settings (2FA, hardware keys), CAPTCHA challenges, and auth tokens not having the necessary scopes. The good news is you only have to log in "once"; after that, secrets are securely saved in an encrypted vault (key stored in your OS keychain) and tokens are refreshed automatically.
 
 Choose one of three methods:
 
@@ -59,6 +64,7 @@ A secure and lightweight option where you provide your credentials in a prompt. 
 
 ```bash
 # Requires Go 1.24+
+make build # or
 cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
 ```
 
@@ -99,7 +105,7 @@ Add configuration options to `config.yaml`. Use [`config.defaults.yaml`](config.
 
 Apart from auth settings (which are set by `tamer-auth`), all settings are optional. By default, lumo-tamer is conservative: experimental or resource-heavy features are disabled.
 
-Options in sections `log`, `conversations`, `commands` and `tools` can be set globally (server & cli), and can be overwritten within `cli` and `server`.
+Options in sections `log`, `conversations`, `commands` and `tools` can be set globally (used by server & cli), and can be overwritten within `cli` and `server` sections.
 
 
 For example:
@@ -127,9 +133,9 @@ Set general and tool-specific instructions for the CLI and server with `cli.inst
 
 ### Conversation sync
 
-> **Note:** Only supported with the `browser` authentication method. Enabling conversation sync requires additional user secrets; if you enable this after initial setup, re-run `tamer-auth`.
-
 Enable conversation sync in `config.yaml`:
+
+> **Note:** Only supported with the `browser` authentication method. Enabling conversation sync requires additional user secrets; if you enable this after initial setup, re-run `tamer-auth`.
 
 ```yaml
 conversations:
@@ -152,6 +158,8 @@ tools:
   enableWebSearch: true
 ```
 
+#### CLI
+
 ```yaml
 cli:
   tools:
@@ -162,6 +170,8 @@ cli:
 ```
 > **Tip:** When you enable CLI tools, consider adapting `cli.instructions.forTools` to reference the languages and shells available in your environment.
 
+#### Server
+
 ```yaml
 server:
   tools:
@@ -170,8 +180,8 @@ server:
 ```
 
 
-> **Warning:** Server-side tool support is experimental. Under the hood, lumo-tamer instructs Lumo to send tool calls as JSON, which it then detects and translates into real tool calls. This can fail because:
-> - Too many tools are provided by the API client.
+> **Warning:** Server-side tool support is experimental. Under the hood, lumo-tamer instructs Lumo to send tool calls as JSON, which it will then detect and translate into real tool calls. This can fail because:
+> - Lumo gets confused by the API client providing too many tools.
 > - Lumo tries to call tools server-side, which fails, so Lumo reports tools as unavailable. If this happens, try manually asking it to output the JSON.
 > - Lumo sets the wrong tool name or arguments.
 > - JSON code blocks are not properly detected or parsed by lumo-tamer.
@@ -208,7 +218,7 @@ Run `tamer-server`
 
 Now, connect your favorite OpenAI-compatible app.
 
-**Warning:** The API implements a subset of OpenAI-compatible endpoints and has only been tested with a handful of clients.
+**Warning:** The API implements a subset of OpenAI-compatible endpoints and has only been tested with a handful of clients (Home Assistant and Open WebUI).
 
 | Endpoint | Description |
 |----------|-------------|
@@ -226,7 +236,7 @@ curl http://localhost:3003/v1/chat/completions \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
     "model": "lumo",
-    "messages": [{"role": "user", "content": "What is 2+2?"}],
+    "messages": [{"role": "user", "content": "Tell me a joke."}],
     "stream": true
   }'
 ```
@@ -243,8 +253,8 @@ curl http://localhost:3003/v1/chat/completions \
 
 - When `conversations.sync` is enabled, you may want to set `conversations.deriveIdFromFirstMessage: true` to group messages properly.
 - To let Lumo read the status of your home or control your devices, set `server.tools.enabled: true`.
-- To improve tool success rate:
-  - Experiment with the instructions sent by Home Assistant.
+- To improve tool call success rate:
+  - Experiment with changing the instructions sent by Home Assistant.
   - Limit the number of exposed entities in Home Assistant's settings.
   - Limit the number of entity aliases.
 
@@ -299,10 +309,10 @@ See [docs/](docs/) for detailed documentation:
 
 ## Roadmap
 
-- **Getting feedback** I'm curious how people use lumo-tamer and what they run into.
-- **More API endpoints** Expand OpenAI compatibility.
-- **Simpler auth** Make the `login` method support conversation sync so you don't need a browser.
-- **On-disk conversation cache** Encrypted local cache to reduce server load and enable full text search.
+- **Getting feedback**: I'm curious how people use lumo-tamer and what they run into.
+- **More API endpoints**: Expand OpenAI compatibility.
+- **Simpler auth**: Make the `login` method support conversation sync so you don't need a browser.
+- **On-disk conversation cache**: Encrypted local cache to reduce server load and enable full text search.
 
 ## Full Disclaimer
 
