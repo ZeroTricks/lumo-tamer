@@ -71,9 +71,6 @@ export async function executeCommand(
       case 'refreshtokens':
         return await handleRefreshTokensCommand(context);
 
-      case 'deleteallspaces':
-        return await handleDeleteAllSpacesCommand(context);
-
       case 'ole':
         return 'ole!';
 
@@ -101,7 +98,6 @@ function getHelpText(): string {
   /save, /sync       - Sync conversations to Proton server
   /refreshtokens     - Manually refresh auth tokens
   /logout            - Revoke session and delete tokens
-  /deleteallspaces   - Delete ALL spaces from server (destructive!)
   /quit              - Exit CLI (CLI mode only)`;
 }
 
@@ -196,22 +192,3 @@ async function handleLogoutCommand(context?: CommandContext): Promise<string> {
   }
 }
 
-/**
- * Handle /deleteAllSpaces command - delete ALL spaces from server
- * WARNING: This is destructive!
- */
-async function handleDeleteAllSpacesCommand(context?: CommandContext): Promise<string> {
-  try {
-    if (!context?.syncInitialized) {
-      return 'Sync not initialized. Persistence may be disabled or KeyManager not ready.';
-    }
-
-    const syncService = getSyncService();
-    const deleted = await syncService.deleteAllSpaces();
-
-    return `Deleted ${deleted} space(s) from server.`;
-  } catch (error) {
-    logger.error({ error }, 'Failed to execute /deleteAllSpaces command');
-    return `Delete failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-  }
-}
