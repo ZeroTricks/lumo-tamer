@@ -1,6 +1,6 @@
 # lumo-tamer Makefile
 
-.PHONY: help auth server cli build clean docker-build docker-auth docker-server docker-cli
+.PHONY: help auth server cli build docker-build docker-auth docker-server docker-cli
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -19,9 +19,6 @@ cli: ## Run CLI - use: make cli ARGS="your prompt"
 
 build: ## Build TypeScript and Go binary
 	npm run build && cd src/auth/login/go && go build -o ../../../../dist/proton-auth
-
-browser: ## Clean build artifacts
-	npm run clean
 
 
 # Docker
