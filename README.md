@@ -260,7 +260,7 @@ curl http://localhost:3003/v1/chat/completions \
 
 #### Open WebUI
 
-For your convenience, an Open WebUI service is included in `docker-compose.yml`. Fill in the API key you configured earlier in `OPENAI_API_KEYS` and launch `docker compose up open-webui`.
+For your convenience, an Open WebUI service is included in `docker-compose.yml`. Launch `docker compose up open-webui` and open `http://localhost:8080`
 
 > **Note:** Open WebUI will by default prompt Lumo for extra information (to set title and tags). Disable these in Open WebUI's settings to avoid cluttering your debugging experience.
 

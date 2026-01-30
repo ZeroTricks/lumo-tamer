@@ -44,13 +44,16 @@ services:
   open-webui:
     image: ghcr.io/open-webui/open-webui:main-slim
     container_name: open-webui
+    # Read apiKey from config.yaml at startup and export as OPENAI_API_KEYS env var
+    entrypoint: ["/bin/bash", "-c", "export OPENAI_API_KEYS=$(grep 'apiKey:' /app/config.yaml | head -1 | sed 's/.*apiKey: *\"\\{0,1\\}//;s/\".*//') && exec /app/backend/start.sh"]
     ports:
       - "8080:8080"
     environment:
-      - OPENAI_API_BASE_URLS=http://app:3003/v1
-      - OPENAI_API_KEYS=
+      - OPENAI_API_BASE_URLS=http://10.0.1.5:3003/v1
       - ENABLE_OPENAI_API=true
     volumes:
+      # access app config for API key
+      - ./config.yaml:/app/config.yaml:ro
       - open-webui-data:/app/backend/data
     restart: unless-stopped
 
