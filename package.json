@@ -20,7 +20,7 @@
     "clean": "rm -rf dist",
     "dev:auth": "tsx src/auth/authenticate.ts",
     "auth": "node dist/auth/authenticate.js",
-    "auth-status": "tsx src/auth/status.ts",
+    "auth-status": "tsx src/auth/authenticate.ts status",
     "sync-upstream": "./src/proton-upstream/sync-upstream.sh"
   },
   "keywords": [

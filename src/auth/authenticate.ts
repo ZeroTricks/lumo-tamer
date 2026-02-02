@@ -2,7 +2,10 @@
 /**
  * Unified authentication script
  *
- * Usage: npm run auth
+ * Usage:
+ *   npm run auth            - Interactive authentication
+ *   npm run auth-status     - Show current auth status
+ *   tamer-auth [status]     - Binary usage
  *
  * Prompts for auth method (with config value as default) and runs extraction:
  * - browser: Extract tokens from browser session via CDP
@@ -27,7 +30,7 @@ import { runLoginAuthentication } from './login/authenticate.js';
 import { BrowserAuthProvider } from './providers/browser.js';
 import { RcloneAuthProvider } from './providers/rclone.js';
 import { LoginAuthProvider } from './providers/login.js';
-import { printStatus, printSummary } from './status.js';
+import { printStatus, printSummary, runStatus } from './status.js';
 import { updateAuthConfig } from './update-config.js';
 import type { AuthMethod, AuthProvider } from './types.js';
 
@@ -88,6 +91,10 @@ async function authenticateBrowser(): Promise<BrowserAuthResult> {
 }
 
 async function main(): Promise<void> {
+    if (process.argv[2] === 'status') {
+        return runStatus();
+    }
+
     console.log('=== lumo-tamer authentication ===\n');
 
     // Prompt for method (with config value as default)

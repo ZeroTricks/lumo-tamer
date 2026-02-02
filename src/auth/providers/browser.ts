@@ -115,7 +115,6 @@ export class BrowserAuthProvider extends BaseAuthProvider {
 
         if (!this.isValid()) {
             status.warnings.push('Tokens likely expired (>24h old)');
-            status.warnings.push('Run: npm run extract-tokens');
         } else {
             status.valid = true;
         }

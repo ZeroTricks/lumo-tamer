@@ -1,7 +1,5 @@
 /**
- * Auth Status - Display current authentication configuration and status
- *
- * Usage: npm run auth-status
+ * Auth Status - Display helpers for authentication status
  */
 
 import { createAuthProvider, type AuthProviderStatus } from './index.js';
@@ -49,7 +47,7 @@ export function printSummary(status: AuthProviderStatus, supportsPersistence: bo
     }
 }
 
-async function main(): Promise<void> {
+export async function runStatus(): Promise<void> {
     console.log('=== lumo-tamer auth status ===');
 
     const method = authConfig.method;
@@ -72,13 +70,4 @@ async function main(): Promise<void> {
         console.log('');
         process.exit(1);
     }
-}
-
-// Only run when invoked directly (not when imported)
-const isDirectInvocation = import.meta.url === `file://${process.argv[1]}`;
-if (isDirectInvocation) {
-    main().catch(err => {
-        console.error('Error:', err);
-        process.exit(1);
-    });
 }
