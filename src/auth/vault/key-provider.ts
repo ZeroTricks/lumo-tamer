@@ -101,8 +101,7 @@ export async function getVaultKey(config: VaultKeyConfig = getDefaultKeyConfig()
     throw new Error(
         'No secure key storage available.\n' +
         '- Desktop: Install system keychain (gnome-keyring, macOS Keychain, Windows Credential Manager)\n' +
-        '- Docker: Mount a secret at /run/secrets/lumo-vault-key\n\n' +
-        'Generate a Docker secret with: openssl rand 32 > secrets/vault-key'
+        `- Docker: Mount a secret at ${config.keyFilePath}\n`
     );
 }
 

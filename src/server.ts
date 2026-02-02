@@ -31,7 +31,9 @@ async function main() {
   });
 }
 
-main().catch((err) => {
-  logger.fatal({ error: err.message, stack: err.stack }, 'Fatal error');
+main().catch(async (err) => {
+  logger.fatal({ error: err.message, stack: err.stack });
+  logger.flush();
+  await new Promise(resolve => setTimeout(resolve, 200));
   process.exit(1);
 });

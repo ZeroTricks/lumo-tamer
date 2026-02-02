@@ -4,14 +4,29 @@ import { resolveProjectPath } from './paths.js';
 import { installConsoleShim } from '../proton-shims/console.js';
 
 // Determine transport based on config
-function getTransport(config: LogConfig): pino.TransportSingleOptions {
+function getTransport(config: LogConfig): pino.TransportSingleOptions | pino.TransportMultiOptions {
   if (config.target === 'file') {
     return {
-      target: 'pino/file',
-      options: {
-        destination: resolveProjectPath(config.filePath),
-        mkdir: true,
-      },
+      targets: [
+        {
+          target: 'pino/file',
+          options: {
+            destination: resolveProjectPath(config.filePath),
+            mkdir: true,
+          },
+        },
+        // Always show warnings and errors in terminal (stderr), without stacks
+        {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            ignore: 'pid,hostname,time,stack,error',
+            messageFormat: '{if msg}{msg}{end}{if error}{if msg}: {end}{error}{end}',
+            destination: 2, // stderr
+          },
+          level: 'warn',
+        },
+      ],
     };
   }
 
