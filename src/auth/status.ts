@@ -19,6 +19,12 @@ export function printStatus(status: AuthProviderStatus): void {
         console.log(`    ${key}: ${displayValue}`);
     }
 
+    const autoRefresh = authConfig.autoRefresh;
+    const autoRefreshDisplay = autoRefresh.enabled
+        ? `\x1b[32myes\x1b[0m (every ${autoRefresh.intervalHours}h)`
+        : '\x1b[33mno\x1b[0m';
+    console.log(`    autoRefresh: ${autoRefreshDisplay}`);
+
     if (status.warnings.length > 0) {
         console.log('  Warnings:');
         for (const warning of status.warnings) {
@@ -33,7 +39,7 @@ export function printSummary(status: AuthProviderStatus, supportsPersistence: bo
         console.log('\x1b[32mAuthentication is configured and valid.\x1b[0m');
         const syncEnabled = getConversationsConfig().sync.enabled;
         if (!syncEnabled) {
-            console.log('Conversation persistence: \x1b[33mdisabled\x1b[0m (config)');
+            console.log('Conversation persistence: \x1b[33mdisabled\x1b[0m (by configuration)');
         } else if (!supportsPersistence) {
             console.log(`Conversation persistence: \x1b[33mdisabled\x1b[0m (${status.method} auth doesn't support it)`);
         } else if (!status.details.hasKeyPassword) {
