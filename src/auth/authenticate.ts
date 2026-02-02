@@ -17,7 +17,7 @@ import { initConfig, getLogConfig } from '../app/config.js';
 initConfig('cli');
 
 import { initLogger, logger } from '../app/logger.js';
-initLogger({...getLogConfig(), target: 'stdout', level: 'warn'}, { consoleShim: false });
+initLogger(getLogConfig(), { consoleShim: false });
 
 import * as readline from 'readline';
 import { authConfig, authMethodSchema, getConversationsConfig } from '../app/config.js';
