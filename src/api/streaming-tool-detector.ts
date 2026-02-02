@@ -150,6 +150,7 @@ export class StreamingToolDetector {
       this.state = 'normal';
 
       // fix fenceMatch matching ``` before ```json
+      // NOTE: can this be done in processNormalState()?
        this.buffer = this.buffer.replace(/^json/, "");
 
       // Try to parse as tool call
