@@ -4,7 +4,7 @@ Use [Proton Lumo](https://lumo.proton.me/) on the command line or integrate it i
 
 [Lumo](https://lumo.proton.me/about) is Proton's privacy-first AI assistant, powered by open-source LLMs running exclusively on Proton-controlled servers. Your prompts and responses are never logged, stored, or used for training. See Proton's [security model](https://proton.me/blog/lumo-security-model) and [privacy policy](https://proton.me/support/lumo-privacy) for details.
 
-lumo-tamer is a lightweight local proxy that talks to Proton's Lumo API using the same protocol as the official web client. All data in transit is encrypted and subject to the same privacy protections as the official client. 
+lumo-tamer is a lightweight local proxy that talks to Proton's Lumo API using the same protocol as the official web client. All data in transit is encrypted and subject to the same privacy protections as the official client. Think "proton-bridge for Lumo".
 
 ## Features
 
@@ -194,9 +194,9 @@ server:
 
 Run `tamer` or `npm run cli`.
 
-Use Lumo from the command line. To let Lumo execute commands, read, create and edit files, set `cli.tools.enabled: true` in `config.yaml`. The app will always ask for your confirmation before executing commands.
+Talk to Lumo from the command line like you would via the web interface. To let Lumo execute commands, read, create and edit files, set `cli.tools.enabled: true` in `config.yaml`. The app will always ask for your confirmation before executing commands.
 
-See this [demo chat](docs/demo-cli-chat.md) session for inspiration.
+You can ask Lumo to give you a demo of its CLI capabilities, or see this [demo chat](docs/demo-cli-chat.md) for inspiration.
 
 ### In-chat commands
 
@@ -252,7 +252,7 @@ curl http://localhost:3003/v1/chat/completions \
 **Tweak**
 
 - When `conversations.sync` is enabled, you may want to set `conversations.deriveIdFromFirstMessage: true` to group messages properly.
-- To let Lumo read the status of your home or control your devices, set `server.tools.enabled: true`.
+- To let Lumo read the status of your home or control your devices, set `server.tools.enabled: true`. (Experimental, see [Tool Calls](#tool-calls).)
 - To improve tool call success rate:
   - Experiment with changing the instructions sent by Home Assistant.
   - Limit the number of exposed entities in Home Assistant's settings.

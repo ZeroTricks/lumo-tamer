@@ -40,3 +40,4 @@ lumo-tamer consists of following parts: API, bridge, Lumo WebClient
   - Try to find extra information on relevant parts in docs/
   - After implementation, make sure relevant docs/ are up to date
   - Be concise in documentation. This project is in flux and documenation gets outdated quickly.
+  - Don't use "—"
