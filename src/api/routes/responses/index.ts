@@ -3,7 +3,6 @@ import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest, FunctionCallOutput } from '../../types.js';
 import { logger } from '../../../app/logger.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './handlers.js';
-import { createEmptyResponse } from './response-factory.js';
 import { convertResponseInputToTurns } from '../../message-converter.js';
 import { getConversationsConfig } from '../../../app/config.js';
 import type { Turn } from '../../../lumo-client/index.js';
@@ -142,15 +141,6 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       } else {
         return res.status(400).json({ error: 'Input is required (string or message array)' });
       }
-
-      // ===== STEP 4: Check for duplicate user message (per-conversation) =====
-      if (deps.conversationStore?.isDuplicateUserMessage(conversationId, inputText)) {
-        logger.debug('[Server] Skipping duplicate user message');
-        return res.json(createEmptyResponse(request));
-      }
-
-      // Update last user message (per-conversation)
-      deps.conversationStore?.setLastUserMessage(conversationId, inputText);
 
       // Persist all messages from input to conversation store
       // The deduplication logic in appendMessages will filter out already-stored messages
