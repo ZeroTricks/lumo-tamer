@@ -107,10 +107,22 @@ export function createProtonApi(options: ApiFactoryOptions): ProtonApi {
 
         if (!response.ok) {
             const errorBody = await response.text().catch(() => '');
-            throw new Error(
-                `API error: ${response.status} ${response.statusText}` +
-                (errorBody ? `\n${errorBody}` : '')
+            // Try to extract Proton's error message from JSON response
+            let protonError: string | undefined;
+            let protonCode: number | undefined;
+            try {
+                const parsed = JSON.parse(errorBody);
+                protonError = parsed.Error;
+                protonCode = parsed.Code;
+            } catch { /* not JSON */ }
+
+            const error = new Error(
+                protonError
+                    || `API error: ${response.status} ${response.statusText}`
             );
+            (error as any).status = response.status;
+            (error as any).Code = protonCode;
+            throw error;
         }
 
         if (output === 'stream') {
