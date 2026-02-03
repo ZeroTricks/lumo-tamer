@@ -128,7 +128,7 @@ export class SyncService {
 
     constructor(config: SyncServiceConfig) {
         if (!config.spaceId && !config.spaceName) {
-            throw new Error('Either spaceId or spaceName must be provided');
+            throw new Error('Either projectId or projectName must be provided in config');
         }
         this.lumoApi = createLumoApi(config.protonApi, config.uid);
         this.keyManager = config.keyManager;
@@ -144,7 +144,7 @@ export class SyncService {
      * Matching logic:
      * 1. If spaceId is configured, use that space directly (by UUID)
      * 2. Otherwise, find a space with matching spaceName (projectName)
-     * 3. If no match found, create a new space with spaceName
+     * 3. If no match found, create a new space
      */
     async getOrCreateSpace(): Promise<{ spaceId: SpaceId; remoteId: RemoteId }> {
         // Already have a space
@@ -156,7 +156,7 @@ export class SyncService {
         const searchCriteria = this.configuredSpaceId
             ? { spaceId: this.configuredSpaceId }
             : { spaceName: this.spaceName };
-        logger.info(searchCriteria, 'Checking for existing space...');
+        logger.info(searchCriteria, 'Checking for existing project...');
         const listResult = await this.lumoApi.listSpaces();
 
         // Convert spaces record to array for iteration
@@ -168,7 +168,7 @@ export class SyncService {
             totalSpaces: existingSpaces.length,
             spacesWithEncryptedData: spacesWithData.length,
             spaceTags: existingSpaces.map(s => s.id),
-        }, 'Available spaces');
+        }, 'Available projects');
 
         // If spaceId is configured, find that specific space by UUID
         if (this.configuredSpaceId) {
@@ -184,21 +184,21 @@ export class SyncService {
                     this.dataEncryptionKey = dataEncryptionKey;
                     this.idMap.spaces.set(space.id, space.remoteId);
 
-                    logger.info(`Using space by id ${space.id}: ${space.remoteId}`);
+                    logger.info(`Using project by id ${space.id}: ${space.remoteId}`);
 
                     return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
                 } catch (error) {
-                    logger.error({ spaceId: this.configuredSpaceId, error }, 'Failed to decrypt configured space');
-                    throw new Error(`Cannot decrypt configured space ${this.configuredSpaceId}`);
+                    logger.error({ spaceId: this.configuredSpaceId, error }, 'Failed to decrypt configured project');
+                    throw new Error(`Cannot decrypt configured project ${this.configuredSpaceId}`);
                 }
             } else {
-                logger.error({ spaceId: this.configuredSpaceId }, 'Configured space not found');
-                throw new Error(`Configured space ${this.configuredSpaceId} not found on server`);
+                logger.error({ spaceId: this.configuredSpaceId }, 'Configured project not found');
+                throw new Error(`Configured project ${this.configuredSpaceId} not found on server`);
             }
         }
 
         // First pass: look for a space with matching project name
-        logger.info(`Looking up space by name "${this.spaceName}" (among ${existingSpaces.length} spaces)`);
+        logger.info(`Looking up project by name "${this.spaceName}" (among ${existingSpaces.length} projects)`);
         for (const space of existingSpaces) {
             if (!space.id) continue;
 
@@ -223,7 +223,7 @@ export class SyncService {
                         lookingFor: this.spaceName,
                         hasEncrypted: !!encryptedData,
                         decryptedOk: !!spacePrivate,
-                    }, 'Checking space for project name match');
+                    }, 'Checking project name match');
 
                     if (spacePrivate && spacePrivate.projectName === this.spaceName) {
                         this.spaceId = space.id;
@@ -236,7 +236,7 @@ export class SyncService {
                             spaceId: space.id,
                             remoteId: space.remoteId,
                             projectName: spacePrivate.projectName,
-                        }, 'Found existing space with matching project name');
+                        }, 'Found existing project');
 
                         return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
                     }
@@ -251,9 +251,9 @@ export class SyncService {
         // No matching space found, create a new one
         if (!this.spaceName) {
             // This shouldn't happen - constructor validates that spaceId or spaceName is set
-            throw new Error('Cannot create space: no spaceName configured');
+            throw new Error('Cannot create project: no projectName configured');
         }
-        logger.info({ spaceName: this.spaceName }, 'Creating new space...');
+        logger.info({ spaceName: this.spaceName }, 'Creating new project...');
         return await this.createSpace();
     }
 
@@ -287,7 +287,7 @@ export class SyncService {
         }, 'background');
 
         if (!remoteId) {
-            throw new Error('Failed to create space - no remote ID returned');
+            throw new Error('Failed to create project - no remote ID returned');
         }
 
         // Cache everything locally
@@ -301,7 +301,7 @@ export class SyncService {
             spaceId: localId,
             remoteId,
             projectName: this.spaceName,
-        }, 'Created new space');
+        }, 'Created new project');
 
         return { spaceId: localId, remoteId };
     }
@@ -324,7 +324,7 @@ export class SyncService {
         try {
             const spaceData = await this.lumoApi.getSpace(this.spaceRemoteId);
             if (!spaceData) {
-                logger.warn({ spaceRemoteId: this.spaceRemoteId }, 'Space not found on server');
+                logger.warn({ spaceRemoteId: this.spaceRemoteId }, 'Project not found on server');
                 return;
             }
 
@@ -684,16 +684,16 @@ export class SyncService {
     async deleteAllSpaces(): Promise<number> {
         const listResult = await this.lumoApi.listSpaces();
         const spaces = Object.values(listResult.spaces);
-        logger.warn({ count: spaces.length }, 'Deleting ALL spaces...');
+        logger.warn({ count: spaces.length }, 'Deleting ALL projects...');
 
         let deleted = 0;
         for (const space of spaces) {
             try {
                 await this.lumoApi.deleteSpace(space.remoteId, 'background');
                 deleted++;
-                logger.info({ spaceId: space.id, remoteId: space.remoteId }, 'Deleted space');
+                logger.info({ spaceId: space.id, remoteId: space.remoteId }, 'Deleted project');
             } catch (error) {
-                logger.error({ spaceId: space.id, error }, 'Failed to delete space');
+                logger.error({ spaceId: space.id, error }, 'Failed to delete project');
             }
         }
 
@@ -706,7 +706,7 @@ export class SyncService {
         this.idMap.conversations.clear();
         this.idMap.messages.clear();
 
-        logger.warn({ deleted, total: spaces.length }, 'Finished deleting spaces');
+        logger.warn({ deleted, total: spaces.length }, 'Finished deleting projects');
         return deleted;
     }
 }

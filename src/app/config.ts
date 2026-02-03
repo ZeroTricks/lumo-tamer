@@ -43,8 +43,8 @@ const conversationsConfigSchema = z.object({
   deriveIdFromFirstMessage: z.boolean(),
   sync: z.object({
     enabled: z.boolean(),
-    spaceId: z.string().uuid().optional(),
-    spaceName: z.string().min(1),
+    projectId: z.string().uuid().optional(),
+    projectName: z.string().min(1),
     includeSystemMessages: z.boolean(),
     autoSync: z.boolean(),
   }),

@@ -131,7 +131,7 @@ export async function initializeSync(
     if (!authProvider.supportsPersistence()) {
         logger.warn(
             { method: authProvider.method },
-            'Persistence requires browser auth (SRP/rclone tokens lack lumo scope for spaces API)'
+            'Conversation sync requires browser auth method'
         );
         return { initialized: false };
     }
@@ -173,8 +173,8 @@ export async function initializeSync(
             protonApi,
             uid,
             keyManager,
-            spaceName: syncConfig.spaceName,
-            spaceId: syncConfig.spaceId,
+            spaceName: syncConfig.projectName,
+            spaceId: syncConfig.projectId,
             includeSystemMessages: syncConfig.includeSystemMessages,
         });
 
@@ -186,7 +186,7 @@ export async function initializeSync(
             const msg = spaceError instanceof Error ? spaceError.message : String(spaceError);
             logger.warn(
                 { error: msg },
-                'getOrCreateSpace failed, but sync service is still available for commands'
+                'getOrCreateSpace failed'
             );
         }
 

@@ -2,6 +2,8 @@
 
 This document covers conversation persistence: how Proton's Lumo WebClient does it, and how lumo-tamer implements compatible persistence.
 
+> **NOTE**: Proton's API and codebase use `space` for conversation containers. The WebClient UI uses `project`. We follow this terminology: config and logs use `project` (user-facing), while internal code keeps `space` to match the API.
+
 ---
 
 # Part 1: Proton Lumo WebClient Reference
@@ -169,8 +171,8 @@ conversations:
   deriveIdFromFirstMessage: false  # For stateless clients (Home Assistant)
   sync:
     enabled: true
-    spaceName: lumo-tamer      # Space name (created if doesn't exist)
-    # spaceId: "uuid"           # Or use specific space UUID
+    projectName: lumo-tamer      # Project name (created if doesn't exist)
+    # projectId: "uuid"           # Or use specific project UUID
     includeSystemMessages: false  # Only sync user/assistant messages
     autoSync: false             # Or use /save command
 ```
@@ -210,7 +212,7 @@ When `sync.autoSync: true`:
 
 ### Known Limitation: Conversation Limit
 
-Proton's backend enforces a per-space conversation limit. Deleted conversations count towards this limit. When reached, sync fails with HTTP 422 "You've reached maximum number of conversations". Conversations remain usable locally but are not persisted server-side. Use a new `spaceName` to work around this. See [#16](https://github.com/ZeroTricks/lumo-tamer/issues/16).
+Proton's backend enforces a per-project conversation limit. Deleted conversations count towards this limit. When reached, sync fails with HTTP 422 "You've reached maximum number of conversations". Conversations remain usable locally but are not persisted server-side. Use a new `projectName` to work around this. See [#16](https://github.com/ZeroTricks/lumo-tamer/issues/16).
 
 ## Module Structure
 

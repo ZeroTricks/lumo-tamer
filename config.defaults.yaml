@@ -68,12 +68,12 @@ conversations:
   sync:
     # Enable syncing to Proton servers
     enabled: false
-    # Space name (project name) for conversations (created if doesn't exist)
-    spaceName: lumo-tamer
-    # Optional: use specific space UUID instead of name matching.
-    # Get the project UUID from the url when your project is loaded in the Web Client:
+    # Project name for conversations (created if doesn't exist)
+    projectName: lumo-tamer
+    # Optional: use specific project UUID instead of name matching.
+    # Get the UUID from the URL when your project is loaded in the Web Client:
     # https://lumo.proton.me/u/1/projects/youruuid-looks-like-this>
-    # spaceId: "uuid"
+    # projectId: "uuid"
     # Include system/tool messages in sync
     # WARNING: Setting this to false is experimental:
     # - this may break saved conversation flow (conversations get split or become trees)

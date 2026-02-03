@@ -142,11 +142,11 @@ conversations:
   deriveIdFromFirstMessage: true
   sync:
     enabled: true
-    spaceName: "lumo-tamer" # this is the project conversations will belong to
+    projectName: "lumo-tamer" # project conversations will belong to
     autoSync: true
 ```
 
-> **Warning:** Projects in Lumo can contain a maximum number of conversations. When hit, sync will fail. Deleting conversations won't help. Sse a new `spaceName` to work around this. See [#16](https://github.com/ZeroTricks/lumo-tamer/issues/16).
+> **Warning:** Projects in Lumo have a limit on the number of conversations. When hit, sync will fail. Deleting conversations won't help. Use a new `projectName` to work around this. See [#16](https://github.com/ZeroTricks/lumo-tamer/issues/16).
 
 ### Tools
 

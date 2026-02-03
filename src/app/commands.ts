@@ -137,7 +137,7 @@ async function handleSaveCommand(context?: CommandContext): Promise<string> {
 
     const stats = syncService.getStats();
     return `Synced ${syncedCount} conversation(s) to server.\n` +
-           `Space: ${stats.spaceId ?? 'none'}\n` +
+           `Project: ${stats.spaceId ?? 'none'}\n` +
            `Mapped conversations: ${stats.mappedConversations}\n` +
            `Mapped messages: ${stats.mappedMessages}`;
   } catch (error) {
