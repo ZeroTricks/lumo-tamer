@@ -40,7 +40,7 @@ const commandsConfigSchema = z.object({
 
 const conversationsConfigSchema = z.object({
   maxInMemory: z.number(),
-  deriveIdFromFirstMessage: z.boolean(),
+  deriveIdFromUser: z.boolean(),
   sync: z.object({
     enabled: z.boolean(),
     projectId: z.string().uuid().optional(),

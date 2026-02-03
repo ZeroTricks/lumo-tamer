@@ -60,9 +60,10 @@ conversations:
   maxInMemory: 100
   
   # WORKAROUND for clients without conversation_id support (e.g., Home Assistant).
-  # Derives conversation ID from first user message - same message = same conversation.
-  # WARNING: May incorrectly merge unrelated conversations with same opening message!
-  deriveIdFromFirstMessage: false
+  # Derives conversation ID from the `user` field in the request.
+  # Home Assistant sends its internal conversation_id as user, making it unique per chat session.
+  # WARNING: May incorrectly merge unrelated conversations with same "user" field. Ignored if `user` is absent.
+  deriveIdFromUser: false
 
   # Sync: persist conversations to Proton servers (requires browser auth)
   sync:

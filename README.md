@@ -139,7 +139,6 @@ Enable conversation sync in `config.yaml`:
 
 ```yaml
 conversations:
-  deriveIdFromFirstMessage: true
   sync:
     enabled: true
     projectName: "lumo-tamer" # project conversations will belong to
@@ -251,7 +250,7 @@ curl http://localhost:3003/v1/chat/completions \
 
 **Tweak**
 
-- When `conversations.sync` is enabled, you may want to set `conversations.deriveIdFromFirstMessage: true` to group messages properly.
+- When `conversations.sync` is enabled, set `conversations.deriveIdFromUser: true` to group messages into conversations (uses the `user` field from the request, which HA sets to its conversation ID).
 - To let Lumo read the status of your home or control your devices, set `server.tools.enabled: true`. (Experimental, see [Tool Calls](#tool-calls).)
 - To improve tool call success rate:
   - Experiment with changing the instructions sent by Home Assistant.

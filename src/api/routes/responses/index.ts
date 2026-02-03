@@ -5,7 +5,7 @@ import { logger } from '../../../app/logger.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './handlers.js';
 import { createEmptyResponse } from './response-factory.js';
 import { convertResponseInputToTurns } from '../../message-converter.js';
-import { getConversationsConfig, getLogConfig } from '../../../app/config.js';
+import { getConversationsConfig } from '../../../app/config.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/index.js';
 
@@ -25,14 +25,14 @@ function deterministicUUID(seed: string): ConversationId {
 }
 
 /**
- * Generate a deterministic conversation ID from the first user message.
- * Important for clients like Home Assistant that send full history without a conversation_id.
+ * Generate a deterministic conversation ID from the `user` field in the request.
+ * Used for clients like Home Assistant that set `user` to their internal conversation_id.
  *
  * Includes SESSION_ID so IDs are deterministic within a session but unique across sessions.
  */
-function generateDeterministicConversationId(firstUserMessage: string): ConversationId {
-  const uuid = deterministicUUID(firstUserMessage);
-  logger.debug(`Generated deterministic conversation ID ${uuid} from first message${getLogConfig().messageContent ? `(${firstUserMessage?.slice(0, 50)})` : ''}`);
+function generateConversationIdFromUser(user: string): ConversationId {
+  const uuid = deterministicUUID(`user:${user}`);
+  logger.debug({ user, uuid }, 'Generated deterministic conversation ID from user field');
   return uuid;
 }
 
@@ -79,20 +79,10 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       } else if (request.previous_response_id) {
         // Use previous_response_id for stateless continuation
         conversationId = request.previous_response_id;
-      } else if (getConversationsConfig()?.deriveIdFromFirstMessage) {
+      } else if (getConversationsConfig()?.deriveIdFromUser && request.user) {
         // WORKAROUND for clients that don't provide conversation (e.g., Home Assistant).
-        // Generate deterministic ID from first USER message so conversations with same start get same ID.
-        // WARNING: This may incorrectly merge unrelated conversations with the same opening message!
-        const firstUserMessage = Array.isArray(request.input)
-          ? request.input.find((m): m is { role: string; content: string } =>
-              typeof m === 'object' && 'role' in m && m.role === 'user' && 'content' in m
-            )?.content
-          : typeof request.input === 'string' ? request.input : undefined;
-
-        conversationId = firstUserMessage
-          ? generateDeterministicConversationId(firstUserMessage)
-          : randomUUID();
-
+        // Home Assistant sets `user` to its internal conversation_id, unique per chat session.
+        conversationId = generateConversationIdFromUser(request.user);
       } else {
         // Default: generate random UUID for each new conversation
         conversationId = randomUUID();

@@ -15,11 +15,11 @@ import { postProcessTitle } from '../../proton-shims/lumo-api-client-utils.js';
 const SESSION_ID = randomUUID();
 
 /**
- * Generate a deterministic conversation ID from the first user message.
- * Used when deriveIdFromFirstMessage is enabled (e.g., for clients that re-send full history).
+ * Generate a deterministic conversation ID from the `user` field in the request.
+ * Used for clients like Home Assistant that set `user` to their internal conversation_id.
  */
-function generateDeterministicConversationId(firstUserMessage: string): ConversationId {
-  const hash = createHash('sha256').update(`lumo-tamer:${SESSION_ID}:${firstUserMessage}`).digest('hex');
+function generateConversationIdFromUser(user: string): ConversationId {
+  const hash = createHash('sha256').update(`lumo-tamer:${SESSION_ID}:user:${user}`).digest('hex');
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
 }
 
@@ -43,14 +43,11 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
 
       // ===== Generate conversation ID for persistence =====
       // Chat Completions has no conversation parameter per OpenAI spec.
-      // We use deriveIdFromFirstMessage to track conversations for Proton sync.
+      // We use deriveIdFromUser to track conversations for Proton sync.
       let conversationId: ConversationId;
-      if (getConversationsConfig()?.deriveIdFromFirstMessage) {
-        // Generate deterministic ID from first user message
-        const firstUserMessage = request.messages.find(m => m.role === 'user');
-        conversationId = firstUserMessage
-          ? generateDeterministicConversationId(firstUserMessage.content)
-          : randomUUID();
+      if (getConversationsConfig()?.deriveIdFromUser && request.user) {
+        // Home Assistant sets `user` to its internal conversation_id, unique per chat session.
+        conversationId = generateConversationIdFromUser(request.user);
       } else {
         // Random UUID per request (creates separate conversations)
         conversationId = randomUUID();

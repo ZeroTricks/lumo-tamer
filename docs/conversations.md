@@ -168,7 +168,7 @@ Goal: Share conversations between lumo-tamer and Proton WebClient.
 ```yaml
 conversations:
   maxInMemory: 100              # Max conversations in memory (LRU eviction)
-  deriveIdFromFirstMessage: false  # For stateless clients (Home Assistant)
+  deriveIdFromUser: false           # For stateless clients (Home Assistant)
   sync:
     enabled: true
     projectName: lumo-tamer      # Project name (created if doesn't exist)

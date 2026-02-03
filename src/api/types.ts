@@ -45,6 +45,7 @@ export interface OpenAIChatRequest {
   temperature?: number;
   max_tokens?: number;
   tools?: OpenAITool[];
+  user?: string;
   // Custom extension for conversation persistence
   conversation_id?: string;
 }
@@ -127,6 +128,7 @@ export interface OpenAIResponseRequest {
   // Conversation identifier (per OpenAI spec: string ID or object)
   // Cannot be used with previous_response_id
   conversation?: string | { id: string };
+  user?: string;
 }
 
 // Output item types for OpenAI Response
