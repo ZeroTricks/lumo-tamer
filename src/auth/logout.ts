@@ -34,8 +34,7 @@ export async function revokeSession(api: ProtonApi): Promise<void> {
         logger.info('Session revoked successfully');
     } catch (error) {
         // Log but don't fail - token might already be invalid or expired
-        const message = error instanceof Error ? error.message : String(error);
-        logger.warn({ error: message }, 'Session revoke failed (may already be invalid)');
+        logger.warn({ error }, 'Session revoke failed (may already be invalid)');
     }
 }
 

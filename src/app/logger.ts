@@ -21,7 +21,7 @@ function getTransport(config: LogConfig): pino.TransportSingleOptions | pino.Tra
           options: {
             colorize: true,
             ignore: 'pid,hostname,time,stack,error',
-            messageFormat: '{if msg}{msg}{end}{if error}{if msg}: {end}{error}{end}',
+            messageFormat: '{if msg}{msg}{end}{if error.message}{if msg}: {end}{error.message}{end}',
             destination: 2, // stderr
           },
           level: 'warn',
@@ -46,6 +46,10 @@ export function createLogger(config: LogConfig): pino.Logger {
   return pino({
     level: config.level,
     transport: getTransport(config),
+    // The codebase uses `error` (not `err`) for error objects in log calls.
+    // Pino only auto-serializes the `err` key, so we register the same
+    // serializer for `error` to get proper message/stack extraction.
+    serializers: { error: pino.stdSerializers.err },
   });
 }
 

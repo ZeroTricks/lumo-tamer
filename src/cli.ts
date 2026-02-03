@@ -19,8 +19,8 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(async (err) => {
-  logger.fatal({ error: err.message, stack: err.stack });
+main().catch(async (error) => {
+  logger.fatal({ error });
   logger.flush();
   await new Promise(resolve => setTimeout(resolve, 200));
   process.exit(1);
