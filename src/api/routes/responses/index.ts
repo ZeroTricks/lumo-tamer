@@ -14,34 +14,48 @@ import type { ConversationId } from '../../../conversations/index.js';
 const SESSION_ID = randomUUID();
 
 /**
- * Generate a deterministic UUID v5-like ID from the first user message.
- * This ensures that conversations with the same starting message get the same ID,
- * which is important for clients like Home Assistant that send full history
- * without a conversation_id.
+ * Generate a deterministic UUID from a seed string, scoped to the current session.
+ * The same seed within the same session always produces the same UUID,
+ * but different sessions produce different UUIDs (prevents sync conflicts).
+ */
+function deterministicUUID(seed: string): ConversationId {
+  const hash = createHash('sha256').update(`lumo-tamer:${SESSION_ID}:${seed}`).digest('hex');
+  // Format as UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
+
+/**
+ * Generate a deterministic conversation ID from the first user message.
+ * Important for clients like Home Assistant that send full history without a conversation_id.
  *
  * Includes SESSION_ID so IDs are deterministic within a session but unique across sessions.
  */
 function generateDeterministicConversationId(firstUserMessage: string): ConversationId {
-  const hash = createHash('sha256').update(`lumo-tamer:${SESSION_ID}:${firstUserMessage}`).digest('hex');
-  // Format as UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-  // Use version 4 format but with deterministic bytes
-  const uuid =  `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
-
+  const uuid = deterministicUUID(firstUserMessage);
   logger.debug(`Generated deterministic conversation ID ${uuid} from first message${getLogConfig().messageContent ? `(${firstUserMessage?.slice(0, 50)})` : ''}`);
-
   return uuid;
 }
 
 /**
- * Extract conversation ID from request.conversation field (per OpenAI spec)
+ * Extract conversation ID from request.conversation field (per OpenAI spec).
+ * The client-provided ID is hashed with SESSION_ID to produce a session-scoped UUID.
+ *
+ * Known limitation: the internal conversation ID will differ across server restarts,
+ * even if the client sends the same conversation ID. This is acceptable because the
+ * in-memory store doesn't persist across restarts anyway.
  */
-function getConversationIdFromRequest(request: OpenAIResponseRequest): string | undefined {
+function getConversationIdFromRequest(request: OpenAIResponseRequest): ConversationId | undefined {
+  let clientId: string | undefined;
   if (!request.conversation) return undefined;
-  if (typeof request.conversation === 'string') return request.conversation;
-  if (typeof request.conversation === 'object' && 'id' in request.conversation) {
-    return request.conversation.id;
+  if (typeof request.conversation === 'string') clientId = request.conversation;
+  else if (typeof request.conversation === 'object' && 'id' in request.conversation) {
+    clientId = request.conversation.id;
   }
-  return undefined;
+  if (!clientId) return undefined;
+
+  const uuid = deterministicUUID(`conversation:${clientId}`);
+  logger.debug({ clientId, uuid }, 'Mapped client-provided conversation ID to session-scoped UUID');
+  return uuid;
 }
 
 export function createResponsesRouter(deps: EndpointDependencies): Router {
