@@ -15,29 +15,38 @@ export class ResponseEventEmitter {
     this.res.write(`data: ${JSON.stringify(event)}\n\n`);
   }
 
+  private baseResponseObject(responseId: string, createdAt: number, model: string): Partial<OpenAIResponse> {
+    return {
+      id: responseId,
+      object: 'response',
+      status: 'in_progress',
+      created_at: createdAt,
+      model,
+      output: [],
+      error: null,
+      incomplete_details: null,
+      instructions: null,
+      metadata: {},
+      parallel_tool_calls: false,
+      temperature: 1.0,
+      tool_choice: 'none',
+      tools: [],
+      top_p: 1.0,
+    };
+  }
+
   emitResponseCreated(responseId: string, createdAt: number, model: string): void {
     this.emit({
       type: 'response.created',
-      response: {
-        id: responseId,
-        object: 'response',
-        status: 'in_progress',
-        created_at: createdAt,
-        model,
-      },
+      response: this.baseResponseObject(responseId, createdAt, model),
       sequence_number: this.sequenceNumber++,
     });
   }
 
-  emitResponseInProgress(responseId: string, createdAt: number): void {
+  emitResponseInProgress(responseId: string, createdAt: number, model: string): void {
     this.emit({
       type: 'response.in_progress',
-      response: {
-        id: responseId,
-        object: 'response',
-        status: 'in_progress',
-        created_at: createdAt,
-      },
+      response: this.baseResponseObject(responseId, createdAt, model),
       sequence_number: this.sequenceNumber++,
     });
   }
@@ -60,6 +69,7 @@ export class ResponseEventEmitter {
       part: {
         type: 'output_text',
         text: '',
+        annotations: [],
       },
       sequence_number: this.sequenceNumber++,
     });
@@ -83,6 +93,30 @@ export class ResponseEventEmitter {
       output_index: outputIndex,
       content_index: contentIndex,
       text,
+      sequence_number: this.sequenceNumber++,
+    });
+  }
+
+  emitContentPartDone(itemId: string, outputIndex: number, contentIndex: number, text: string): void {
+    this.emit({
+      type: 'response.content_part.done',
+      item_id: itemId,
+      output_index: outputIndex,
+      content_index: contentIndex,
+      part: {
+        type: 'output_text',
+        text,
+        annotations: [],
+      },
+      sequence_number: this.sequenceNumber++,
+    });
+  }
+
+  emitOutputItemDone(item: any, outputIndex: number): void {
+    this.emit({
+      type: 'response.output_item.done',
+      item,
+      output_index: outputIndex,
       sequence_number: this.sequenceNumber++,
     });
   }
@@ -118,6 +152,7 @@ export class ResponseEventEmitter {
       item_id: fcId,
       output_index: outputIndex,
       arguments: args,
+      name,
       sequence_number: this.sequenceNumber++,
     });
 

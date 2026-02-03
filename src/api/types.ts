@@ -212,5 +212,5 @@ export type ResponseStreamEvent =
   | { type: 'response.output_text.delta'; item_id: string; output_index: number; content_index: number; delta: string; sequence_number: number }
   | { type: 'response.output_text.done'; item_id: string; output_index: number; content_index: number; text: string; sequence_number: number }
   | { type: 'response.function_call_arguments.delta'; item_id: string; output_index: number; delta: string; sequence_number: number }
-  | { type: 'response.function_call_arguments.done'; item_id: string; output_index: number; arguments: string; sequence_number: number }
+  | { type: 'response.function_call_arguments.done'; item_id: string; output_index: number; arguments: string; name: string; sequence_number: number }
   | { type: 'error'; code: string; message: string; param: string | null; sequence_number: number };

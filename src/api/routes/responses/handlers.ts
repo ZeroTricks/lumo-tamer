@@ -35,11 +35,13 @@ export async function handleStreamingRequest(
     const client = deps.lumoClient;
 
     try {
+      const model = request.model || getServerConfig().apiModelName;
+
       // Event 1: response.created
-      emitter.emitResponseCreated(id, createdAt, request.model || getServerConfig().apiModelName);
+      emitter.emitResponseCreated(id, createdAt, model);
 
       // Event 2: response.in_progress
-      emitter.emitResponseInProgress(id, createdAt);
+      emitter.emitResponseInProgress(id, createdAt, model);
 
       // Event 3: response.output_item.added
       emitter.emitOutputItemAdded(
@@ -65,7 +67,8 @@ export async function handleStreamingRequest(
       // Create detector if custom tools are enabled
       const detector = hasCustomTools ? new StreamingToolDetector() : null;
       const toolCallsEmitted: OpenAIToolCall[] = [];
-      let toolCallIndex = 0;
+      // output_index 0 is the message item; tool calls start at 1
+      let nextOutputIndex = 1;
 
 
       // Build command context for /save and other commands
@@ -90,10 +93,8 @@ export async function handleStreamingRequest(
             accumulatedText += textToEmit;
 
             // Emit text delta if any
-            // emitContentDelta(textToEmit);
             emitter.emitOutputTextDelta(itemId, 0, 0, textToEmit);
 
-            let i = 0;
             // Emit tool call deltas for completed tools
             for (const tc of completedToolCalls) {
               const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
@@ -108,8 +109,7 @@ export async function handleStreamingRequest(
                 },
               });
 
-              // emitToolCallDelta(toolCallIndex++, callId, tc.name, tc.arguments);
-              emitter.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), i++);
+              emitter.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
               logger.debug({ name: tc.name }, '[Server] Tool call emitted in stream');
             }
           } else {
@@ -136,8 +136,29 @@ export async function handleStreamingRequest(
       // Update accumulated text from result (in case of discrepancy)
       accumulatedText = result.response;
 
-      // Event N-4: response.output_text.done
+      // Event: response.output_text.done
       emitter.emitOutputTextDone(itemId, 0, 0, accumulatedText);
+
+      // Event: response.content_part.done
+      emitter.emitContentPartDone(itemId, 0, 0, accumulatedText);
+
+      // Event: response.output_item.done (message item)
+      emitter.emitOutputItemDone(
+        {
+          id: itemId,
+          type: 'message',
+          role: 'assistant',
+          status: 'completed',
+          content: [
+            {
+              type: 'output_text',
+              text: accumulatedText,
+              annotations: [],
+            },
+          ],
+        },
+        0
+      );
 
       // Build output array with message item only (no tool calls)
       const output = buildOutputItems({
