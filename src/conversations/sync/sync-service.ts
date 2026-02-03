@@ -186,7 +186,6 @@ export class SyncService {
 
                     logger.info(`Using space by id ${space.id}: ${space.remoteId}`);
 
-                    await this.loadExistingConversations();
                     return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
                 } catch (error) {
                     logger.error({ spaceId: this.configuredSpaceId, error }, 'Failed to decrypt configured space');
@@ -239,7 +238,6 @@ export class SyncService {
                             projectName: spacePrivate.projectName,
                         }, 'Found existing space with matching project name');
 
-                        await this.loadExistingConversations();
                         return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
                     }
                 }
@@ -655,8 +653,7 @@ export class SyncService {
             logger.debug({ spaceId, json }, 'Successfully decrypted space private data');
             return JSON.parse(json) as SpacePrivate;
         } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : String(error);
-            logger.warn({ spaceId, error: errorMsg }, 'Failed to decrypt space private data');
+            logger.warn({ spaceId, error }, 'Failed to decrypt space private data');
             return null;
         }
     }
