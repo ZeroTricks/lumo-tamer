@@ -208,6 +208,10 @@ When `sync.autoSync: true`:
 3. **Throttle**: Respects minimum interval
 4. **Max delay**: Forces sync after timeout
 
+### Known Limitation: Conversation Limit
+
+Proton's backend enforces a per-space conversation limit. Deleted conversations count towards this limit. When reached, sync fails with HTTP 422 "You've reached maximum number of conversations". Conversations remain usable locally but are not persisted server-side. Use a new `spaceName` to work around this. See [#16](https://github.com/ZeroTricks/lumo-tamer/issues/16).
+
 ## Module Structure
 
 ```

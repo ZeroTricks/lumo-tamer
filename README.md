@@ -146,7 +146,7 @@ conversations:
     autoSync: true
 ```
 
-> **Warning:** Having too many conversations in your project will slow down app/server startup and may cause rate limiting. Clean up your conversations regularly or use a new spaceName.
+> **Warning:** Projects in Lumo can contain a maximum number of conversations. When hit, sync will fail. Deleting conversations won't help. Sse a new `spaceName` to work around this. See [#16](https://github.com/ZeroTricks/lumo-tamer/issues/16).
 
 ### Tools
 
