@@ -8,6 +8,9 @@
  */
 
 import { StreamingToolDetector } from '../src/api/streaming-tool-detector.js';
+import { initLogger } from '../src/app/logger.js';
+
+initLogger({ level: 'warn', target: 'stdout', filePath: '', messageContent: false }, { consoleShim: false });
 
 interface TestResult {
   name: string;
@@ -225,6 +228,87 @@ test('handles escaped quotes in arguments', () => {
 
   assert(allToolCalls.length === 1, `Expected 1 tool call, got ${allToolCalls.length}`);
   assertEqual(allToolCalls[0].arguments, { text: 'say "hello" world' }, 'Escaped quotes not handled');
+});
+
+// Test 9: Raw JSON with character-by-character streaming (Lumo-like)
+test('detects raw JSON tool call with character-by-character streaming', () => {
+  const detector = new StreamingToolDetector();
+  const json = '{\n  "name": "HassTurnOff",\n  "arguments": {\n    "name": "office"\n  }\n}';
+
+  let allText = '';
+  const allToolCalls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+
+  for (let i = 0; i < json.length; i++) {
+    const result = detector.processChunk(json[i]);
+    allText += result.textToEmit;
+    allToolCalls.push(...result.completedToolCalls);
+  }
+
+  const final = detector.finalize();
+  allText += final.textToEmit;
+  allToolCalls.push(...final.completedToolCalls);
+
+  assert(allToolCalls.length === 1, `Expected 1 tool call, got ${allToolCalls.length}`);
+  assertEqual(allToolCalls[0].name, 'HassTurnOff', 'Tool name mismatch');
+  assertEqual(allToolCalls[0].arguments, { name: 'office' }, 'Tool arguments mismatch');
+});
+
+// Test 10: Raw JSON with small chunks that split strings mid-value
+test('detects raw JSON tool call with chunks splitting strings', () => {
+  const detector = new StreamingToolDetector();
+  // Simulate chunks that split mid-string (like encrypted Lumo streaming)
+  const chunks = [
+    '{\n  "na',
+    'me": "Has',
+    'sTurnOff",\n  "argu',
+    'ments": {\n    "na',
+    'me": "off',
+    'ice"\n  }\n}',
+  ];
+
+  let allText = '';
+  const allToolCalls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+
+  for (const chunk of chunks) {
+    const result = detector.processChunk(chunk);
+    allText += result.textToEmit;
+    allToolCalls.push(...result.completedToolCalls);
+  }
+
+  const final = detector.finalize();
+  allText += final.textToEmit;
+  allToolCalls.push(...final.completedToolCalls);
+
+  assert(allToolCalls.length === 1, `Expected 1 tool call, got ${allToolCalls.length}`);
+  assertEqual(allToolCalls[0].name, 'HassTurnOff', 'Tool name mismatch');
+  assertEqual(allToolCalls[0].arguments, { name: 'office' }, 'Tool arguments mismatch');
+});
+
+// Test 11: Raw JSON with string containing braces (regression)
+test('raw JSON handles strings containing brace characters', () => {
+  const detector = new StreamingToolDetector();
+  const chunks = [
+    '{\n  "name": "test",\n  "argu',
+    'ments": {\n    "text": "hello {wor',
+    'ld} bye"\n  }\n}',
+  ];
+
+  let allText = '';
+  const allToolCalls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+
+  for (const chunk of chunks) {
+    const result = detector.processChunk(chunk);
+    allText += result.textToEmit;
+    allToolCalls.push(...result.completedToolCalls);
+  }
+
+  const final = detector.finalize();
+  allText += final.textToEmit;
+  allToolCalls.push(...final.completedToolCalls);
+
+  assert(allToolCalls.length === 1, `Expected 1 tool call, got ${allToolCalls.length}`);
+  assertEqual(allToolCalls[0].name, 'test', 'Tool name mismatch');
+  assertEqual(allToolCalls[0].arguments, { text: 'hello {world} bye' }, 'Arguments mismatch');
 });
 
 // Summary

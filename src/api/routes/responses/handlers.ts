@@ -66,6 +66,7 @@ export async function handleStreamingRequest(
 
       // Create detector if custom tools are enabled
       const detector = hasCustomTools ? new StreamingToolDetector() : null;
+      logger.debug({ hasCustomTools, toolCount: request.tools?.length }, '[Server] Tool detector state');
       const toolCallsEmitted: OpenAIToolCall[] = [];
       // output_index 0 is the message item; tool calls start at 1
       let nextOutputIndex = 1;
@@ -91,6 +92,10 @@ export async function handleStreamingRequest(
             const { textToEmit, completedToolCalls } = detector.processChunk(chunk);
 
             accumulatedText += textToEmit;
+
+            if (completedToolCalls.length > 0) {
+              logger.debug({ count: completedToolCalls.length, names: completedToolCalls.map(tc => tc.name) }, '[Server] Tool calls detected in chunk');
+            }
 
             // Emit text delta if any
             emitter.emitOutputTextDelta(itemId, 0, 0, textToEmit);
@@ -124,7 +129,9 @@ export async function handleStreamingRequest(
       logger.debug('[Server] Stream completed');
 
       if(detector){
-        emitter.emitOutputTextDelta(itemId, 0, 0, detector.getPendingText());
+        const pending = detector.getPendingText();
+        logger.debug({ pendingLength: pending.length, pendingText: pending.slice(0, 50), toolCallsEmitted: toolCallsEmitted.length }, '[Server] Post-stream detector state');
+        emitter.emitOutputTextDelta(itemId, 0, 0, pending);
       }
 
       // Save generated title if present
