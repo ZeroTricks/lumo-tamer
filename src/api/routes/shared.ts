@@ -93,11 +93,31 @@ export function extractToolsFromResponse(response: string, hasCustomTools: boole
   return { content, toolCalls };
 }
 
-// ── Call ID generation ─────────────────────────────────────────────
+// ── ID generation ─────────────────────────────────────────────────
 
-/** Generate a call_id in the standard format. */
+/** Generate a response ID (`resp-xxx`). */
+export function generateResponseId(): string {
+  return `resp-${randomUUID()}`;
+}
+
+/** Generate an output item ID (`item-xxx`). */
+export function generateItemId(): string {
+  return `item-${randomUUID()}`;
+}
+
+/** Generate a function call item ID (`fc-xxx`). */
+export function generateFunctionCallId(): string {
+  return `fc-${randomUUID()}`;
+}
+
+/** Generate a call_id for tool calls (`call_xxx`). */
 export function generateCallId(): string {
   return `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
+}
+
+/** Generate a chat completion ID (`chatcmpl-xxx`). */
+export function generateChatCompletionId(): string {
+  return `chatcmpl-${randomUUID()}`;
 }
 
 // ── Streaming tool processor ───────────────────────────────────────

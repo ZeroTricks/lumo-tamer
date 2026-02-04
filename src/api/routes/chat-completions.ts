@@ -12,6 +12,7 @@ import {
   persistResponse,
   extractToolsFromResponse,
   generateCallId,
+  generateChatCompletionId,
   createStreamingToolProcessor,
 } from './shared.js';
 
@@ -96,7 +97,7 @@ function handleCommandStreamingResponse(
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
-  const id = `chatcmpl-${randomUUID()}`;
+  const id = generateChatCompletionId();
   const created = Math.floor(Date.now() / 1000);
 
   // Send the text as a single chunk
@@ -140,7 +141,7 @@ function handleCommandNonStreamingResponse(
   text: string
 ): void {
   const response: OpenAIChatResponse = {
-    id: `chatcmpl-${randomUUID()}`,
+    id: generateChatCompletionId(),
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
     model: request.model || getServerConfig().apiModelName,
@@ -170,7 +171,7 @@ async function handleStreamingRequest(
   res.setHeader('Connection', 'keep-alive');
 
   await deps.queue.add(async () => {
-    const id = `chatcmpl-${randomUUID()}`;
+    const id = generateChatCompletionId();
     const created = Math.floor(Date.now() / 1000);
     let toolCallIndex = 0;
 
@@ -311,7 +312,7 @@ async function handleNonStreamingRequest(
     : undefined;
 
   const response: OpenAIChatResponse = {
-    id: `chatcmpl-${randomUUID()}`,
+    id: generateChatCompletionId(),
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
     model: request.model || getServerConfig().apiModelName,

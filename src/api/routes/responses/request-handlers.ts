@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import { randomUUID } from 'crypto';
 import {
   EndpointDependencies,
   OpenAIResponseRequest,
@@ -19,6 +18,10 @@ import {
   persistResponse,
   extractToolsFromResponse,
   createStreamingToolProcessor,
+  generateResponseId,
+  generateItemId,
+  generateFunctionCallId,
+  generateCallId,
 } from '../shared.js';
 
 // ── Output building ────────────────────────────────────────────────
@@ -39,7 +42,7 @@ function buildOutputItems(options: BuildOutputOptions): OutputItem[] {
 
   const messageItem: MessageOutputItem = {
     type: 'message',
-    id: itemId || `item-${randomUUID()}`,
+    id: itemId || generateItemId(),
     status: 'completed',
     role: 'assistant',
     content: [
@@ -61,8 +64,8 @@ function buildOutputItems(options: BuildOutputOptions): OutputItem[] {
 
       output.push({
         type: 'function_call',
-        id: `fc-${randomUUID()}`,
-        call_id: `call-${randomUUID()}`,
+        id: generateFunctionCallId(),
+        call_id: generateCallId(),
         status: 'completed',
         name: toolCall.name,
         arguments: argumentsJson,
@@ -131,8 +134,8 @@ export async function handleStreamingRequest(
   res.setHeader('Connection', 'keep-alive');
 
   await deps.queue.add(async () => {
-    const id = `resp-${randomUUID()}`;
-    const itemId = `item-${randomUUID()}`;
+    const id = generateResponseId();
+    const itemId = generateItemId();
     const createdAt = Math.floor(Date.now() / 1000);
     const model = request.model || getServerConfig().apiModelName;
     const emitter = new ResponseEventEmitter(res);
@@ -243,8 +246,8 @@ export async function handleNonStreamingRequest(
   const { content, toolCalls } = extractToolsFromResponse(result.response, ctx.hasCustomTools);
   persistResponse(deps, conversationId, content);
 
-  const id = `resp-${randomUUID()}`;
-  const itemId = `item-${randomUUID()}`;
+  const id = generateResponseId();
+  const itemId = generateItemId();
   const createdAt = Math.floor(Date.now() / 1000);
   const output = buildOutputItems({
     text: content,
