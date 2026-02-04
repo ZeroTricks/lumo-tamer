@@ -30,6 +30,10 @@ export class StreamingToolDetector {
   private buffer = '';
   private braceDepth = 0;
   private pendingText = '';
+  // Persistent string-tracking state for processRawJsonState.
+  // Survives chunk boundaries so braces inside JSON strings are ignored.
+  private inString = false;
+  private escaped = false;
 
   // Patterns for detection
   private static readonly CODE_FENCE_START = /```(?:json)?\s*$/;
@@ -117,6 +121,8 @@ export class StreamingToolDetector {
       this.state = 'in_raw_json';
       this.buffer = '';
       this.braceDepth = 0;
+      this.inString = false;
+      this.escaped = false;
       return;
     }
 
@@ -173,18 +179,43 @@ export class StreamingToolDetector {
 
   /**
    * Process raw JSON state - track brace depth until balanced.
+   * Uses persistent inString/escaped state so braces inside JSON strings
+   * are correctly ignored across chunk boundaries.
+   *
+   * We don't use JSON.parse / partialParse (openai/_vendor/partial-json-parser)
+   * per chunk for performance and different concerns:
+   * - O(1) per char with zero allocations, vs JSON.parse on growing buffer O(n^2).
+   * - partialParse deals with isolated streams (no trailing normal text)
+   * - Good enough: this covers majority of cases, while Lumo should use code fences anyway
+   * - The finalize() fallback uses JSON.parse once at end-of-stream as a safety net.
    */
   private processRawJsonState(result: ProcessResult): void {
     for (let i = 0; i < this.pendingText.length; i++) {
       const char = this.pendingText[i];
       this.buffer += char;
 
-      if (char === '{') {
+      if (this.inString) {
+        if (this.escaped) {
+          // Previous char was \, this char is escaped - skip it
+          this.escaped = false;
+        } else if (char === '\\') {
+          this.escaped = true;
+        } else if (char === '"') {
+          this.inString = false;
+        }
+        // While in string, don't count braces
+        continue;
+      }
+
+      // Not in a string
+      if (char === '"') {
+        this.inString = true;
+        this.escaped = false;
+      } else if (char === '{') {
         this.braceDepth++;
       } else if (char === '}') {
         this.braceDepth--;
         if (this.braceDepth === 0) {
-
           logger.debug(`Raw JSON ending found: ${this.showSnippet(i)}`);
 
           // JSON is complete
@@ -200,26 +231,6 @@ export class StreamingToolDetector {
             result.textToEmit += this.buffer;
           }
           this.buffer = '';
-          return;
-        }
-      } else if (char === '"') {
-        // Handle string content - skip until closing quote
-        i++;
-        while (i < this.pendingText.length) {
-          const strChar = this.pendingText[i];
-          this.buffer += strChar;
-          if (strChar === '\\' && i + 1 < this.pendingText.length) {
-            // Escaped character
-            i++;
-            this.buffer += this.pendingText[i];
-          } else if (strChar === '"') {
-            break;
-          }
-          i++;
-        }
-        if (i >= this.pendingText.length) {
-          // String not closed, need more data
-          this.pendingText = '';
           return;
         }
       }
@@ -262,8 +273,20 @@ export class StreamingToolDetector {
       this.pendingText = '';
     }
 
-    // If we were in the middle of parsing, emit buffer as text (incomplete)
+    // If we were in the middle of parsing, try to salvage before emitting as text
     if (this.state !== 'normal' && this.buffer) {
+      // End-of-stream fallback: try JSON.parse on the complete buffer.
+      // Catches edge cases where char-by-char tracking failed but JSON is actually complete.
+      if (this.state === 'in_raw_json') {
+        const toolCall = this.tryParseToolCall(this.buffer.trim());
+        if (toolCall) {
+          result.completedToolCalls.push(toolCall);
+          this.buffer = '';
+          this.state = 'normal';
+          return result;
+        }
+      }
+
       if (this.state === 'in_code_fence') {
         result.textToEmit += '```\n' + this.buffer;
       } else {

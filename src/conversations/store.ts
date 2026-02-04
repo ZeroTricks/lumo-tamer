@@ -353,22 +353,6 @@ export class ConversationStore {
     // that re-send full conversation history like Home Assistant)
 
     /**
-     * Check if a user message is a duplicate of the last one
-     */
-    isDuplicateUserMessage(id: ConversationId, message: string): boolean {
-        const state = this.conversations.get(id);
-        return state?.lastUserMessage === message;
-    }
-
-    /**
-     * Record the last user message for deduplication
-     */
-    setLastUserMessage(id: ConversationId, message: string): void {
-        const state = this.getOrCreate(id);
-        state.lastUserMessage = message;
-    }
-
-    /**
      * Check if a function call_id is a duplicate of the last one
      */
     isDuplicateFunctionCallId(id: ConversationId, callId: string): boolean {
