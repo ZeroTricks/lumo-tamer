@@ -1,17 +1,20 @@
 import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { EndpointDependencies, OpenAIResponseRequest, OpenAIToolCall } from '../../types.js';
-import { getServerConfig, getToolsConfig } from '../../../app/config.js';
+import { EndpointDependencies, OpenAIResponseRequest } from '../../types.js';
+import { getServerConfig } from '../../../app/config.js';
 import { logger } from '../../../app/logger.js';
 import { ResponseEventEmitter } from './events.js';
 import { buildOutputItems } from './output-builder.js';
 import { createCompletedResponse } from './response-factory.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/index.js';
-import { StreamingToolDetector } from 'api/streaming-tool-detector.js';
-import { extractToolCallsFromResponse, stripToolCallsFromResponse } from 'api/tool-parser.js';
-import type { CommandContext } from '../../../app/commands.js';
-import { postProcessTitle } from '../../../proton-shims/lumo-api-client-utils.js';
+import {
+  buildRequestContext,
+  persistTitle,
+  persistResponse,
+  extractToolsFromResponse,
+  createStreamingToolProcessor,
+} from '../shared.js';
 
 export async function handleStreamingRequest(
   req: Request,
@@ -21,7 +24,6 @@ export async function handleStreamingRequest(
   turns: Turn[],
   conversationId: ConversationId
 ): Promise<void> {
-  // Streaming response with event-based format
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -30,184 +32,84 @@ export async function handleStreamingRequest(
     const id = `resp-${randomUUID()}`;
     const itemId = `item-${randomUUID()}`;
     const createdAt = Math.floor(Date.now() / 1000);
-    let accumulatedText = '';
-
+    const model = request.model || getServerConfig().apiModelName;
     const emitter = new ResponseEventEmitter(res);
-    const client = deps.lumoClient;
+    let accumulatedText = '';
+    // output_index 0 is the message item; tool calls start at 1
+    let nextOutputIndex = 1;
 
     try {
-      const model = request.model || getServerConfig().apiModelName;
-
-      // Event 1: response.created
+      // Preamble events
       emitter.emitResponseCreated(id, createdAt, model);
-
-      // Event 2: response.in_progress
       emitter.emitResponseInProgress(id, createdAt, model);
-
-      // Event 3: response.output_item.added
       emitter.emitOutputItemAdded(
-        {
-          id: itemId,
-          type: 'message',
-          role: 'assistant',
-          status: 'in_progress',
-          content: [],
-        },
+        { id: itemId, type: 'message', role: 'assistant', status: 'in_progress', content: [] },
         0
       );
-
-      // Event 4: response.content_part.added
       emitter.emitContentPartAdded(itemId, 0, 0);
 
-      // Determine if external tools (web_search, etc.) should be enabled
-      const enableExternalTools = getToolsConfig()?.enableWebSearch ?? false;
+      const ctx = buildRequestContext(deps, conversationId, request.tools);
+      logger.debug({ hasCustomTools: ctx.hasCustomTools, toolCount: request.tools?.length }, '[Server] Tool detector state');
 
-      // Check if request has custom tools AND tools are enabled
-      const hasCustomTools = getToolsConfig().enabled && request.tools && request.tools.length > 0;
-
-      // Create detector if custom tools are enabled
-      const detector = hasCustomTools ? new StreamingToolDetector() : null;
-      logger.debug({ hasCustomTools, toolCount: request.tools?.length }, '[Server] Tool detector state');
-      const toolCallsEmitted: OpenAIToolCall[] = [];
-      // output_index 0 is the message item; tool calls start at 1
-      let nextOutputIndex = 1;
-
-
-      // Build command context for /save and other commands
-      const commandContext: CommandContext = {
-        syncInitialized: deps.syncInitialized ?? false,
-        conversationId,
-        authManager: deps.authManager,
-      };
-
-      // Request title for new conversations (title still has default value)
-      const existingConv = deps.conversationStore?.get(conversationId);
-      const requestTitle = existingConv?.title === 'New Conversation';
-
-      // Get response using LumoClient
-      const result = await client.chatWithHistory(
-        turns,
-        (chunk: string) => {
-          if (detector) {
-            // Use streaming tool detector
-            const { textToEmit, completedToolCalls } = detector.processChunk(chunk);
-
-            accumulatedText += textToEmit;
-
-            if (completedToolCalls.length > 0) {
-              logger.debug({ count: completedToolCalls.length, names: completedToolCalls.map(tc => tc.name) }, '[Server] Tool calls detected in chunk');
-            }
-
-            // Emit text delta if any
-            emitter.emitOutputTextDelta(itemId, 0, 0, textToEmit);
-
-            // Emit tool call deltas for completed tools
-            for (const tc of completedToolCalls) {
-              const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
-              // Track call ID per-conversation for function output deduplication
-              deps.conversationStore?.addGeneratedCallId(conversationId, callId);
-              toolCallsEmitted.push({
-                id: callId,
-                type: 'function',
-                function: {
-                  name: tc.name,
-                  arguments: JSON.stringify(tc.arguments),
-                },
-              });
-
-              emitter.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
-              logger.debug({ name: tc.name }, '[Server] Tool call emitted in stream');
-            }
-          } else {
-            // No tools - pass through directly
-            emitter.emitOutputTextDelta(itemId, 0, 0, chunk);
-          }
+      const processor = createStreamingToolProcessor(ctx.hasCustomTools, {
+        emitTextDelta(text) {
+          accumulatedText += text;
+          emitter.emitOutputTextDelta(itemId, 0, 0, text);
         },
+        emitToolCall(callId, tc) {
+          // Track call ID per-conversation for function output deduplication
+          deps.conversationStore?.addGeneratedCallId(conversationId, callId);
+          emitter.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
+        },
+      });
 
-        { enableEncryption: true, enableExternalTools, commandContext, requestTitle }
+      const result = await deps.lumoClient.chatWithHistory(
+        turns,
+        processor.onChunk,
+        {
+          enableEncryption: true,
+          enableExternalTools: ctx.enableExternalTools,
+          commandContext: ctx.commandContext,
+          requestTitle: ctx.requestTitle,
+        }
       );
 
       logger.debug('[Server] Stream completed');
+      processor.finalize();
+      persistTitle(result, deps, conversationId);
 
-      if (detector) {
-        const { textToEmit, completedToolCalls } = detector.finalize();
-        logger.debug({ textToEmitLength: textToEmit.length, finalToolCalls: completedToolCalls.length, toolCallsEmitted: toolCallsEmitted.length }, '[Server] Post-stream detector finalize');
-        if (textToEmit) {
-          accumulatedText += textToEmit;
-          emitter.emitOutputTextDelta(itemId, 0, 0, textToEmit);
-        }
-        for (const tc of completedToolCalls) {
-          const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
-          deps.conversationStore?.addGeneratedCallId(conversationId, callId);
-          toolCallsEmitted.push({
-            id: callId,
-            type: 'function',
-            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-          });
-          emitter.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
-          logger.debug({ name: tc.name }, '[Server] Tool call emitted in finalize');
-        }
-      }
-
-      // Save generated title if present
-      if (result.title && deps.conversationStore) {
-        const processedTitle = postProcessTitle(result.title);
-        deps.conversationStore.setTitle(conversationId, processedTitle);
-      }
-
-      // Update accumulated text from result, stripping tool JSON if tools were detected
-      if (detector && toolCallsEmitted.length > 0) {
-        const parsedToolCalls = extractToolCallsFromResponse(result.response);
-        accumulatedText = parsedToolCalls
-          ? stripToolCallsFromResponse(result.response, parsedToolCalls)
-          : result.response;
+      // Use stripped text for final events (tool JSON removed)
+      if (processor.toolCallsEmitted.length > 0) {
+        const { content } = extractToolsFromResponse(result.response, true);
+        accumulatedText = content;
       } else {
         accumulatedText = result.response;
       }
 
-      // Event: response.output_text.done
+      // Completion events
       emitter.emitOutputTextDone(itemId, 0, 0, accumulatedText);
-
-      // Event: response.content_part.done
       emitter.emitContentPartDone(itemId, 0, 0, accumulatedText);
-
-      // Event: response.output_item.done (message item)
       emitter.emitOutputItemDone(
         {
           id: itemId,
           type: 'message',
           role: 'assistant',
           status: 'completed',
-          content: [
-            {
-              type: 'output_text',
-              text: accumulatedText,
-              annotations: [],
-            },
-          ],
+          content: [{ type: 'output_text', text: accumulatedText, annotations: [] }],
         },
         0
       );
 
-      // Build output array with message and any tool calls
       const output = buildOutputItems({
         text: accumulatedText,
         itemId,
-        toolCalls: toolCallsEmitted.length > 0
-          ? toolCallsEmitted.map(tc => ({ name: tc.function.name, arguments: tc.function.arguments }))
+        toolCalls: processor.toolCallsEmitted.length > 0
+          ? processor.toolCallsEmitted.map(tc => ({ name: tc.function.name, arguments: tc.function.arguments }))
           : undefined,
       });
 
-      // Persist assistant response if conversation store is available
-      if (deps.conversationStore) {
-        deps.conversationStore.appendAssistantResponse(conversationId, accumulatedText);
-        logger.debug({ conversationId }, 'Persisted assistant response');
-      }
-
-      // Event N-1: response.completed
-      const completedResponse = createCompletedResponse(id, createdAt, request, output);
-      emitter.emitResponseCompleted(completedResponse);
-
+      persistResponse(deps, conversationId, accumulatedText);
+      emitter.emitResponseCompleted(createCompletedResponse(id, createdAt, request, output));
       res.end();
     } catch (error) {
       emitter.emitError(error as Error);
@@ -224,70 +126,29 @@ export async function handleNonStreamingRequest(
   turns: Turn[],
   conversationId: ConversationId
 ): Promise<void> {
-  // Determine if external tools (web_search, etc.) should be enabled
-  const enableExternalTools = getToolsConfig()?.enableWebSearch ?? false;
+  const ctx = buildRequestContext(deps, conversationId, request.tools);
 
-  // Build command context for /save and other commands
-  const commandContext: CommandContext = {
-    syncInitialized: deps.syncInitialized ?? false,
-    conversationId,
-    authManager: deps.authManager,
-  };
+  const result = await deps.queue.add(async () =>
+    deps.lumoClient.chatWithHistory(turns, undefined, {
+      enableEncryption: true,
+      enableExternalTools: ctx.enableExternalTools,
+      commandContext: ctx.commandContext,
+      requestTitle: ctx.requestTitle,
+    })
+  );
 
-  // Request title for new conversations (title still has default value)
-  const existingConv = deps.conversationStore?.get(conversationId);
-  const requestTitle = existingConv?.title === 'New Conversation';
-
-  // Non-streaming response
-  const result = await deps.queue.add(async () => {
-    const client = deps.lumoClient;
-    return await client.chatWithHistory(
-      turns,
-      undefined,
-      { enableEncryption: true, enableExternalTools, commandContext, requestTitle }
-    );
-  });
+  persistTitle(result, deps, conversationId);
+  const { content, toolCalls } = extractToolsFromResponse(result.response, ctx.hasCustomTools);
+  persistResponse(deps, conversationId, content);
 
   const id = `resp-${randomUUID()}`;
   const itemId = `item-${randomUUID()}`;
   const createdAt = Math.floor(Date.now() / 1000);
-
-  // Save generated title if present
-  if (result.title && deps.conversationStore) {
-    const processedTitle = postProcessTitle(result.title);
-    deps.conversationStore.setTitle(conversationId, processedTitle);
-  }
-
-  // Detect and strip tool calls if tools are enabled
-  const hasCustomTools = getToolsConfig().enabled && request.tools && request.tools.length > 0;
-  let content = result.response;
-  let toolCalls: { name: string; arguments: string }[] | undefined;
-
-  if (hasCustomTools) {
-    const parsedToolCalls = extractToolCallsFromResponse(result.response);
-    if (parsedToolCalls) {
-      toolCalls = parsedToolCalls.map(tc => ({
-        name: tc.name,
-        arguments: JSON.stringify(tc.arguments),
-      }));
-      content = stripToolCallsFromResponse(result.response, parsedToolCalls);
-      logger.debug({ toolCount: toolCalls.length, names: toolCalls.map(tc => tc.name) }, '[Server] Tool calls detected in non-streaming response');
-    }
-  }
-
   const output = buildOutputItems({
     text: content,
     itemId,
-    toolCalls: toolCalls ?? undefined,
+    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
   });
 
-  // Persist assistant response (stripped of tool JSON) if conversation store is available
-  if (deps.conversationStore) {
-    deps.conversationStore.appendAssistantResponse(conversationId, content);
-    logger.debug({ conversationId }, 'Persisted assistant response');
-  }
-
-  const response = createCompletedResponse(id, createdAt, request, output);
-
-  res.json(response);
+  res.json(createCompletedResponse(id, createdAt, request, output));
 }
