@@ -9,6 +9,7 @@ import { createCompletedResponse } from './response-factory.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/index.js';
 import { StreamingToolDetector } from 'api/streaming-tool-detector.js';
+import { extractToolCallsFromResponse, stripToolCallsFromResponse } from 'api/tool-parser.js';
 import type { CommandContext } from '../../../app/commands.js';
 import { postProcessTitle } from '../../../proton-shims/lumo-api-client-utils.js';
 
@@ -128,10 +129,24 @@ export async function handleStreamingRequest(
 
       logger.debug('[Server] Stream completed');
 
-      if(detector){
-        const pending = detector.getPendingText();
-        logger.debug({ pendingLength: pending.length, pendingText: pending.slice(0, 50), toolCallsEmitted: toolCallsEmitted.length }, '[Server] Post-stream detector state');
-        emitter.emitOutputTextDelta(itemId, 0, 0, pending);
+      if (detector) {
+        const { textToEmit, completedToolCalls } = detector.finalize();
+        logger.debug({ textToEmitLength: textToEmit.length, finalToolCalls: completedToolCalls.length, toolCallsEmitted: toolCallsEmitted.length }, '[Server] Post-stream detector finalize');
+        if (textToEmit) {
+          accumulatedText += textToEmit;
+          emitter.emitOutputTextDelta(itemId, 0, 0, textToEmit);
+        }
+        for (const tc of completedToolCalls) {
+          const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
+          deps.conversationStore?.addGeneratedCallId(conversationId, callId);
+          toolCallsEmitted.push({
+            id: callId,
+            type: 'function',
+            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+          });
+          emitter.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
+          logger.debug({ name: tc.name }, '[Server] Tool call emitted in finalize');
+        }
       }
 
       // Save generated title if present
@@ -140,8 +155,15 @@ export async function handleStreamingRequest(
         deps.conversationStore.setTitle(conversationId, processedTitle);
       }
 
-      // Update accumulated text from result (in case of discrepancy)
-      accumulatedText = result.response;
+      // Update accumulated text from result, stripping tool JSON if tools were detected
+      if (detector && toolCallsEmitted.length > 0) {
+        const parsedToolCalls = extractToolCallsFromResponse(result.response);
+        accumulatedText = parsedToolCalls
+          ? stripToolCallsFromResponse(result.response, parsedToolCalls)
+          : result.response;
+      } else {
+        accumulatedText = result.response;
+      }
 
       // Event: response.output_text.done
       emitter.emitOutputTextDone(itemId, 0, 0, accumulatedText);
@@ -167,10 +189,13 @@ export async function handleStreamingRequest(
         0
       );
 
-      // Build output array with message item only (no tool calls)
+      // Build output array with message and any tool calls
       const output = buildOutputItems({
         text: accumulatedText,
         itemId,
+        toolCalls: toolCallsEmitted.length > 0
+          ? toolCallsEmitted.map(tc => ({ name: tc.function.name, arguments: tc.function.arguments }))
+          : undefined,
       });
 
       // Persist assistant response if conversation store is available
@@ -233,15 +258,32 @@ export async function handleNonStreamingRequest(
     deps.conversationStore.setTitle(conversationId, processedTitle);
   }
 
-  // Build output array with message item only (no tool calls)
+  // Detect and strip tool calls if tools are enabled
+  const hasCustomTools = getToolsConfig().enabled && request.tools && request.tools.length > 0;
+  let content = result.response;
+  let toolCalls: { name: string; arguments: string }[] | undefined;
+
+  if (hasCustomTools) {
+    const parsedToolCalls = extractToolCallsFromResponse(result.response);
+    if (parsedToolCalls) {
+      toolCalls = parsedToolCalls.map(tc => ({
+        name: tc.name,
+        arguments: JSON.stringify(tc.arguments),
+      }));
+      content = stripToolCallsFromResponse(result.response, parsedToolCalls);
+      logger.debug({ toolCount: toolCalls.length, names: toolCalls.map(tc => tc.name) }, '[Server] Tool calls detected in non-streaming response');
+    }
+  }
+
   const output = buildOutputItems({
-    text: result.response,
+    text: content,
     itemId,
+    toolCalls: toolCalls ?? undefined,
   });
 
-  // Persist assistant response if conversation store is available
+  // Persist assistant response (stripped of tool JSON) if conversation store is available
   if (deps.conversationStore) {
-    deps.conversationStore.appendAssistantResponse(conversationId, result.response);
+    deps.conversationStore.appendAssistantResponse(conversationId, content);
     logger.debug({ conversationId }, 'Persisted assistant response');
   }
 
