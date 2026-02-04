@@ -126,7 +126,8 @@ export class LumoClient {
                 msg.type === 'harmful' ||
                 msg.type === 'timeout'
             ) {
-                throw new Error(`API returned error: ${msg.type}`);
+                const detail = (msg as any).message;
+                throw new Error(`API returned ${msg.type}${detail ? `: ${detail}` : ''}`);
             }
         };
 

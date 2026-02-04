@@ -85,6 +85,7 @@ const scenarios: Record<Exclude<Scenario, 'weeklyLimit'>, () => AsyncGenerator<s
         yield formatSSEMessage({
             type: 'token_data',
             target: 'tool_call',
+            count: 0,
             content: '{"name": "web_search", "parameters": {"search_term": "test search"}}',
         });
         await delay(500);
@@ -92,6 +93,7 @@ const scenarios: Record<Exclude<Scenario, 'weeklyLimit'>, () => AsyncGenerator<s
         yield formatSSEMessage({
             type: 'token_data',
             target: 'tool_result',
+            count: 1,
             content: 'Mock search result data',
         });
         await delay(300);

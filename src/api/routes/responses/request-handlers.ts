@@ -217,6 +217,7 @@ export async function handleStreamingRequest(
       emitter.emitResponseCompleted(createCompletedResponse(id, createdAt, request, output));
       res.end();
     } catch (error) {
+      logger.error({ error: String(error) }, 'Streaming response error');
       emitter.emitError(error as Error);
       res.end();
     }
