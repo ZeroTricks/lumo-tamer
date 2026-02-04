@@ -1,15 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse, OpenAIToolCall } from '../types.js';
-import { getServerConfig, getToolsConfig, getConversationsConfig } from '../../app/config.js';
+import { getServerConfig, getConversationsConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
 import { convertMessagesToTurns } from '../message-converter.js';
-import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../tool-parser.js';
-import { StreamingToolDetector } from '../streaming-tool-detector.js';
 import type { Turn } from '../../lumo-client/index.js';
-import type { CommandContext } from '../../app/commands.js';
 import type { ConversationId } from '../../conversations/index.js';
-import { postProcessTitle } from '../../proton-shims/lumo-api-client-utils.js';
+import {
+  buildRequestContext,
+  persistTitle,
+  persistResponse,
+  extractToolsFromResponse,
+  generateCallId,
+  generateChatCompletionId,
+  createStreamingToolProcessor,
+} from './shared.js';
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session
 const SESSION_ID = randomUUID();
@@ -92,7 +97,7 @@ function handleCommandStreamingResponse(
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
-  const id = `chatcmpl-${randomUUID()}`;
+  const id = generateChatCompletionId();
   const created = Math.floor(Date.now() / 1000);
 
   // Send the text as a single chunk
@@ -136,7 +141,7 @@ function handleCommandNonStreamingResponse(
   text: string
 ): void {
   const response: OpenAIChatResponse = {
-    id: `chatcmpl-${randomUUID()}`,
+    id: generateChatCompletionId(),
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
     model: request.model || getServerConfig().apiModelName,
@@ -165,27 +170,14 @@ async function handleStreamingRequest(
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
-  // Determine if external tools (web_search, etc.) should be enabled
-  const enableExternalTools = getToolsConfig().enableWebSearch;
-
-  // Check if request has custom tools AND tools are enabled
-  const hasCustomTools = getToolsConfig().enabled && request.tools && request.tools.length > 0;
-
   await deps.queue.add(async () => {
-    const id = `chatcmpl-${randomUUID()}`;
+    const id = generateChatCompletionId();
     const created = Math.floor(Date.now() / 1000);
-    const client = deps.lumoClient;
-
-    // Create detector if custom tools are provided
-    const detector = hasCustomTools ? new StreamingToolDetector() : null;
-    const toolCallsEmitted: OpenAIToolCall[] = [];
     let toolCallIndex = 0;
-    let accumulatedText = '';  // Track full response for persistence
 
     // Helper to emit content delta chunk
     const emitContentDelta = (content: string) => {
       if (!content) return;
-      accumulatedText += content;  // Accumulate for persistence
       const sseChunk: OpenAIStreamChunk = {
         id,
         object: 'chat.completion.chunk',
@@ -233,81 +225,30 @@ async function handleStreamingRequest(
     };
 
     try {
-      // Build command context for /save and other commands
-      const commandContext: CommandContext = {
-        syncInitialized: deps.syncInitialized ?? false,
-        conversationId,
-        authManager: deps.authManager,
-      };
+      const ctx = buildRequestContext(deps, conversationId, request.tools);
 
-      // Request title for new conversations (title still has default value)
-      const existingConv = deps.conversationStore?.get(conversationId);
-      const requestTitle = existingConv?.title === 'New Conversation';
-
-      const result = await client.chatWithHistory(
-        turns,
-        (chunk: string) => {
-          if (detector) {
-            // Use streaming tool detector
-            const { textToEmit, completedToolCalls } = detector.processChunk(chunk);
-
-            // Emit text delta if any
-            emitContentDelta(textToEmit);
-
-            // Emit tool call deltas for completed tools
-            for (const tc of completedToolCalls) {
-              const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
-              toolCallsEmitted.push({
-                id: callId,
-                type: 'function',
-                function: {
-                  name: tc.name,
-                  arguments: JSON.stringify(tc.arguments),
-                },
-              });
-
-              emitToolCallDelta(toolCallIndex++, callId, tc.name, tc.arguments);
-              logger.debug({ name: tc.name }, '[Server] Tool call emitted in stream');
-            }
-          } else {
-            // No tools - pass through directly
-            emitContentDelta(chunk);
-          }
+      const processor = createStreamingToolProcessor(ctx.hasCustomTools, {
+        emitTextDelta(text) { emitContentDelta(text); },
+        emitToolCall(callId, tc) {
+          emitToolCallDelta(toolCallIndex++, callId, tc.name, tc.arguments);
         },
-        { enableEncryption: true, enableExternalTools, commandContext, requestTitle }
+      });
+
+      const result = await deps.lumoClient.chatWithHistory(
+        turns,
+        processor.onChunk,
+        {
+          enableEncryption: true,
+          enableExternalTools: ctx.enableExternalTools,
+          commandContext: ctx.commandContext,
+          requestTitle: ctx.requestTitle,
+        }
       );
       logger.debug('[Server] Stream completed');
 
-      // Finalize detector and emit any remaining content
-      if (detector) {
-        const { textToEmit, completedToolCalls } = detector.finalize();
-        emitContentDelta(textToEmit);
-
-        for (const tc of completedToolCalls) {
-          const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
-          toolCallsEmitted.push({
-            id: callId,
-            type: 'function',
-            function: {
-              name: tc.name,
-              arguments: JSON.stringify(tc.arguments),
-            },
-          });
-          emitToolCallDelta(toolCallIndex++, callId, tc.name, tc.arguments);
-        }
-      }
-
-      // Save generated title if present
-      if (result.title && deps.conversationStore) {
-        const processedTitle = postProcessTitle(result.title);
-        deps.conversationStore.setTitle(conversationId, processedTitle);
-      }
-
-      // Persist assistant response
-      if (deps.conversationStore) {
-        deps.conversationStore.appendAssistantResponse(conversationId, result.response);
-        logger.debug({ conversationId }, 'Persisted assistant response');
-      }
+      processor.finalize();
+      persistTitle(result, deps, conversationId);
+      persistResponse(deps, conversationId, result.response);
 
       // Send final chunk with finish_reason
       const finalChunk: OpenAIStreamChunk = {
@@ -319,7 +260,7 @@ async function handleStreamingRequest(
           {
             index: 0,
             delta: {},
-            finish_reason: toolCallsEmitted.length > 0 ? 'tool_calls' : 'stop',
+            finish_reason: processor.toolCallsEmitted.length > 0 ? 'tool_calls' : 'stop',
           },
         ],
       };
@@ -346,70 +287,32 @@ async function handleNonStreamingRequest(
   turns: Turn[],
   conversationId: ConversationId
 ): Promise<void> {
-  // Determine if external tools (web_search, etc.) should be enabled
-  const enableExternalTools = getToolsConfig().enableWebSearch;
+  const ctx = buildRequestContext(deps, conversationId, request.tools);
 
-  // Check if request has custom tools AND tools are enabled
-  const hasCustomTools = getToolsConfig().enabled && request.tools && request.tools.length > 0;
+  const chatResult = await deps.queue.add(async () =>
+    deps.lumoClient.chatWithHistory(turns, undefined, {
+      enableEncryption: true,
+      enableExternalTools: ctx.enableExternalTools,
+      commandContext: ctx.commandContext,
+      requestTitle: ctx.requestTitle,
+    })
+  );
 
-  // Build command context for /save and other commands
-  const commandContext: CommandContext = {
-    syncInitialized: deps.syncInitialized ?? false,
-    conversationId,
-    authManager: deps.authManager,
-  };
+  persistTitle(chatResult, deps, conversationId);
+  const { content, toolCalls: processedTools } = extractToolsFromResponse(chatResult.response, ctx.hasCustomTools);
+  persistResponse(deps, conversationId, content);
 
-  // Request title for new conversations (title still has default value)
-  const existingConv = deps.conversationStore?.get(conversationId);
-  const requestTitle = existingConv?.title === 'New Conversation';
-
-  const chatResult = await deps.queue.add(async () => {
-    const client = deps.lumoClient;
-    return await client.chatWithHistory(
-      turns,
-      undefined,
-      { enableEncryption: true, enableExternalTools, commandContext, requestTitle }
-    );
-  });
-
-  // Save generated title if present
-  if (chatResult.title && deps.conversationStore) {
-    const processedTitle = postProcessTitle(chatResult.title);
-    deps.conversationStore.setTitle(conversationId, processedTitle);
-  }
-
-  // Parse tool calls from response if custom tools were provided
-  let content = chatResult.response;
-  let toolCalls: OpenAIToolCall[] | undefined;
-
-  if (hasCustomTools) {
-    const parsedToolCalls = extractToolCallsFromResponse(chatResult.response);
-    if (parsedToolCalls) {
-      logger.debug({ count: parsedToolCalls.length }, '[Server] Tool calls detected');
-
-      // Convert to OpenAI format
-      toolCalls = parsedToolCalls.map((tc) => ({
-        id: `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+  // Convert to OpenAI format with call IDs
+  const toolCalls: OpenAIToolCall[] | undefined = processedTools.length > 0
+    ? processedTools.map(tc => ({
+        id: generateCallId(),
         type: 'function' as const,
-        function: {
-          name: tc.name,
-          arguments: JSON.stringify(tc.arguments),
-        },
-      }));
-
-      // Strip tool call JSON from content
-      content = stripToolCallsFromResponse(chatResult.response, parsedToolCalls);
-    }
-  }
-
-  // Persist assistant response
-  if (deps.conversationStore) {
-    deps.conversationStore.appendAssistantResponse(conversationId, content);
-    logger.debug({ conversationId }, 'Persisted assistant response');
-  }
+        function: { name: tc.name, arguments: tc.arguments },
+      }))
+    : undefined;
 
   const response: OpenAIChatResponse = {
-    id: `chatcmpl-${randomUUID()}`,
+    id: generateChatCompletionId(),
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
     model: request.model || getServerConfig().apiModelName,
