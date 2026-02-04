@@ -1,11 +1,16 @@
 import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { EndpointDependencies, OpenAIResponseRequest } from '../../types.js';
+import {
+  EndpointDependencies,
+  OpenAIResponseRequest,
+  OpenAIResponse,
+  OutputItem,
+  MessageOutputItem,
+  FunctionCallOutputItem,
+} from '../../types.js';
 import { getServerConfig } from '../../../app/config.js';
 import { logger } from '../../../app/logger.js';
 import { ResponseEventEmitter } from './events.js';
-import { buildOutputItems } from './output-builder.js';
-import { createCompletedResponse } from './response-factory.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/index.js';
 import {
@@ -15,6 +20,103 @@ import {
   extractToolsFromResponse,
   createStreamingToolProcessor,
 } from '../shared.js';
+
+// ── Output building ────────────────────────────────────────────────
+
+interface ToolCall {
+  name: string;
+  arguments: string | object;
+}
+
+interface BuildOutputOptions {
+  text: string;
+  toolCalls?: ToolCall[] | null;
+  itemId?: string;
+}
+
+function buildOutputItems(options: BuildOutputOptions): OutputItem[] {
+  const { text, toolCalls, itemId } = options;
+
+  const messageItem: MessageOutputItem = {
+    type: 'message',
+    id: itemId || `item-${randomUUID()}`,
+    status: 'completed',
+    role: 'assistant',
+    content: [
+      {
+        type: 'output_text',
+        text,
+        annotations: [],
+      },
+    ],
+  };
+
+  const output: OutputItem[] = [messageItem];
+
+  if (toolCalls && toolCalls.length > 0) {
+    for (const toolCall of toolCalls) {
+      const argumentsJson = typeof toolCall.arguments === 'string'
+        ? toolCall.arguments
+        : JSON.stringify(toolCall.arguments);
+
+      output.push({
+        type: 'function_call',
+        id: `fc-${randomUUID()}`,
+        call_id: `call-${randomUUID()}`,
+        status: 'completed',
+        name: toolCall.name,
+        arguments: argumentsJson,
+      } satisfies FunctionCallOutputItem);
+    }
+  }
+
+  return output;
+}
+
+// ── Response factory ───────────────────────────────────────────────
+
+function createCompletedResponse(
+  responseId: string,
+  createdAt: number,
+  request: OpenAIResponseRequest,
+  output: OutputItem[]
+): OpenAIResponse {
+  return {
+    id: responseId,
+    object: 'response',
+    created_at: createdAt,
+    status: 'completed',
+    completed_at: Math.floor(Date.now() / 1000),
+    error: null,
+    incomplete_details: null,
+    instructions: request.instructions || null,
+    max_output_tokens: request.max_output_tokens || null,
+    model: request.model || getServerConfig().apiModelName,
+    output,
+    parallel_tool_calls: false,
+    previous_response_id: null,
+    reasoning: {
+      effort: null,
+      summary: null,
+    },
+    store: request.store || false,
+    temperature: request.temperature || 1.0,
+    text: {
+      format: {
+        type: 'text',
+      },
+    },
+    tool_choice: 'none',
+    tools: [],
+    top_p: 1.0,
+    truncation: 'auto',
+    usage: null,
+    user: null,
+    metadata: request.metadata || {},
+  };
+}
+
+// ── Handlers ───────────────────────────────────────────────────────
 
 export async function handleStreamingRequest(
   req: Request,

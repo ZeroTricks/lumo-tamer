@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest, FunctionCallOutput } from '../../types.js';
 import { logger } from '../../../app/logger.js';
-import { handleStreamingRequest, handleNonStreamingRequest } from './handlers.js';
+import { handleStreamingRequest, handleNonStreamingRequest } from './request-handlers.js';
 import { convertResponseInputToTurns } from '../../message-converter.js';
 import { getConversationsConfig } from '../../../app/config.js';
 import type { Turn } from '../../../lumo-client/index.js';
