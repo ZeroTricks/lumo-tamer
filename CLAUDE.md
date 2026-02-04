@@ -17,7 +17,7 @@ lumo-tamer consists of following parts: API, bridge, Lumo WebClient
 
 - Lumo's WebClient:
   Code from Proton's open source Lumo WebClient applications/lumo in monorepo https://github.com/ProtonMail/WebClients/ . A clone of the monorepo can be found in ~/integrations/WebClients . Use docs/proton-webclients-analysis.md as a starting point.
-  - src/proton-upstream: files pulled 1:1, see src/proton-upstream/UPSTREAM.md
+  - src/proton-upstream: files pulled 1:1, see docs/upstream.md
   - src/proton-shims: partially reimplements (closed source) `@proton/crypto/*` using standard libraries
 
 
