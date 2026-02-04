@@ -21,7 +21,11 @@
     "dev:auth": "tsx src/auth/authenticate.ts",
     "auth": "node dist/auth/authenticate.js",
     "auth-status": "tsx src/auth/authenticate.ts status",
-    "sync-upstream": "./src/proton-upstream/sync-upstream.sh"
+    "sync-upstream": "./src/proton-upstream/sync-upstream.sh",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests/unit/",
+    "test:integration": "vitest run tests/integration/"
   },
   "keywords": [
     "lumo",
@@ -56,8 +60,10 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.11.5",
     "@types/uuid": "^9.0.8",
+    "@vitest/coverage-v8": "^4.0.18",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.0.18"
   }
 }

@@ -36,6 +36,15 @@ lumo-tamer consists of following parts: API, bridge, Lumo WebClient
   - Use config.ts, config.yaml and config.defaults.yaml to add configuration parameters. Don't put defaults in config.ts or other code; config.defaults.yaml is the single source of truth.
   - Ignore todos within code unless you need to rewrite code anyway, or unless specifically mentioned.
 
+  ## Testing:
+  - Framework: Vitest. Run `npm test` (all) or `npm run test:unit` / `npm run test:integration`.
+  - Tests inject `createMockProtonApi()` directly, bypassing Application/config.yaml entirely.
+  - `tests/helpers/test-server.ts` creates an Express app with mock dependencies for integration tests.
+  - Unit tests: pure function/class tests in `tests/unit/`.
+  - Integration tests: HTTP endpoint tests in `tests/integration/`.
+  - E2E tests: OpenAI SDK compatibility and CLI smoke test in `tests/e2e/`.
+  - `tests/setup.ts` initializes config and silences the logger for all tests.
+
   ## Documentation guidelines:
   - Try to find extra information on relevant parts in docs/
   - After implementation, make sure relevant docs/ are up to date
