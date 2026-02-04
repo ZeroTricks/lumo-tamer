@@ -52,6 +52,7 @@ src/
 │   ├── rclone/                # Rclone config parsing
 │   └── vault/                 # Encrypted credential storage
 ├── lumo-client/               # Bridge: connects API/CLI to Proton's Lumo backend
+├── mock/                      # Mock mode: simulated API responses for development
 ├── conversations/             # Conversation store, encryption, sync
 │   ├── encryption/            # Key hierarchy (master key → space key → DEK)
 │   └── sync/                  # Remote sync via upstream LumoApi
@@ -73,6 +74,20 @@ DIFF_TOOL=meld npm run sync-upstream
 Fetches files from GitHub, compares with local copies, and provides an interactive menu to review changes, update files, and track the upstream commit.
 
 See [upstream.md](upstream.md) for file mappings.
+
+## Mock Mode
+
+Bypass authentication and use simulated Lumo responses for development:
+
+```yaml
+# config.yaml
+test:
+  mock:
+    enabled: true
+    scenario: "success"  # success, error, timeout, rejected, toolCall, weeklyLimit
+```
+
+Encryption and conversation sync are disabled automatically. Scenarios are adapted from Proton WebClients `applications/lumo/src/app/mocks/handlers.ts`.
 
 ## Testing
 
