@@ -9,14 +9,13 @@ import {
     isValidContinuation,
     detectBranching,
     type IncomingMessage,
-} from '../src/persistence/deduplication.js';
-import type { Message } from '../src/persistence/types.js';
+} from '../../src/conversations/deduplication.js';
+import type { Message } from '../../src/conversations/types.js';
 
-// Helper to create a stored message
 function createStoredMessage(
     role: string,
     content: string,
-    index: number
+    index: number,
 ): Message {
     return {
         id: `msg-${index}`,
@@ -54,9 +53,8 @@ describe('findNewMessages', () => {
             { role: 'user', content: 'Hello' },
             { role: 'assistant', content: 'Hi there!' },
         ];
-        const stored: Message[] = [];
 
-        const result = findNewMessages(incoming, stored);
+        const result = findNewMessages(incoming, []);
         expect(result).toHaveLength(2);
         expect(result[0].content).toBe('Hello');
     });
@@ -113,9 +111,8 @@ describe('isValidContinuation', () => {
         const incoming: IncomingMessage[] = [
             { role: 'user', content: 'Hello' },
         ];
-        const stored: Message[] = [];
 
-        const result = isValidContinuation(incoming, stored);
+        const result = isValidContinuation(incoming, []);
         expect(result.valid).toBe(true);
     });
 

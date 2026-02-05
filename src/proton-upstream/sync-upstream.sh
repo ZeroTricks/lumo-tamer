@@ -130,6 +130,33 @@ if [ -n "$UPSTREAM_VERSION" ] && [ "$UPSTREAM_VERSION" != "$LOCAL_VERSION" ]; th
     echo -e "  Update src/proton-upstream/config.ts if needed."
 fi
 
+# Check adapted (not 1:1) upstream files for changes
+# These are files we adapted into our own code; warn if the upstream source changed.
+echo -e "\n${BLUE}Checking adapted upstream sources...${NC}"
+ADAPTED_MOCK_URL="${UPSTREAM_BASE_URL}/mocks/handlers.ts"
+ADAPTED_MOCK_TEMP="${TEMP_DIR}/_adapted_handlers.ts"
+if curl -sfL -o "$ADAPTED_MOCK_TEMP" "$ADAPTED_MOCK_URL" 2>/dev/null; then
+    # Compare against a stored hash to detect changes
+    ADAPTED_HASH_FILE="${UPSTREAM_DIR}/.adapted-hashes"
+    NEW_HASH=$(sha256sum "$ADAPTED_MOCK_TEMP" | cut -d' ' -f1)
+    OLD_HASH=$(grep "^mocks/handlers.ts " "$ADAPTED_HASH_FILE" 2>/dev/null | cut -d' ' -f2)
+
+    if [ -z "$OLD_HASH" ]; then
+        echo -e "  ${YELLOW}!${NC} mocks/handlers.ts (no stored hash - run sync to initialize)"
+        echo "mocks/handlers.ts $NEW_HASH" >> "$ADAPTED_HASH_FILE"
+    elif [ "$NEW_HASH" != "$OLD_HASH" ]; then
+        echo -e "  ${YELLOW}⚠${NC} mocks/handlers.ts changed upstream"
+        echo -e "    Review changes and update src/mock/mock-api.ts if needed."
+        if [ -n "${DIFF_TOOL:-}" ]; then
+            echo -e "    Run: curl -sL '$ADAPTED_MOCK_URL' | ${DIFF_TOOL} - src/mock/mock-api.ts"
+        fi
+    else
+        echo -e "  ${GREEN}=${NC} mocks/handlers.ts (no changes)"
+    fi
+else
+    echo -e "  ${RED}✗${NC} mocks/handlers.ts (download failed)"
+fi
+
 # Interactive menu
 show_menu() {
     echo -e "\n${BLUE}=== Options ===${NC}"
@@ -180,6 +207,20 @@ sync_all_files() {
         sed -i "s/\*\*Commit:\*\* [a-f0-9]*/\*\*Commit:\*\* ${LATEST_COMMIT}/" "docs/upstream.md"
         sed -i "s/\*\*Sync Date:\*\* [0-9-]*/\*\*Sync Date:\*\* $(date +%Y-%m-%d)/" "docs/upstream.md"
         echo -e "  ${GREEN}✓${NC} Updated docs/upstream.md"
+    fi
+
+    # Update adapted file hashes
+    ADAPTED_HASH_FILE="${UPSTREAM_DIR}/.adapted-hashes"
+    ADAPTED_MOCK_TEMP="${TEMP_DIR}/_adapted_handlers.ts"
+    if [ -f "$ADAPTED_MOCK_TEMP" ]; then
+        NEW_HASH=$(sha256sum "$ADAPTED_MOCK_TEMP" | cut -d' ' -f1)
+        # Replace or add the hash line
+        if grep -q "^mocks/handlers.ts " "$ADAPTED_HASH_FILE" 2>/dev/null; then
+            sed -i "s|^mocks/handlers.ts .*|mocks/handlers.ts $NEW_HASH|" "$ADAPTED_HASH_FILE"
+        else
+            echo "mocks/handlers.ts $NEW_HASH" >> "$ADAPTED_HASH_FILE"
+        fi
+        echo -e "  ${GREEN}✓${NC} Updated adapted file hashes"
     fi
 
     echo -e "\n${GREEN}Sync complete!${NC}"

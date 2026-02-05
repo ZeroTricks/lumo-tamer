@@ -46,7 +46,10 @@ const DEFAULT_EXTERNAL_TOOLS: ToolName[] = ['web_search', 'weather', 'stock', 'c
 const DEFAULT_ENDPOINT = 'ai/v1/chat';
 
 export class LumoClient {
-    constructor(private protonApi: ProtonApi) { }
+    constructor(
+        private protonApi: ProtonApi,
+        private defaultOptions?: Partial<LumoClientOptions>,
+    ) { }
 
     /**
      * Send a message and stream the response
@@ -123,7 +126,8 @@ export class LumoClient {
                 msg.type === 'harmful' ||
                 msg.type === 'timeout'
             ) {
-                throw new Error(`API returned error: ${msg.type}`);
+                const detail = (msg as any).message;
+                throw new Error(`API returned ${msg.type}${detail ? `: ${detail}` : ''}`);
             }
         };
 
@@ -167,7 +171,7 @@ export class LumoClient {
     ): Promise<ChatResult> {
         const {
             enableExternalTools = false,
-            enableEncryption = true,
+            enableEncryption = this.defaultOptions?.enableEncryption ?? true,
             endpoint = DEFAULT_ENDPOINT,
             commandContext,
             requestTitle = false,

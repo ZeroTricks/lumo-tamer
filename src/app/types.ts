@@ -12,8 +12,8 @@ import type { ConversationStore } from '../conversations/store.js';
 export interface AppContext {
   getLumoClient(): LumoClient;
   getConversationStore(): ConversationStore;
-  getAuthProvider(): AuthProvider;
-  getAuthManager(): AuthManager;
+  getAuthProvider(): AuthProvider | undefined;
+  getAuthManager(): AuthManager | undefined;
   isSyncInitialized(): boolean;
   destroy(): void;
 }

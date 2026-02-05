@@ -268,6 +268,7 @@ async function handleStreamingRequest(
       res.write('data: [DONE]\n\n');
       res.end();
     } catch (error) {
+      logger.error({ error: String(error) }, 'Streaming chat completion error');
       const errorChunk = {
         error: {
           message: String(error),

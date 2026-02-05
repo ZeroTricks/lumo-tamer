@@ -5,12 +5,13 @@
  * providing a unified context for both CLI and API modes.
  */
 
-import { getConversationsConfig, authConfig } from './config.js';
+import { getConversationsConfig, authConfig, mockConfig } from './config.js';
 import { logger } from './logger.js';
 import { resolveProjectPath } from './paths.js';
 import { LumoClient } from '../lumo-client/index.js';
 import { createAuthProvider, AuthManager, type AuthProvider, type ProtonApi } from '../auth/index.js';
 import { getConversationStore, type ConversationStore, initializeSync } from '../conversations/index.js';
+import { createMockProtonApi } from '../mock/mock-api.js';
 import type { AppContext } from './types.js';
 
 export class Application implements AppContext {
@@ -26,9 +27,26 @@ export class Application implements AppContext {
    */
   static async create(): Promise<Application> {
     const app = new Application();
-    await app.initializeAuth();
-    await app.initializeSync();
+    if (mockConfig.enabled) {
+      app.initializeMock();
+    } else {
+      await app.initializeAuth();
+      await app.initializeSync();
+    }
     return app;
+  }
+
+  /**
+   * Initialize mock mode - bypass auth, use simulated API responses
+   */
+  private initializeMock(): void {
+    const conversationsConfig = getConversationsConfig();
+    getConversationStore({ maxConversationsInMemory: conversationsConfig.maxInMemory });
+
+    this.protonApi = createMockProtonApi(mockConfig.scenario);
+    this.lumoClient = new LumoClient(this.protonApi, { enableEncryption: false });
+
+    logger.info({ scenario: mockConfig.scenario }, 'Mock mode active - auth and sync bypassed');
   }
 
   /**
@@ -90,11 +108,11 @@ export class Application implements AppContext {
     return getConversationStore();
   }
 
-  getAuthProvider(): AuthProvider {
+  getAuthProvider(): AuthProvider | undefined {
     return this.authProvider;
   }
 
-  getAuthManager(): AuthManager {
+  getAuthManager(): AuthManager | undefined {
     return this.authManager;
   }
 

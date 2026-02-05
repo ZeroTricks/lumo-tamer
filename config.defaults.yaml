@@ -42,6 +42,14 @@ auth:
     appVersion: "macos-drive@1.0.0-alpha.1+rclone"
     userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+# Test/development configuration
+test:
+  mock:
+    # Enable mock mode: bypass authentication, return simulated Lumo responses
+    enabled: false
+    # Scenario: success, error, timeout, rejected, toolCall, weeklyLimit
+    scenario: "success"
+
 # Shared Logging Configuration (can be overridden in server/cli sections)
 log:
   # Levels: trace, debug, info, warn, error, fatal

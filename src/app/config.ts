@@ -186,6 +186,22 @@ export const authConfig = ((): z.infer<typeof authConfigSchema> => {
   return authConfigSchema.parse(merged);
 })();
 
+// Mock config (eagerly loaded, needed before initConfig to decide auth vs mock)
+const mockConfigSchema = z.object({
+  enabled: z.boolean(),
+  scenario: z.enum(['success', 'error', 'timeout', 'rejected', 'toolCall', 'weeklyLimit']),
+});
+
+export const mockConfig = ((): z.infer<typeof mockConfigSchema> => {
+  const userConfig = loadUserYaml();
+  const defaults = (configDefaults as any).test?.mock ?? {};
+  const user = (userConfig as any).test?.mock ?? {};
+  const merged = merge({}, defaults, user);
+  return mockConfigSchema.parse(merged);
+})();
+
+export type MockConfig = z.infer<typeof mockConfigSchema>;
+
 // Types
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 export type ServerConfig = z.infer<typeof serverFieldsSchema>;

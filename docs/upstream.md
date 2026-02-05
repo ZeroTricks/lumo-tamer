@@ -125,6 +125,15 @@ These files in this directory are **shims**, not upstream copies:
 Note: `fetch-adapter.ts` was moved to `src/proton-shims/` since it's not imported
 by upstream files via relative paths.
 
+## Adapted (Not 1:1) Upstream Code
+
+Some upstream code is adapted rather than pulled unchanged, because it has
+browser-specific dependencies that can't be shimmed:
+
+- `src/mock/mock-api.ts` - SSE scenario generators from `applications/lumo/src/app/mocks/handlers.ts`.
+  The upstream file depends on MSW (Mock Service Worker) and browser globals.
+  We reuse the scenario logic wrapped in a ProtonApi-compatible function instead.
+
 ## NPM Dependencies for Upstream Files
 
 The upstream files require these additional npm packages:
