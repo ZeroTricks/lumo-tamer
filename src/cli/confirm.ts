@@ -5,6 +5,7 @@
  */
 
 import type { Interface as ReadlineInterface } from 'readline';
+import { printToChat } from './terminal.js';
 
 export type ConfirmResult = 'yes' | 'no' | 'skip_all';
 
@@ -39,28 +40,28 @@ export async function confirmAndApply<T>(
     formatOutput?: (result: T) => string; // extra output after apply (default: none)
   },
 ): Promise<T | 'skipped' | 'skip_all'> {
-  process.stdout.write(`[${options.label}]\n`);
-  process.stdout.write('─'.repeat(40) + '\n');
-  process.stdout.write(options.content + '\n');
-  process.stdout.write('─'.repeat(40) + '\n');
+  printToChat(`[${options.label}]\n`);
+  printToChat('─'.repeat(40) + '\n');
+  printToChat(options.content + '\n');
+  printToChat('─'.repeat(40) + '\n');
 
   const answer = await confirm(rl, options.prompt);
   if (answer === 'skip_all') return 'skip_all';
   if (answer !== 'yes') {
-    process.stdout.write('[Skipped]\n\n');
+    printToChat('[Skipped]\n\n');
     return 'skipped';
   }
 
-  process.stdout.write(`[${options.verb}...]\n\n`);
+  printToChat(`[${options.verb}...]\n\n`);
   try {
     const result = await options.apply();
     if (options.formatOutput) {
-      process.stdout.write(options.formatOutput(result) + '\n\n');
+      printToChat(options.formatOutput(result) + '\n\n');
     }
     return result;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stdout.write(`[${options.errorLabel}: ${msg}]\n\n`);
+    printToChat(`[${options.errorLabel}: ${msg}]\n\n`);
     return 'skipped';
   }
 }

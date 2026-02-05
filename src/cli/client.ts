@@ -19,6 +19,7 @@ import { CodeBlockDetector, type CodeBlock } from './code-block-detector.js';
 import { blockHandlers, type BlockResult } from './block-handlers.js';
 import { confirmAndApply } from './confirm.js';
 import { injectInstructions } from './message-converter.js';
+import { printToChat, clearBusyIndicator, BUSY_INDICATOR } from './terminal.js';
 
 interface LumoResponse {
   response: string;
@@ -29,13 +30,6 @@ interface LumoResponse {
 interface HandledBlock {
   block: CodeBlock;
   result: BlockResult;
-}
-
-const BUSY_INDICATOR = '...';
-
-function clearBusyIndicator(): void {
-  // Backspace over "..."
-  process.stdout.write('\b\b\b   \b\b\b');
 }
 
 export class CLIClient {
@@ -71,7 +65,7 @@ export class CLIClient {
     const blocks: CodeBlock[] = [];
     let chunkCount = 0;
 
-    process.stdout.write('Lumo: ' + BUSY_INDICATOR);
+    printToChat('Lumo: ' + BUSY_INDICATOR);
 
     const turns = injectInstructions(this.store.toTurns(this.conversationId));
     const result = await this.app.getLumoClient().chatWithHistory(
@@ -80,10 +74,10 @@ export class CLIClient {
         if (chunkCount === 0) clearBusyIndicator();
         if (detector) {
           const { text, blocks: newBlocks } = detector.processChunk(chunk);
-          process.stdout.write(text);
+          printToChat(text);
           blocks.push(...newBlocks);
         } else {
-          process.stdout.write(chunk);
+          printToChat(chunk);
         }
         chunkCount++;
       },
@@ -94,12 +88,12 @@ export class CLIClient {
     if (detector) {
       const final = detector.finalize();
       if (chunkCount === 0) clearBusyIndicator();
-      process.stdout.write(final.text);
+      printToChat(final.text);
       blocks.push(...final.blocks);
     } else {
       if (chunkCount === 0) clearBusyIndicator();
     }
-    process.stdout.write('\n\n');
+    printToChat('\n\n');
 
     // Handle title
     if (result.title) {
@@ -131,7 +125,7 @@ export class CLIClient {
       if (!handler.requiresConfirmation) {
         const result = await handler.apply(block);
         if (!result.success && handler.formatApplyOutput) {
-          process.stdout.write(handler.formatApplyOutput(result) + '\n');
+          printToChat(handler.formatApplyOutput(result) + '\n');
         }
         results.push({ block, result });
         continue;
@@ -148,7 +142,7 @@ export class CLIClient {
 
       if (outcome === 'skip_all') {
         const remaining = actionableCount - processed;
-        process.stdout.write(`[Skipped this and ${remaining} remaining block${remaining === 1 ? '' : 's'}]\n\n`);
+        printToChat(`[Skipped this and ${remaining} remaining block${remaining === 1 ? '' : 's'}]\n\n`);
         break;
       }
       if (outcome !== 'skipped') {
@@ -171,18 +165,18 @@ export class CLIClient {
 
   private async singleQuery(query: string): Promise<void> {
     logger.info({ query }, 'Sending query');
-    process.stdout.write('\n');
+    printToChat('\n');
 
     const startTime = Date.now();
     let chunkCount = 0;
-    process.stdout.write(BUSY_INDICATOR);
+    printToChat(BUSY_INDICATOR);
 
     try {
       const result = await this.app.getLumoClient().chat(
         query,
         (chunk) => {
           if (chunkCount === 0) clearBusyIndicator();
-          process.stdout.write(chunk);
+          printToChat(chunk);
           chunkCount++;
         },
         { enableEncryption: true, enableExternalTools: false }
@@ -190,11 +184,11 @@ export class CLIClient {
 
       if (chunkCount === 0) clearBusyIndicator();
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-      process.stdout.write('\n\n');
+      printToChat('\n\n');
       logger.info({ responseLength: result.response.length, chunkCount, elapsedSeconds: elapsed }, 'Done');
     } catch (error) {
       clearBusyIndicator();
-      process.stdout.write('\n');
+      printToChat('\n');
       logger.error({ error }, 'Request failed');
       this.handleError(error);
       process.exit(1);
@@ -219,11 +213,11 @@ export class CLIClient {
     };
 
     // Welcome message
-    process.stdout.write('\n');
-    process.stdout.write('Welcome to lumo-tamer cli\n');
+    printToChat('\n');
+    printToChat('Welcome to lumo-tamer cli\n');
     if (commandsConfig.enabled)
-      process.stdout.write('Type /help for commands, /quit to exit.\n');
-    process.stdout.write('\n');
+      printToChat('Type /help for commands, /quit to exit.\n');
+    printToChat('\n');
 
     while (true) {
       const input = await prompt();
@@ -241,7 +235,7 @@ export class CLIClient {
             authManager: this.app.getAuthManager(),
           };
           const result = await executeCommand(input, commandContext);
-          process.stdout.write(result + '\n\n');
+          printToChat(result + '\n\n');
           continue;
         } else {
           logger.debug({ input }, 'Command ignored (commands.enabled=false)');
@@ -270,7 +264,7 @@ export class CLIClient {
           if (results.length === 0) break; // user skipped all
 
           // Send batch results back to Lumo
-          process.stdout.write('─── Sending results to Lumo ───\n\n');
+          printToChat('─── Sending results to Lumo ───\n\n');
           const batchMessage = this.formatResultsMessage(results);
           this.store.appendUserMessage(this.conversationId, batchMessage);
 
@@ -279,7 +273,7 @@ export class CLIClient {
         }
       } catch (error) {
         clearBusyIndicator();
-        process.stdout.write('\n');
+        printToChat('\n');
         logger.error({ error }, 'Request failed');
         this.handleError(error);
       }
@@ -289,17 +283,17 @@ export class CLIClient {
 
     // Sync on exit if available and commands enabled
     if (this.app.isSyncInitialized() && getCommandsConfig().enabled) {
-      process.stdout.write('Syncing conversations before exit...\n');
+      printToChat('Syncing conversations before exit...\n');
       const commandContext: CommandContext = { syncInitialized: true };
       try {
         const result = await executeCommand('/save', commandContext);
-        process.stdout.write(result + '\n');
+        printToChat(result + '\n');
       } catch {
         // Ignore errors on exit sync
       }
     }
 
-    process.stdout.write('Goodbye!\n');
+    printToChat('Goodbye!\n');
   }
 
   private handleError(error: unknown): void {
