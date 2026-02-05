@@ -187,6 +187,8 @@ server:
 >
 > This requires some trial and error. Experiment with `server.instructions.forTools` to improve results.
 
+See [docs/tools.md](docs/tools.md) for the full tools architecture (native, custom, confused, CLI).
+
 ## Usage
 
 ### CLI
@@ -304,6 +306,7 @@ See [docs/](docs/) for detailed documentation:
 - [Authentication](docs/authentication.md): Auth methods, setup and troubleshooting
 - [Conversations](docs/conversations.md): Conversation persistence and sync
 - [Development](docs/development.md): Development setup and workflow
+- [Tools](docs/tools.md): Tools architecture (native, custom, confused, CLI)
 - [Upstream Files](docs/upstream.md): Proton WebClients files, shims and path aliases
 
 ## Roadmap
