@@ -33,16 +33,29 @@ export const customScenarios: Record<string, ScenarioGenerator> = {
         // through its native pipeline instead of outputting it as text. Always fails server-side.
         // Based on real logs: concatenated retried tool calls, error results, then fallback text.
         //
-        // On follow-up requests (client sending tool result back), respond with normal text
-        // to break the loop. Since all turns are encrypted into one opaque blob, we use a
-        // simple call counter - first call returns confused, subsequent calls return normal text.
-        if (incrementCallCount('confusedToolCall') > 1) {
+        // Call 1: confused native tool call (triggers bounce)
+        // Call 2: bounce response - JSON code fence (what Lumo should have done)
+        // Call 3+: normal text response (after client sends tool result back)
+        const callNum = incrementCallCount('confusedToolCall');
+        if (callNum > 2) {
+            // Normal response after tool result - prevents loop with clients like Home Assistant
             yield formatSSEMessage({ type: 'ingesting', target: 'message' });
             await delay(200);
             const tokens = ['(Mocked) ', 'Tool ', 'result ', 'received, ', 'thanks!'];
             for (let i = 0; i < tokens.length; i++) {
                 yield formatSSEMessage({ type: 'token_data', target: 'message', count: i, content: tokens[i] });
-                await delay(30);
+            }
+            yield formatSSEMessage({ type: 'done' });
+            return;
+        }
+        if (callNum === 2) {
+            // Bounce response: output the tool call as JSON text (what Lumo should have done)
+            yield formatSSEMessage({ type: 'ingesting', target: 'message' });
+            await delay(200);
+            const json = '```json\n{"name":"GetLiveContext","arguments":{}}\n```';
+            const tokens = json.split('');
+            for (let i = 0; i < tokens.length; i++) {
+                yield formatSSEMessage({ type: 'token_data', target: 'message', count: i, content: tokens[i] });
             }
             yield formatSSEMessage({ type: 'done' });
             return;

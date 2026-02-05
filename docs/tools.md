@@ -185,7 +185,7 @@ instructions:
 
 ### The Problem
 
-Sometimes Lumo routes a custom tool through the native SSE pipeline instead of outputting it as text. This always fails server-side because the backend doesn't know how to execute client-defined tools.
+Sometimes Lumo routes a custom tool through the native SSE pipeline instead of outputting it as text. This always fails server-side because the backend doesn't know how to execute client-defined tools. Proton sees these as tool errors.
 
 ### SSE Stream for a Confused Call
 
@@ -197,18 +197,51 @@ data: {"type":"token_data","target":"message","content":"I don't have access to 
 
 The tool_call contains the custom tool name, tool_result is always `{"error":true}`, and the message is Lumo's fallback apology text.
 
-### How lumo-tamer Rescues These
+### How lumo-tamer Bounces These
 
-1. **`LumoClient.processStream()`** tracks `tool_call` and `tool_result` SSE targets using `JsonBraceTracker` + `native-tool-parser.ts`
-2. When `tool_result` contains `{"error":true}`, `nativeToolCallFailed` is set and the `onNativeToolCallFailed` callback fires
-3. The API handler suppresses Lumo's fallback text via `processor.setSuppressText()`
-4. **`mergeConfusedToolCall()`** in `shared.ts` converts the failed native call into an OpenAI-compatible tool call, deduplicating against any text-detected calls
+Instead of silently converting the failed call, lumo-tamer bounces confused calls back to Lumo with a corrective instruction. This teaches Lumo within the conversation to output custom tool calls as JSON text.
+
+1. **Detection**: `LumoClient.processStream()` tracks SSE `tool_call` targets. When a tool name is not in `KNOWN_NATIVE_TOOLS`, it's identified as confused.
+2. **Suppression**: `onChunk` stops firing immediately - the client suppresses Lumo's fallback text ("I don't have access...") internally.
+3. **Bounce**: `chatWithHistory()` appends the failed assistant response + a corrective user message (from `instructions.forConfusedToolBounce` config) to the conversation turns and makes a second call.
+4. **Result**: Lumo re-outputs the tool call as JSON text in the bounce response. This flows through normal `StreamingToolDetector` / `tool-parser.ts` detection.
+
+API handlers are completely unaware of confused calls - the bounce happens inside `LumoClient`.
+
+### Streaming Sequence
+
+```
+Handler -> LumoClient.chatWithHistory(turns, onChunk, options)
+  LumoClient -> Lumo: first call
+  Lumo -> LumoClient: confused tool_call (name not in KNOWN_NATIVE_TOOLS)
+  LumoClient: sets suppressChunks=true, stops calling onChunk
+  Lumo -> LumoClient: tool_result error + fallback text (onChunk not called)
+  LumoClient: stream ends, confused flag set
+  LumoClient -> Lumo: bounce call (passes onChunk through)
+  Lumo -> LumoClient: text with JSON tool call -> onChunk fires -> handler streams it
+  LumoClient: returns bounce ChatResult
+Handler: StreamingToolProcessor detected/emitted tool call via onChunk
+```
+
+### Configuration
+
+The bounce instruction template in `config.defaults.yaml`:
+
+```yaml
+instructions:
+  forConfusedToolBounce: |
+    You tried to call a custom tool using your built-in tool system, but custom tools
+    must be called by outputting JSON text. Please output the tool call as JSON, like this:
+    {toolCall}
+```
+
+The `{toolCall}` placeholder is replaced at runtime with the actual confused tool call JSON.
 
 ### Key code
 
-- `src/lumo-client/client.ts` - `ChatResult.nativeToolCall` / `nativeToolCallFailed`
+- `src/lumo-client/client.ts` - `isConfusedToolCall()`, `buildBounceInstruction()`, bounce in `chatWithHistory()`
 - `src/api/native-tool-parser.ts` - `parseNativeToolCallJson()`, `isErrorResult()`
-- `src/api/routes/shared.ts` - `mergeConfusedToolCall()`
+- `src/api/json-brace-tracker.ts` - SSE target JSON extraction
 - Mock scenario: `confusedToolCall`
 
 ## CLI Tools
@@ -240,7 +273,7 @@ Native tools and custom tools can be enabled simultaneously:
 - `tools.enableWebSearch: true` enables Lumo's native `web_search` tool (config)
 - Providing `tools` array in OpenAI request enables custom tool detection
 - Both work together: native tools execute server-side, custom tools are detected client-side
-- Confused tool calls are automatically rescued into OpenAI format
+- Confused tool calls are automatically bounced back to Lumo for correction
 
 ## Data Structures
 

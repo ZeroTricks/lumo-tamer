@@ -17,7 +17,6 @@ import {
   persistTitle,
   persistResponse,
   extractToolsFromResponse,
-  mergeConfusedToolCall,
   createStreamingToolProcessor,
   generateResponseId,
   generateItemId,
@@ -177,7 +176,6 @@ export async function handleStreamingRequest(
           enableExternalTools: ctx.enableExternalTools,
           commandContext: ctx.commandContext,
           requestTitle: ctx.requestTitle,
-          onNativeToolCallFailed: () => processor.setSuppressText(),
         }
       );
 
@@ -185,28 +183,10 @@ export async function handleStreamingRequest(
       processor.finalize();
       persistTitle(result, deps, conversationId);
 
-      // Rescue confused tool call if not already detected via text-based detection
-      if (result.nativeToolCall && result.nativeToolCallFailed) {
-        const alreadyEmitted = processor.toolCallsEmitted.some(
-          tc => tc.function.name === result.nativeToolCall!.name
-        );
-        if (!alreadyEmitted) {
-          const callId = generateCallId();
-          deps.conversationStore?.addGeneratedCallId(conversationId, callId);
-          processor.toolCallsEmitted.push({
-            id: callId,
-            type: 'function',
-            function: { name: result.nativeToolCall.name, arguments: JSON.stringify(result.nativeToolCall.arguments) },
-          });
-          emitter.emitFunctionCallEvents(id, callId, result.nativeToolCall.name, JSON.stringify(result.nativeToolCall.arguments), nextOutputIndex++);
-          logger.debug({ name: result.nativeToolCall.name }, '[Server] Confused tool call rescued (streaming)');
-        }
-      }
-
       // Use stripped text for final events (tool JSON removed)
       if (processor.toolCallsEmitted.length > 0) {
         const { content } = extractToolsFromResponse(result.response, true);
-        accumulatedText = result.nativeToolCallFailed ? '' : content;
+        accumulatedText = content;
       } else {
         accumulatedText = result.response;
       }
@@ -264,13 +244,7 @@ export async function handleNonStreamingRequest(
   );
 
   persistTitle(result, deps, conversationId);
-  let { content, toolCalls } = extractToolsFromResponse(result.response, ctx.hasCustomTools);
-
-  // Rescue confused tool call: custom tool that Lumo routed through native pipeline
-  if (result.nativeToolCallFailed) {
-    toolCalls = mergeConfusedToolCall(result.nativeToolCall, toolCalls);
-    content = '';
-  }
+  const { content, toolCalls } = extractToolsFromResponse(result.response, ctx.hasCustomTools);
 
   persistResponse(deps, conversationId, content);
 

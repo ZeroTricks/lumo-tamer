@@ -140,34 +140,46 @@ export class StreamingToolDetector {
    * Process code fence state - accumulate until closing ```.
    */
   private processCodeFenceState(result: ProcessResult): void {
+    // First check pendingText for closing fence
     const endMatch = this.pendingText.match(/```/);
     if (endMatch && endMatch.index !== undefined) {
 
       logger.debug(`Code block ending found: ${this.showSnippet(endMatch.index)}`);
 
-      // Found closing fence
+      // Found closing fence in pendingText
       this.buffer += this.pendingText.slice(0, endMatch.index);
       this.pendingText = this.pendingText.slice(endMatch.index + 3);
-      this.state = 'normal';
-
-      // fix fenceMatch matching ``` before ```json
-      // NOTE: can this be done in processNormalState()?
-       this.buffer = this.buffer.replace(/^json/, "");
-
-      // Try to parse as tool call
-      const toolCall = this.tryParseToolCall(this.buffer.trim());
-      if (toolCall) {
-        result.completedToolCalls.push(toolCall);
-      } else {
-        // Not a valid tool call, emit as text with code fence formatting
-        result.textToEmit += '```\n' + this.buffer + '```';
-      }
-      this.buffer = '';
-    } else {
-      // No closing fence yet, buffer everything
-      this.buffer += this.pendingText;
-      this.pendingText = '';
+      this.completeCodeFence(result);
+      return;
     }
+
+    // No closing fence in pendingText - buffer it and check if buffer now ends with ```
+    this.buffer += this.pendingText;
+    this.pendingText = '';
+
+    if (this.buffer.endsWith('```')) {
+      logger.debug('Code block ending found at end of buffer');
+      this.buffer = this.buffer.slice(0, -3);
+      this.completeCodeFence(result);
+    }
+  }
+
+  /** Complete a code fence: parse buffer as tool call or emit as text. */
+  private completeCodeFence(result: ProcessResult): void {
+    this.state = 'normal';
+
+    // fix fenceMatch matching ``` before ```json
+    this.buffer = this.buffer.replace(/^json/, '');
+
+    // Try to parse as tool call
+    const toolCall = this.tryParseToolCall(this.buffer.trim());
+    if (toolCall) {
+      result.completedToolCalls.push(toolCall);
+    } else {
+      // Not a valid tool call, emit as text with code fence formatting
+      result.textToEmit += '```\n' + this.buffer + '```';
+    }
+    this.buffer = '';
   }
 
 

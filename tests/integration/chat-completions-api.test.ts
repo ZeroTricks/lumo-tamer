@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { createTestServer, parseSSEEvents, type TestServer } from '../helpers/test-server.js';
 import { resetCallCounts } from '../../src/mock/mock-api.js';
+import { getToolsConfig } from '../../src/app/config.js';
 
 /** POST /v1/chat/completions with JSON body, returning the raw Response. */
 function postChat(ts: TestServer, body: Record<string, unknown>): Promise<Response> {
@@ -125,20 +126,26 @@ describe('/v1/chat/completions', () => {
     });
   });
 
-  describe('confusedToolCall scenario', () => {
+  describe('confusedToolCall scenario (bounce)', () => {
     let nativeTs: TestServer;
+    const dummyTools = [{ type: 'function', function: { name: 'GetLiveContext', parameters: {} } }];
 
     beforeAll(async () => {
       nativeTs = await createTestServer('confusedToolCall');
+      (getToolsConfig() as any).enabled = true;
     });
-    afterAll(async () => { await nativeTs.close(); });
+    afterAll(async () => {
+      (getToolsConfig() as any).enabled = false;
+      await nativeTs.close();
+    });
     beforeEach(() => { resetCallCounts(); });
 
-    it('non-streaming: returns tool_calls with suppressed content', async () => {
+    it('non-streaming: bounces confused call and returns tool_calls from text detection', async () => {
       const res = await postChat(nativeTs, {
         model: 'lumo',
         messages: userMessage('Hello'),
         stream: false,
+        tools: dummyTools,
       });
 
       expect(res.status).toBe(200);
@@ -147,22 +154,20 @@ describe('/v1/chat/completions', () => {
       expect(body.object).toBe('chat.completion');
       expect(body.choices).toHaveLength(1);
 
-      // Should have tool_calls for GetLiveContext
+      // Should have tool_calls for GetLiveContext (detected from bounce response text)
       const choice = body.choices[0];
       expect(choice.finish_reason).toBe('tool_calls');
       expect(choice.message.tool_calls).toBeDefined();
       expect(choice.message.tool_calls.length).toBeGreaterThanOrEqual(1);
       expect(choice.message.tool_calls[0].function.name).toBe('GetLiveContext');
-
-      // Content should be suppressed (empty)
-      expect(choice.message.content).toBe('');
     });
 
-    it('streaming: emits tool call delta and suppresses text', async () => {
+    it('streaming: bounces confused call and emits tool call delta', async () => {
       const res = await postChat(nativeTs, {
         model: 'lumo',
         messages: userMessage('Hello'),
         stream: true,
+        tools: dummyTools,
       });
 
       expect(res.status).toBe(200);
@@ -170,7 +175,7 @@ describe('/v1/chat/completions', () => {
       const events = parseSSEEvents(text);
       const jsonEvents = events.filter(e => typeof e.data === 'object');
 
-      // Should have a tool_calls delta chunk
+      // Should have a tool_calls delta chunk (from bounce response text detection)
       const toolCallChunk = jsonEvents.find(e => {
         const delta = (e.data as any)?.choices?.[0]?.delta;
         return delta?.tool_calls?.length > 0;

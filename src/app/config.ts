@@ -24,6 +24,7 @@ const instructionsConfigSchema = z.object({
   default: z.string(),
   append: z.boolean(),
   forTools: z.string(),
+  forConfusedToolBounce: z.string(),
 });
 
 const toolsConfigSchema = z.object({
