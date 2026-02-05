@@ -130,6 +130,9 @@ export class CLIClient {
 
       if (!handler.requiresConfirmation) {
         const result = await handler.apply(block);
+        if (!result.success && handler.formatApplyOutput) {
+          process.stdout.write(handler.formatApplyOutput(result) + '\n');
+        }
         results.push({ block, result });
         continue;
       }

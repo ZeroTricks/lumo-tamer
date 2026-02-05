@@ -30,7 +30,10 @@ const instructionsConfigSchema = z.object({
 const toolsConfigSchema = z.object({
   enabled: z.boolean(),
   enableWebSearch: z.boolean(),
-  enableFileReads: z.boolean(),
+  fileReads: z.object({
+    enabled: z.boolean(),
+    maxFileSizeKB: z.number().positive(),
+  }),
   // Maps code block language tag → [command, ...args]. Code is appended as last arg.
   executors: z.record(z.string(), z.array(z.string())),
 });

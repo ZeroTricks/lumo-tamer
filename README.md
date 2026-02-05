@@ -165,7 +165,8 @@ cli:
     # enable Lumo to create and edit files, and run commands in your terminal
     enabled: true
     # enable Lumo to read text-based files on your system
-    enableFileReads: true 
+    fileReads:
+      enabled: true
 ```
 > **Tip:** When you enable CLI tools, consider adapting `cli.instructions.forTools` to reference the languages and shells available in your environment.
 
