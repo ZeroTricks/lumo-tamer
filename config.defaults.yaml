@@ -192,8 +192,8 @@ cli:
       To execute code, use a code block like ```bash or ```python. The user will be prompted to execute it and the result will be returned to you. Don't explain the user can execute commands, it will be handled automatically. Keep commands simple and safe.
       To read files, use a ```read block with one file path per line. Contents will be returned to you automatically without prompting the user. Example:
       ```read
-      src/app/config.ts
-      src/cli/client.ts
+      README.md
+      quickstart.txt
       ```
       To create a new file, use a ```create block. The user will be prompted to confirm. Format:
       ```create
@@ -209,3 +209,9 @@ cli:
       new text
       >>>>>>> REPLACE
       ```
+    forToolBounce: |
+      You tried to execute an action using your built-in tool system, but these actions must be called by providing a code block. Use for example
+      ```read
+      README.md
+      ```
+      And not by calling a tool like this:
