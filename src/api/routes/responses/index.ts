@@ -5,7 +5,7 @@ import { logger } from '../../../app/logger.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './request-handlers.js';
 import { convertResponseInputToTurns } from '../../message-converter.js';
 import { getConversationsConfig } from '../../../app/config.js';
-import type { Turn } from '../../../lumo-client/index.js';
+
 import type { ConversationId } from '../../../conversations/index.js';
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session
@@ -88,79 +88,60 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
         logger.debug({ conversationId }, 'Generated random conversation ID');
       }
 
-      // ===== STEP 2: Check for function_call_output (with per-conversation dedup) =====
+      // ===== STEP 2: Validate input =====
+      if (!request.input) {
+        return res.status(400).json({ error: 'Input is required (string or message array)' });
+      }
+      if (Array.isArray(request.input)) {
+        const hasUserMessage = request.input.some((m) =>
+          typeof m === 'object' && 'role' in m && m.role === 'user'
+        );
+        if (!hasUserMessage) {
+          return res.status(400).json({ error: 'No user message found in input array' });
+        }
+      }
+
+      // ===== STEP 3: Convert input to turns =====
+      // Single call handles both normal messages and function_call_output requests.
+      // convertResponseInputToTurns filters out function_call/function_call_output items
+      // and injects instructions into the first user turn.
+      const turns = convertResponseInputToTurns(request.input, request.instructions, request.tools);
+
+      // If there's a non-duplicate function_call_output, append it as a user turn
       if (Array.isArray(request.input)) {
         const functionOutputs = request.input
           .filter((item): item is FunctionCallOutput =>
             typeof item === 'object' && 'type' in item && item.type === 'function_call_output'
           )
-          // Only process outputs for call_ids we generated in THIS conversation
           .filter((item) => deps.conversationStore?.hasGeneratedCallId(conversationId, item.call_id) ?? false);
 
-        // Get the last function output if any
         const lastFunctionOutput = functionOutputs[functionOutputs.length - 1];
 
         if (lastFunctionOutput) {
-          // Check if this call_id is different from last processed (per-conversation)
           const isDuplicate = deps.conversationStore?.isDuplicateFunctionCallId(conversationId, lastFunctionOutput.call_id) ?? false;
-
           if (!isDuplicate) {
             deps.conversationStore?.setLastFunctionCallId(conversationId, lastFunctionOutput.call_id);
-
+            turns.push({ role: 'user', content: JSON.stringify(lastFunctionOutput) });
             logger.debug(`[Server] Processing function_call_output for call_id: ${lastFunctionOutput.call_id}`);
-
-            // Convert function output to a turn
-            const outputString = JSON.stringify(lastFunctionOutput);
-            const turns: Turn[] = [{ role: 'user', content: outputString }];
-
-            if (request.stream) {
-              await handleStreamingRequest(req, res, deps, request, turns, conversationId);
-            } else {
-              await handleNonStreamingRequest(req, res, deps, request, turns, conversationId);
-            }
-            return; // Early return after processing
+          } else {
+            logger.debug('[Server] Skipping duplicate function_call_output');
           }
-          // If duplicate function_call_output, continue to check user message
-          logger.debug('[Server] Skipping duplicate function_call_output, checking for user message');
         }
       }
 
-      // ===== STEP 3: Extract input text =====
-      let inputText: string;
-      if (typeof request.input === 'string') {
-        inputText = request.input;
-      } else if (Array.isArray(request.input)) {
-        // Get the last user message from array
-        const lastUserMessage = [...request.input].reverse().find((m): m is { role: string; content: string } =>
-          typeof m === 'object' && 'role' in m && m.role === 'user'
-        );
-        if (!lastUserMessage) {
-          return res.status(400).json({ error: 'No user message found in input array' });
-        }
-        inputText = lastUserMessage.content;
-      } else {
-        return res.status(400).json({ error: 'Input is required (string or message array)' });
-      }
-
-      // Persist all messages from input to conversation store
-      // The deduplication logic in appendMessages will filter out already-stored messages
+      // ===== STEP 4: Persist incoming messages =====
       if (deps.conversationStore && Array.isArray(request.input)) {
-        // Extract all messages (including system, tool calls, etc.)
-        // Function calls and outputs are converted to a storable format
         const allMessages: Array<{ role: string; content: string }> = [];
         for (const item of request.input) {
-          // Use type assertion to access 'type' property safely
           const itemType = 'type' in item ? (item as { type: string }).type : undefined;
 
           if (itemType === 'function_call') {
-            // Convert function_call to a message format
             const fc = item as unknown as { type: string; name: string; arguments: string; call_id: string };
             allMessages.push({
               role: 'tool_call',
               content: JSON.stringify({ call_id: fc.call_id, name: fc.name, arguments: fc.arguments })
             });
           } else if (itemType === 'function_call_output') {
-            // Convert function_call_output to a message format
             const fco = item as FunctionCallOutput;
             allMessages.push({
               role: 'tool_result',
@@ -176,15 +157,11 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
           logger.debug({ conversationId, messageCount: allMessages.length }, 'Persisted conversation messages');
         }
       } else if (deps.conversationStore && typeof request.input === 'string') {
-        // Simple string input - just the user message
         deps.conversationStore.appendMessages(conversationId, [
-          { role: 'user', content: inputText }
+          { role: 'user', content: request.input }
         ]);
         logger.debug({ conversationId }, 'Persisted user message');
       }
-
-      // Convert input to turns (includes instructions injection)
-      const turns = convertResponseInputToTurns(request.input, request.instructions, request.tools);
 
       // Add to queue and process
       if (request.stream) {

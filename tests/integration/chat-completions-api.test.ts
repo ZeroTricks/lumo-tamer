@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestServer, parseSSEEvents, type TestServer } from '../helpers/test-server.js';
+import { getToolsConfig } from '../../src/app/config.js';
 
 /** POST /v1/chat/completions with JSON body, returning the raw Response. */
 function postChat(ts: TestServer, body: Record<string, unknown>): Promise<Response> {
@@ -121,6 +122,75 @@ describe('/v1/chat/completions', () => {
       // Last JSON event should have finish_reason: 'stop'
       const lastEvent = jsonEvents[jsonEvents.length - 1];
       expect((lastEvent.data as any).choices[0].finish_reason).toBe('stop');
+    });
+  });
+
+  describe('confusedToolCall scenario (bounce)', () => {
+    let nativeTs: TestServer;
+    const dummyTools = [{ type: 'function', function: { name: 'GetLiveContext', parameters: {} } }];
+
+    beforeAll(async () => {
+      nativeTs = await createTestServer('confusedToolCall');
+      (getToolsConfig() as any).enabled = true;
+    });
+    afterAll(async () => {
+      (getToolsConfig() as any).enabled = false;
+      await nativeTs.close();
+    });
+
+    it('non-streaming: bounces confused call and returns tool_calls from text detection', async () => {
+      const res = await postChat(nativeTs, {
+        model: 'lumo',
+        messages: userMessage('Hello'),
+        stream: false,
+        tools: dummyTools,
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.object).toBe('chat.completion');
+      expect(body.choices).toHaveLength(1);
+
+      // Should have tool_calls for GetLiveContext (detected from bounce response text)
+      const choice = body.choices[0];
+      expect(choice.finish_reason).toBe('tool_calls');
+      expect(choice.message.tool_calls).toBeDefined();
+      expect(choice.message.tool_calls.length).toBeGreaterThanOrEqual(1);
+      expect(choice.message.tool_calls[0].function.name).toBe('GetLiveContext');
+    });
+
+    it('streaming: bounces confused call and emits tool call delta', async () => {
+      const res = await postChat(nativeTs, {
+        model: 'lumo',
+        messages: userMessage('Hello'),
+        stream: true,
+        tools: dummyTools,
+      });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      const events = parseSSEEvents(text);
+      const jsonEvents = events.filter(e => typeof e.data === 'object');
+
+      // Should have a tool_calls delta chunk (from bounce response text detection)
+      const toolCallChunk = jsonEvents.find(e => {
+        const delta = (e.data as any)?.choices?.[0]?.delta;
+        return delta?.tool_calls?.length > 0;
+      });
+      expect(toolCallChunk).toBeDefined();
+      expect((toolCallChunk!.data as any).choices[0].delta.tool_calls[0].function.name).toBe('GetLiveContext');
+
+      // Final chunk should have finish_reason: 'tool_calls'
+      const lastJsonEvent = jsonEvents[jsonEvents.length - 1];
+      expect((lastJsonEvent.data as any).choices[0].finish_reason).toBe('tool_calls');
+
+      // Text content delta events should not contain the fallback text
+      const contentDeltas = jsonEvents
+        .filter(e => (e.data as any)?.choices?.[0]?.delta?.content)
+        .map(e => (e.data as any).choices[0].delta.content);
+      const fullContent = contentDeltas.join('');
+      expect(fullContent).not.toContain("don't have access");
     });
   });
 });

@@ -238,7 +238,6 @@ async function handleStreamingRequest(
         turns,
         processor.onChunk,
         {
-          enableEncryption: true,
           enableExternalTools: ctx.enableExternalTools,
           commandContext: ctx.commandContext,
           requestTitle: ctx.requestTitle,
@@ -248,6 +247,7 @@ async function handleStreamingRequest(
 
       processor.finalize();
       persistTitle(result, deps, conversationId);
+
       persistResponse(deps, conversationId, result.response);
 
       // Send final chunk with finish_reason
@@ -292,7 +292,6 @@ async function handleNonStreamingRequest(
 
   const chatResult = await deps.queue.add(async () =>
     deps.lumoClient.chatWithHistory(turns, undefined, {
-      enableEncryption: true,
       enableExternalTools: ctx.enableExternalTools,
       commandContext: ctx.commandContext,
       requestTitle: ctx.requestTitle,
@@ -301,6 +300,7 @@ async function handleNonStreamingRequest(
 
   persistTitle(chatResult, deps, conversationId);
   const { content, toolCalls: processedTools } = extractToolsFromResponse(chatResult.response, ctx.hasCustomTools);
+
   persistResponse(deps, conversationId, content);
 
   // Convert to OpenAI format with call IDs

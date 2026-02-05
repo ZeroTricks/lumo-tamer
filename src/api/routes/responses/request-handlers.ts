@@ -172,7 +172,6 @@ export async function handleStreamingRequest(
         turns,
         processor.onChunk,
         {
-          enableEncryption: true,
           enableExternalTools: ctx.enableExternalTools,
           commandContext: ctx.commandContext,
           requestTitle: ctx.requestTitle,
@@ -236,7 +235,6 @@ export async function handleNonStreamingRequest(
 
   const result = await deps.queue.add(async () =>
     deps.lumoClient.chatWithHistory(turns, undefined, {
-      enableEncryption: true,
       enableExternalTools: ctx.enableExternalTools,
       commandContext: ctx.commandContext,
       requestTitle: ctx.requestTitle,
@@ -245,6 +243,7 @@ export async function handleNonStreamingRequest(
 
   persistTitle(result, deps, conversationId);
   const { content, toolCalls } = extractToolsFromResponse(result.response, ctx.hasCustomTools);
+
   persistResponse(deps, conversationId, content);
 
   const id = generateResponseId();

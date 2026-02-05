@@ -23,7 +23,10 @@ import type {
     Turn,
 } from './types.js';
 import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
-import { getCommandsConfig, getLogConfig } from '../app/config.js';
+import { getCommandsConfig, getInstructionsConfig, getLogConfig } from '../app/config.js';
+import { JsonBraceTracker } from '../api/json-brace-tracker.js';
+import { parseNativeToolCallJson, isErrorResult } from '../api/native-tool-parser.js';
+import type { ParsedToolCall } from '../api/tool-parser.js';
 
 export interface LumoClientOptions {
     enableExternalTools?: boolean;
@@ -39,11 +42,31 @@ export interface LumoClientOptions {
 export interface ChatResult {
     response: string;
     title?: string;
+    /** First valid native tool call from SSE tool_call target, if any.
+     *  "Native" here means Lumo-native SSE pipeline - this includes both legitimate
+     *  native calls (e.g. web_search) and "confused" calls (custom tools Lumo
+     *  mistakenly routed through the native pipeline). */
+    nativeToolCall?: ParsedToolCall;
+    /** Whether the native tool call failed server-side (tool_result contained error). */
+    nativeToolCallFailed?: boolean;
 }
 
 const DEFAULT_INTERNAL_TOOLS: ToolName[] = ['proton_info'];
 const DEFAULT_EXTERNAL_TOOLS: ToolName[] = ['web_search', 'weather', 'stock', 'cryptocurrency'];
+const KNOWN_NATIVE_TOOLS = new Set<string>([...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]);
 const DEFAULT_ENDPOINT = 'ai/v1/chat';
+
+/** A confused tool call is a custom tool Lumo mistakenly routed through its native SSE pipeline. */
+function isConfusedToolCall(toolCall: ParsedToolCall | undefined): boolean {
+    return !!toolCall && !KNOWN_NATIVE_TOOLS.has(toolCall.name);
+}
+
+/** Build the bounce instruction: config text + the confused tool call as JSON example. */
+function buildBounceInstruction(toolCall: ParsedToolCall): string {
+    const instruction = getInstructionsConfig().forToolBounce;
+    const toolCallJson = JSON.stringify({ name: toolCall.name, arguments: toolCall.arguments }, null, 2);
+    return `${instruction}\n${toolCallJson}`;
+}
 
 export class LumoClient {
     constructor(
@@ -81,13 +104,21 @@ export class LumoClient {
             enableEncryption: boolean;
             requestKey?: AesGcmCryptoKey;
             requestId?: RequestId;
-        }
+        },
     ): Promise<ChatResult> {
         const reader = stream.getReader();
         const decoder = new TextDecoder('utf-8');
         const processor = new StreamProcessor();
         let fullResponse = '';
         let fullTitle = '';
+
+        // Native tool call tracking (SSE tool_call/tool_result targets)
+        const toolCallTracker = new JsonBraceTracker();
+        const toolResultTracker = new JsonBraceTracker();
+        let firstNativeToolCall: ParsedToolCall | null = null;
+        let nativeToolCallFailed = false;
+        // Suppress onChunk when a confused tool call is detected mid-stream
+        let suppressChunks = false;
 
         const processMessage = async (msg: GenerationToFrontendMessage) => {
             if (msg.type === 'token_data') {
@@ -115,10 +146,30 @@ export class LumoClient {
 
                 if (msg.target === 'message') {
                     fullResponse += content;
-                    onChunk?.(content);
+                    if (!suppressChunks) {
+                        onChunk?.(content);
+                    }
                 } else if (msg.target === 'title') {
                     // Accumulate title chunks (title streams before message)
                     fullTitle += content;
+                } else if (msg.target === 'tool_call') {
+                    for (const json of toolCallTracker.feed(content)) {
+                        logger.debug({ raw: json }, 'Native SSE tool_call');
+                        if (!firstNativeToolCall) {
+                            firstNativeToolCall = parseNativeToolCallJson(json);
+                            if (firstNativeToolCall && isConfusedToolCall(firstNativeToolCall)) {
+                                suppressChunks = true;
+                                logger.debug({ name: firstNativeToolCall.name }, 'Confused tool call detected, suppressing chunks');
+                            }
+                        }
+                    }
+                } else if (msg.target === 'tool_result') {
+                    for (const json of toolResultTracker.feed(content)) {
+                        logger.debug({ raw: json }, 'Native SSE tool_result');
+                        if (firstNativeToolCall && !nativeToolCallFailed && isErrorResult(json)) {
+                            nativeToolCallFailed = true;
+                        }
+                    }
                 }
             } else if (
                 msg.type === 'error' ||
@@ -150,9 +201,15 @@ export class LumoClient {
                 await processMessage(msg);
             }
 
+            if (firstNativeToolCall) {
+                logger.debug({ toolCall: firstNativeToolCall, failed: nativeToolCallFailed }, 'Lumo native tool call');
+            }
+
             return {
                 response: fullResponse,
                 title: fullTitle || undefined,
+                nativeToolCall: firstNativeToolCall ?? undefined,
+                nativeToolCallFailed: firstNativeToolCall ? nativeToolCallFailed : undefined,
             };
         } finally {
             reader.releaseLock();
@@ -167,7 +224,9 @@ export class LumoClient {
     async chatWithHistory(
         turns: Turn[],
         onChunk?: (content: string) => void,
-        options: LumoClientOptions = {}
+        options: LumoClientOptions = {},
+        /** Internal: prevents infinite bounce loops. Do not set externally. */
+        isBounce = false,
     ): Promise<ChatResult> {
         const {
             enableExternalTools = false,
@@ -184,7 +243,7 @@ export class LumoClient {
             logger.info(`[${turn.role}] ${turn.content && turn.content.length > 200
                 ? turn.content.substring(0, 200) + '...'
                 : turn.content
-            } `);
+                } `);
         }
 
         // NOTE: commands and command results will be present in turns
@@ -261,6 +320,20 @@ export class LumoClient {
             if (result.title) {
                 logger.debug({ title: result.title }, 'Generated title');
             }
+        }
+
+        // Bounce confused tool calls: ask Lumo to re-output as JSON text
+        if (!isBounce && isConfusedToolCall(result.nativeToolCall)) {
+            const bounceInstruction = buildBounceInstruction(result.nativeToolCall!);
+            logger.info({ name: result.nativeToolCall!.name }, 'Bouncing confused tool call');
+
+            const bounceTurns: Turn[] = [
+                ...turns,
+                { role: 'assistant', content: result.response },
+                { role: 'user', content: bounceInstruction },
+            ];
+
+            return this.chatWithHistory(bounceTurns, onChunk, options, true);
         }
 
         return result;

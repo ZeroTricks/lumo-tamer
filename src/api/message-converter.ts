@@ -148,18 +148,30 @@ export function convertResponseInputToTurns(
     return [{ role: 'user', content }];
   }
 
-  // Array of messages - filter out function_call_output items
-  const messages = input.filter((item): item is { role: string; content: string } => {
-    if (typeof item !== 'object') return false;
-    if ('type' in item && item.type === 'function_call_output') return false;
-    return 'role' in item && 'content' in item;
-  });
-
-  // Convert to ChatMessage format
-  const chatMessages: ChatMessage[] = messages.map(m => ({
-    role: m.role as 'user' | 'assistant' | 'system',
-    content: m.content,
-  }));
+  // Array of messages -> ChatMessage[]
+  // - function_call -> assistant turn with tool call JSON
+  // - function_call_output -> filtered out (appended separately by handler)
+  // - regular messages -> passed through
+  const chatMessages: ChatMessage[] = [];
+  for (const item of input) {
+    if (typeof item !== 'object') continue;
+    const itemType = 'type' in item ? (item as { type: string }).type : undefined;
+    if (itemType === 'function_call_output') continue;
+    if (itemType === 'function_call') {
+      const fc = item as unknown as { name: string; arguments: string };
+      chatMessages.push({
+        role: 'assistant',
+        content: JSON.stringify({ name: fc.name, arguments: JSON.parse(fc.arguments || '{}') }),
+      });
+      continue;
+    }
+    if ('role' in item && 'content' in item) {
+      chatMessages.push({
+        role: (item as { role: string }).role as 'user' | 'assistant' | 'system',
+        content: (item as { content: string }).content,
+      });
+    }
+  }
 
   // If request instructions provided and no system message exists, add one
   if (requestInstructions && !chatMessages.some(m => m.role === 'system')) {

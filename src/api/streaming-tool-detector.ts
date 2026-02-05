@@ -7,9 +7,11 @@
  * - Raw JSON format: {"name":"...", "arguments":{...}}
  *
  * Buffers tool JSON and emits it separately from normal text.
+ * Raw JSON brace tracking is delegated to JsonBraceTracker.
  */
 
 import { isToolCallJson, type ParsedToolCall } from './tool-parser.js';
+import { JsonBraceTracker } from './json-brace-tracker.js';
 import { logger } from '../app/logger.js';
 
 type DetectorState = 'normal' | 'in_code_fence' | 'in_raw_json';
@@ -28,12 +30,8 @@ export interface ProcessResult {
 export class StreamingToolDetector {
   private state: DetectorState = 'normal';
   private buffer = '';
-  private braceDepth = 0;
   private pendingText = '';
-  // Persistent string-tracking state for processRawJsonState.
-  // Survives chunk boundaries so braces inside JSON strings are ignored.
-  private inString = false;
-  private escaped = false;
+  private jsonTracker = new JsonBraceTracker();
 
   // Patterns for detection
   private static readonly CODE_FENCE_START = /```(?:json)?\s*$/;
@@ -119,10 +117,7 @@ export class StreamingToolDetector {
       }
       this.pendingText = this.pendingText.slice(startIdx);
       this.state = 'in_raw_json';
-      this.buffer = '';
-      this.braceDepth = 0;
-      this.inString = false;
-      this.escaped = false;
+      this.jsonTracker.reset();
       return;
     }
 
@@ -145,99 +140,77 @@ export class StreamingToolDetector {
    * Process code fence state - accumulate until closing ```.
    */
   private processCodeFenceState(result: ProcessResult): void {
+    // First check pendingText for closing fence
     const endMatch = this.pendingText.match(/```/);
     if (endMatch && endMatch.index !== undefined) {
 
       logger.debug(`Code block ending found: ${this.showSnippet(endMatch.index)}`);
 
-      // Found closing fence
+      // Found closing fence in pendingText
       this.buffer += this.pendingText.slice(0, endMatch.index);
       this.pendingText = this.pendingText.slice(endMatch.index + 3);
-      this.state = 'normal';
-
-      // fix fenceMatch matching ``` before ```json
-      // NOTE: can this be done in processNormalState()?
-       this.buffer = this.buffer.replace(/^json/, "");
-
-      // Try to parse as tool call
-      const toolCall = this.tryParseToolCall(this.buffer.trim());
-      if (toolCall) {
-        result.completedToolCalls.push(toolCall);
-      } else {
-        // Not a valid tool call, emit as text with code fence formatting
-        result.textToEmit += '```\n' + this.buffer + '```';
-      }
-      this.buffer = '';
-    } else {
-      // No closing fence yet, buffer everything
-      this.buffer += this.pendingText;
-      this.pendingText = '';
+      this.completeCodeFence(result);
+      return;
     }
+
+    // No closing fence in pendingText - buffer it and check if buffer now ends with ```
+    this.buffer += this.pendingText;
+    this.pendingText = '';
+
+    if (this.buffer.endsWith('```')) {
+      logger.debug('Code block ending found at end of buffer');
+      this.buffer = this.buffer.slice(0, -3);
+      this.completeCodeFence(result);
+    }
+  }
+
+  /** Complete a code fence: parse buffer as tool call or emit as text. */
+  private completeCodeFence(result: ProcessResult): void {
+    this.state = 'normal';
+
+    // fix fenceMatch matching ``` before ```json
+    this.buffer = this.buffer.replace(/^json/, '');
+
+    // Try to parse as tool call
+    const toolCall = this.tryParseToolCall(this.buffer.trim());
+    if (toolCall) {
+      result.completedToolCalls.push(toolCall);
+    } else {
+      // Not a valid tool call, emit as text with code fence formatting
+      result.textToEmit += '```\n' + this.buffer + '```';
+    }
+    this.buffer = '';
   }
 
 
 
   /**
-   * Process raw JSON state - track brace depth until balanced.
-   * Uses persistent inString/escaped state so braces inside JSON strings
-   * are correctly ignored across chunk boundaries.
-   *
-   * We don't use JSON.parse / partialParse (openai/_vendor/partial-json-parser)
-   * per chunk for performance and different concerns:
-   * - O(1) per char with zero allocations, vs JSON.parse on growing buffer O(n^2).
-   * - partialParse deals with isolated streams (no trailing normal text)
-   * - Good enough: this covers majority of cases, while Lumo should use code fences anyway
-   * - The finalize() fallback uses JSON.parse once at end-of-stream as a safety net.
+   * Process raw JSON state - delegates to JsonBraceTracker for brace-depth
+   * tracking with proper string/escape handling across chunk boundaries.
    */
   private processRawJsonState(result: ProcessResult): void {
-    for (let i = 0; i < this.pendingText.length; i++) {
-      const char = this.pendingText[i];
-      this.buffer += char;
+    const { results: completedJsons, remainder } = this.jsonTracker.feedWithRemainder(this.pendingText);
 
-      if (this.inString) {
-        if (this.escaped) {
-          // Previous char was \, this char is escaped - skip it
-          this.escaped = false;
-        } else if (char === '\\') {
-          this.escaped = true;
-        } else if (char === '"') {
-          this.inString = false;
-        }
-        // While in string, don't count braces
-        continue;
-      }
-
-      // Not in a string
-      if (char === '"') {
-        this.inString = true;
-        this.escaped = false;
-      } else if (char === '{') {
-        this.braceDepth++;
-      } else if (char === '}') {
-        this.braceDepth--;
-        if (this.braceDepth === 0) {
-          logger.debug(`Raw JSON ending found: ${this.showSnippet(i)}`);
-
-          // JSON is complete
-          this.pendingText = this.pendingText.slice(i + 1);
-          this.state = 'normal';
-
-          // Try to parse as tool call
-          const toolCall = this.tryParseToolCall(this.buffer.trim());
-          if (toolCall) {
-            result.completedToolCalls.push(toolCall);
-          } else {
-            // Not a valid tool call, emit as text
-            result.textToEmit += this.buffer;
-          }
-          this.buffer = '';
-          return;
+    if (completedJsons.length > 0) {
+      // At least one JSON object completed
+      for (const json of completedJsons) {
+        logger.debug('Raw JSON ending found');
+        const toolCall = this.tryParseToolCall(json.trim());
+        if (toolCall) {
+          result.completedToolCalls.push(toolCall);
+        } else {
+          // Not a valid tool call, emit as text
+          result.textToEmit += json;
         }
       }
+
+      // Remainder goes back to pendingText for normal-state processing
+      this.pendingText = remainder;
+      this.state = 'normal';
+    } else {
+      // No complete object yet, need more data
+      this.pendingText = '';
     }
-
-    // Consumed all pending text, need more data
-    this.pendingText = '';
   }
 
   /**
@@ -274,25 +247,31 @@ export class StreamingToolDetector {
     }
 
     // If we were in the middle of parsing, try to salvage before emitting as text
-    if (this.state !== 'normal' && this.buffer) {
-      // End-of-stream fallback: try JSON.parse on the complete buffer.
-      // Catches edge cases where char-by-char tracking failed but JSON is actually complete.
-      if (this.state === 'in_raw_json') {
-        const toolCall = this.tryParseToolCall(this.buffer.trim());
-        if (toolCall) {
-          result.completedToolCalls.push(toolCall);
-          this.buffer = '';
-          this.state = 'normal';
-          return result;
+    if (this.state !== 'normal') {
+      const trackerBuffer = this.state === 'in_raw_json' ? this.jsonTracker.getBuffer() : this.buffer;
+
+      if (trackerBuffer) {
+        // End-of-stream fallback: try JSON.parse on the complete buffer.
+        // Catches edge cases where char-by-char tracking failed but JSON is actually complete.
+        if (this.state === 'in_raw_json') {
+          const toolCall = this.tryParseToolCall(trackerBuffer.trim());
+          if (toolCall) {
+            result.completedToolCalls.push(toolCall);
+            this.jsonTracker.reset();
+            this.state = 'normal';
+            return result;
+          }
+        }
+
+        if (this.state === 'in_code_fence') {
+          result.textToEmit += '```\n' + trackerBuffer;
+        } else {
+          result.textToEmit += trackerBuffer;
         }
       }
 
-      if (this.state === 'in_code_fence') {
-        result.textToEmit += '```\n' + this.buffer;
-      } else {
-        result.textToEmit += this.buffer;
-      }
       this.buffer = '';
+      this.jsonTracker.reset();
     }
 
     this.state = 'normal';

@@ -47,7 +47,7 @@ test:
   mock:
     # Enable mock mode: bypass authentication, return simulated Lumo responses
     enabled: false
-    # Scenario: success, error, timeout, rejected, toolCall, weeklyLimit
+    # Scenario: success, error, timeout, rejected, toolCall, confusedToolCall, weeklyLimit
     scenario: "success"
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
@@ -155,11 +155,16 @@ server:
 
     # Description text for tools (prepended to stringified tools JSON if tools.enabled and tools are provided in the request)
     forTools: |
-      Use the tools below to accomplish tasks.
-      To call them you MUST output the JSON to the user, unlike your existing tools like proton_info or web search.
+      The tools listed below are custom tools. Unlike your built-in tools (proton_info, web_search, etc.),
+      custom tools MUST be called by outputting JSON text to the user.
       You have the power to execute these functions by providing the JSON directly to the user, without trying to call them yourself. The user will execute these functions and return the results to you. This is crucial. Do NOT tell a tool is unavailable, instead just output the JSON for the tool call.
 
-      Available tools:
+      Available custom tools:
+
+    # Bounce instruction sent when Lumo routes a custom tool through its native tool pipeline.
+    # The actual tool call JSON is appended at runtime.
+    forToolBounce: |
+      You tried to call a custom tool using your built-in tool system, but custom tools must be called by outputting JSON text. Please output the tool call as JSON, like this:
 
 
 # CLI Configuration

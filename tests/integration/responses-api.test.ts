@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestServer, parseSSEEvents, type TestServer } from '../helpers/test-server.js';
+import { getToolsConfig } from '../../src/app/config.js';
 
 /** POST /v1/responses with JSON body, returning the raw Response. */
 function postResponses(ts: TestServer, body: Record<string, unknown>): Promise<Response> {
@@ -127,6 +128,56 @@ describe('/v1/responses', () => {
 
       expect(doneEvent).toBeDefined();
       expect((doneEvent!.data as any).text.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('confusedToolCall scenario (bounce)', () => {
+    let ts: TestServer;
+    const dummyTools = [{ type: 'function', function: { name: 'GetLiveContext', parameters: {} } }];
+
+    beforeAll(async () => {
+      ts = await createTestServer('confusedToolCall');
+      // Enable custom tool detection so the bounce response JSON is parsed
+      (getToolsConfig() as any).enabled = true;
+    });
+    afterAll(async () => {
+      (getToolsConfig() as any).enabled = false;
+      await ts.close();
+    });
+
+    it('non-streaming: bounces confused call and returns function_call from text detection', async () => {
+      const res = await postResponses(ts, { input: 'Hello', stream: false, tools: dummyTools });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.status).toBe('completed');
+
+      // Should have a function_call output item for GetLiveContext (detected from bounce response text)
+      const functionCall = body.output.find((o: any) => o.type === 'function_call');
+      expect(functionCall).toBeDefined();
+      expect(functionCall.name).toBe('GetLiveContext');
+      expect(functionCall.status).toBe('completed');
+    });
+
+    it('streaming: bounces confused call and emits function_call events', async () => {
+      const res = await postResponses(ts, { input: 'Hello', stream: true, tools: dummyTools });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      const events = parseSSEEvents(text);
+
+      // Should have function_call output item added event (from bounce response text detection)
+      const functionCallAdded = events.find(e => {
+        const data = e.data as any;
+        return data?.type === 'response.output_item.added' && data?.item?.type === 'function_call';
+      });
+      expect(functionCallAdded).toBeDefined();
+      expect((functionCallAdded!.data as any).item.name).toBe('GetLiveContext');
+
+      // response.completed should be present
+      const completed = events.find(e => (e.data as any)?.type === 'response.completed');
+      expect(completed).toBeDefined();
     });
   });
 
