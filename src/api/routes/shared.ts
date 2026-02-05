@@ -120,6 +120,33 @@ export function generateChatCompletionId(): string {
   return `chatcmpl-${randomUUID()}`;
 }
 
+// ── Confused tool call rescue ─────────────────────────────────────
+
+/**
+ * Merge a "confused" tool call into existing tool calls.
+ *
+ * A confused tool call is a custom (client-defined) tool that Lumo mistakenly
+ * routed through its native SSE pipeline instead of outputting as text.
+ * It always fails server-side, so we rescue it into OpenAI-compatible format.
+ *
+ * Deduplicates by name: if a text-detected tool call with the same name already
+ * exists, the confused call is skipped.
+ */
+export function mergeConfusedToolCall(
+  nativeToolCall: ParsedToolCall | undefined,
+  existingToolCalls: ProcessedToolCall[]
+): ProcessedToolCall[] {
+  if (!nativeToolCall) return existingToolCalls;
+  const alreadyPresent = existingToolCalls.some(tc => tc.name === nativeToolCall.name);
+  if (alreadyPresent) return existingToolCalls;
+
+  logger.debug({ name: nativeToolCall.name }, '[Server] Rescuing confused tool call');
+  return [
+    ...existingToolCalls,
+    { name: nativeToolCall.name, arguments: JSON.stringify(nativeToolCall.arguments) },
+  ];
+}
+
 // ── Streaming tool processor ───────────────────────────────────────
 
 export interface StreamingToolEmitter {
@@ -136,6 +163,8 @@ export interface StreamingToolProcessor {
   finalize(): void;
   /** All tool calls emitted during streaming. */
   toolCallsEmitted: OpenAIToolCall[];
+  /** Suppress text deltas (called when native tool call failed internally). */
+  setSuppressText(): void;
 }
 
 /**
@@ -150,6 +179,7 @@ export function createStreamingToolProcessor(
 ): StreamingToolProcessor {
   const detector = hasCustomTools ? new StreamingToolDetector() : null;
   const toolCallsEmitted: OpenAIToolCall[] = [];
+  let suppressText = false;
 
   function processToolCalls(completedToolCalls: ParsedToolCall[]): void {
     for (const tc of completedToolCalls) {
@@ -166,19 +196,22 @@ export function createStreamingToolProcessor(
 
   return {
     toolCallsEmitted,
+    setSuppressText(): void {
+      suppressText = true;
+    },
     onChunk(chunk: string): void {
       if (detector) {
         const { textToEmit, completedToolCalls } = detector.processChunk(chunk);
-        if (textToEmit) emitter.emitTextDelta(textToEmit);
+        if (textToEmit && !suppressText) emitter.emitTextDelta(textToEmit);
         processToolCalls(completedToolCalls);
       } else {
-        emitter.emitTextDelta(chunk);
+        if (!suppressText) emitter.emitTextDelta(chunk);
       }
     },
     finalize(): void {
       if (detector) {
         const { textToEmit, completedToolCalls } = detector.finalize();
-        if (textToEmit) emitter.emitTextDelta(textToEmit);
+        if (textToEmit && !suppressText) emitter.emitTextDelta(textToEmit);
         processToolCalls(completedToolCalls);
       }
     },

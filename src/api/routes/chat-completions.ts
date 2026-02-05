@@ -11,6 +11,7 @@ import {
   persistTitle,
   persistResponse,
   extractToolsFromResponse,
+  mergeConfusedToolCall,
   generateCallId,
   generateChatCompletionId,
   createStreamingToolProcessor,
@@ -242,13 +243,32 @@ async function handleStreamingRequest(
           enableExternalTools: ctx.enableExternalTools,
           commandContext: ctx.commandContext,
           requestTitle: ctx.requestTitle,
+          onNativeToolCallFailed: () => processor.setSuppressText(),
         }
       );
       logger.debug('[Server] Stream completed');
 
       processor.finalize();
       persistTitle(result, deps, conversationId);
-      persistResponse(deps, conversationId, result.response);
+
+      // Rescue confused tool call if not already detected via text-based detection
+      if (result.nativeToolCall && result.nativeToolCallFailed) {
+        const alreadyEmitted = processor.toolCallsEmitted.some(
+          tc => tc.function.name === result.nativeToolCall!.name
+        );
+        if (!alreadyEmitted) {
+          const callId = generateCallId();
+          processor.toolCallsEmitted.push({
+            id: callId,
+            type: 'function',
+            function: { name: result.nativeToolCall.name, arguments: JSON.stringify(result.nativeToolCall.arguments) },
+          });
+          emitToolCallDelta(toolCallIndex++, callId, result.nativeToolCall.name, result.nativeToolCall.arguments);
+          logger.debug({ name: result.nativeToolCall.name }, '[Server] Confused tool call rescued (streaming)');
+        }
+      }
+
+      persistResponse(deps, conversationId, result.nativeToolCallFailed ? '' : result.response);
 
       // Send final chunk with finish_reason
       const finalChunk: OpenAIStreamChunk = {
@@ -300,7 +320,14 @@ async function handleNonStreamingRequest(
   );
 
   persistTitle(chatResult, deps, conversationId);
-  const { content, toolCalls: processedTools } = extractToolsFromResponse(chatResult.response, ctx.hasCustomTools);
+  let { content, toolCalls: processedTools } = extractToolsFromResponse(chatResult.response, ctx.hasCustomTools);
+
+  // Rescue confused tool call: custom tool that Lumo routed through native pipeline
+  if (chatResult.nativeToolCallFailed) {
+    processedTools = mergeConfusedToolCall(chatResult.nativeToolCall, processedTools);
+    content = '';
+  }
+
   persistResponse(deps, conversationId, content);
 
   // Convert to OpenAI format with call IDs

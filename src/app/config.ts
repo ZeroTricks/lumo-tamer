@@ -189,7 +189,7 @@ export const authConfig = ((): z.infer<typeof authConfigSchema> => {
 // Mock config (eagerly loaded, needed before initConfig to decide auth vs mock)
 const mockConfigSchema = z.object({
   enabled: z.boolean(),
-  scenario: z.enum(['success', 'error', 'timeout', 'rejected', 'toolCall', 'weeklyLimit']),
+  scenario: z.enum(['success', 'error', 'timeout', 'rejected', 'toolCall', 'confusedToolCall', 'weeklyLimit']),
 });
 
 export const mockConfig = ((): z.infer<typeof mockConfigSchema> => {

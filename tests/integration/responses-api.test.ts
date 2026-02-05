@@ -5,8 +5,9 @@
  * formatting without hitting any real API.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { createTestServer, parseSSEEvents, type TestServer } from '../helpers/test-server.js';
+import { resetCallCounts } from '../../src/mock/mock-api.js';
 
 /** POST /v1/responses with JSON body, returning the raw Response. */
 function postResponses(ts: TestServer, body: Record<string, unknown>): Promise<Response> {
@@ -127,6 +128,61 @@ describe('/v1/responses', () => {
 
       expect(doneEvent).toBeDefined();
       expect((doneEvent!.data as any).text.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('confusedToolCall scenario', () => {
+    let ts: TestServer;
+
+    beforeAll(async () => {
+      ts = await createTestServer('confusedToolCall');
+    });
+    afterAll(async () => { await ts.close(); });
+    beforeEach(() => { resetCallCounts(); });
+
+    it('non-streaming: returns function_call output item with suppressed text', async () => {
+      const res = await postResponses(ts, { input: 'Hello', stream: false });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.status).toBe('completed');
+
+      // Should have a function_call output item for GetLiveContext
+      const functionCall = body.output.find((o: any) => o.type === 'function_call');
+      expect(functionCall).toBeDefined();
+      expect(functionCall.name).toBe('GetLiveContext');
+      expect(functionCall.status).toBe('completed');
+
+      // Message text should be suppressed (empty)
+      const messageItem = body.output.find((o: any) => o.type === 'message');
+      expect(messageItem).toBeDefined();
+      expect(messageItem.content[0].text).toBe('');
+    });
+
+    it('streaming: emits function_call events and suppresses text', async () => {
+      const res = await postResponses(ts, { input: 'Hello', stream: true });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      const events = parseSSEEvents(text);
+
+      // Should have function_call output item added event
+      const functionCallAdded = events.find(e => {
+        const data = e.data as any;
+        return data?.type === 'response.output_item.added' && data?.item?.type === 'function_call';
+      });
+      expect(functionCallAdded).toBeDefined();
+      expect((functionCallAdded!.data as any).item.name).toBe('GetLiveContext');
+
+      // The output_text.done should have empty/suppressed text
+      const textDone = events.find(e => (e.data as any)?.type === 'response.output_text.done');
+      expect(textDone).toBeDefined();
+      expect((textDone!.data as any).text).toBe('');
+
+      // response.completed should be present
+      const completed = events.find(e => (e.data as any)?.type === 'response.completed');
+      expect(completed).toBeDefined();
     });
   });
 

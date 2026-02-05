@@ -24,6 +24,9 @@ import type {
 } from './types.js';
 import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
 import { getCommandsConfig, getLogConfig } from '../app/config.js';
+import { JsonBraceTracker } from '../api/json-brace-tracker.js';
+import { parseNativeToolCallJson, isErrorResult } from '../api/native-tool-parser.js';
+import type { ParsedToolCall } from '../api/tool-parser.js';
 
 export interface LumoClientOptions {
     enableExternalTools?: boolean;
@@ -31,6 +34,8 @@ export interface LumoClientOptions {
     endpoint?: string;
     commandContext?: CommandContext;
     requestTitle?: boolean;
+    /** Fires when a native tool call failed internally (before message text arrives) */
+    onNativeToolCallFailed?: () => void;
 }
 
 /**
@@ -39,6 +44,14 @@ export interface LumoClientOptions {
 export interface ChatResult {
     response: string;
     title?: string;
+    /** First valid native tool call from SSE tool_call target, if any.
+     *  "Native" here means Lumo-native SSE pipeline - this includes both legitimate
+     *  native calls (e.g. web_search) and "confused" calls (custom tools Lumo
+     *  mistakenly routed through the native pipeline). */
+    nativeToolCall?: ParsedToolCall;
+    /** Whether the native tool call failed server-side (tool_result contained error).
+     *  When true, this is a "confused" tool call that needs rescuing. */
+    nativeToolCallFailed?: boolean;
 }
 
 const DEFAULT_INTERNAL_TOOLS: ToolName[] = ['proton_info'];
@@ -81,13 +94,20 @@ export class LumoClient {
             enableEncryption: boolean;
             requestKey?: AesGcmCryptoKey;
             requestId?: RequestId;
-        }
+        },
+        onNativeToolCallFailed?: () => void,
     ): Promise<ChatResult> {
         const reader = stream.getReader();
         const decoder = new TextDecoder('utf-8');
         const processor = new StreamProcessor();
         let fullResponse = '';
         let fullTitle = '';
+
+        // Native tool call tracking (SSE tool_call/tool_result targets)
+        const toolCallTracker = new JsonBraceTracker();
+        const toolResultTracker = new JsonBraceTracker();
+        let firstNativeToolCall: ParsedToolCall | null = null;
+        let nativeToolCallFailed = false;
 
         const processMessage = async (msg: GenerationToFrontendMessage) => {
             if (msg.type === 'token_data') {
@@ -119,6 +139,21 @@ export class LumoClient {
                 } else if (msg.target === 'title') {
                     // Accumulate title chunks (title streams before message)
                     fullTitle += content;
+                } else if (msg.target === 'tool_call') {
+                    for (const json of toolCallTracker.feed(content)) {
+                        logger.debug({ raw: json }, 'Native SSE tool_call');
+                        if (!firstNativeToolCall) {
+                            firstNativeToolCall = parseNativeToolCallJson(json);
+                        }
+                    }
+                } else if (msg.target === 'tool_result') {
+                    for (const json of toolResultTracker.feed(content)) {
+                        logger.debug({ raw: json }, 'Native SSE tool_result');
+                        if (firstNativeToolCall && !nativeToolCallFailed && isErrorResult(json)) {
+                            nativeToolCallFailed = true;
+                            onNativeToolCallFailed?.();
+                        }
+                    }
                 }
             } else if (
                 msg.type === 'error' ||
@@ -150,9 +185,15 @@ export class LumoClient {
                 await processMessage(msg);
             }
 
+            if (firstNativeToolCall) {
+                logger.debug({ toolCall: firstNativeToolCall, failed: nativeToolCallFailed }, 'Lumo native tool call');
+            }
+
             return {
                 response: fullResponse,
                 title: fullTitle || undefined,
+                nativeToolCall: firstNativeToolCall ?? undefined,
+                nativeToolCallFailed: firstNativeToolCall ? nativeToolCallFailed : undefined,
             };
         } finally {
             reader.releaseLock();
@@ -175,6 +216,7 @@ export class LumoClient {
             endpoint = DEFAULT_ENDPOINT,
             commandContext,
             requestTitle = false,
+            onNativeToolCallFailed,
         } = options;
 
         const turn = turns[turns.length - 1];
@@ -184,7 +226,7 @@ export class LumoClient {
             logger.info(`[${turn.role}] ${turn.content && turn.content.length > 200
                 ? turn.content.substring(0, 200) + '...'
                 : turn.content
-            } `);
+                } `);
         }
 
         // NOTE: commands and command results will be present in turns
@@ -249,7 +291,7 @@ export class LumoClient {
             enableEncryption,
             requestKey,
             requestId,
-        });
+        }, onNativeToolCallFailed);
 
         // Log response
         const responsePreview = result.response.length > 200

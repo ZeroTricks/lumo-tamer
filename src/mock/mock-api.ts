@@ -17,18 +17,21 @@
 import type { ProtonApi, ProtonApiOptions } from '../lumo-client/types.js';
 import type { MockConfig } from '../app/config.js';
 import { logger } from '../app/logger.js';
+import { customScenarios, resetCallCounts } from './custom-scenarios.js';
+export { resetCallCounts };
 
 type Scenario = MockConfig['scenario'];
+export type ScenarioGenerator = (options: ProtonApiOptions) => AsyncGenerator<string>;
 
 const formatSSEMessage = (data: unknown) => `data: ${JSON.stringify(data)}\n\n`;
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function createStream(generator: () => AsyncGenerator<string>): ReadableStream<Uint8Array> {
+function createStream(generator: ScenarioGenerator, options: ProtonApiOptions): ReadableStream<Uint8Array> {
     const encoder = new TextEncoder();
     return new ReadableStream({
         async start(controller) {
             try {
-                for await (const chunk of generator()) {
+                for await (const chunk of generator(options)) {
                     controller.enqueue(encoder.encode(chunk));
                 }
                 controller.close();
@@ -39,8 +42,8 @@ function createStream(generator: () => AsyncGenerator<string>): ReadableStream<U
     });
 }
 
-// Scenario generators (from Proton WebClients handlers.ts)
-const scenarios: Record<Exclude<Scenario, 'weeklyLimit'>, () => AsyncGenerator<string>> = {
+// Upstream scenario generators (adapted from Proton WebClients handlers.ts)
+const upstreamScenarios: Record<string, ScenarioGenerator> = {
     success: async function* () {
         yield formatSSEMessage({ type: 'ingesting', target: 'message' });
         await delay(300);
@@ -112,10 +115,14 @@ const scenarios: Record<Exclude<Scenario, 'weeklyLimit'>, () => AsyncGenerator<s
     },
 };
 
+// Merged: upstream + custom scenarios
+const scenarios: Record<string, ScenarioGenerator> = { ...upstreamScenarios, ...customScenarios };
+
 /**
  * Create a mock ProtonApi function that returns simulated SSE streams
  */
 export function createMockProtonApi(scenario: Scenario): ProtonApi {
+    resetCallCounts();
     return async (options: ProtonApiOptions) => {
         logger.debug({ url: options.url, method: options.method, output: options.output }, 'Mock API request');
 
@@ -129,7 +136,7 @@ export function createMockProtonApi(scenario: Scenario): ProtonApi {
 
             const generator = scenarios[scenario];
             logger.debug({ scenario }, 'Mock API: returning SSE stream');
-            return createStream(generator);
+            return createStream(generator, options);
         }
 
         // Non-stream requests: return generic Proton success
