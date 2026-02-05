@@ -5,9 +5,8 @@
  * formatting without hitting any real API.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestServer, parseSSEEvents, type TestServer } from '../helpers/test-server.js';
-import { resetCallCounts } from '../../src/mock/mock-api.js';
 import { getToolsConfig } from '../../src/app/config.js';
 
 /** POST /v1/responses with JSON body, returning the raw Response. */
@@ -145,7 +144,6 @@ describe('/v1/responses', () => {
       (getToolsConfig() as any).enabled = false;
       await ts.close();
     });
-    beforeEach(() => { resetCallCounts(); });
 
     it('non-streaming: bounces confused call and returns function_call from text detection', async () => {
       const res = await postResponses(ts, { input: 'Hello', stream: false, tools: dummyTools });

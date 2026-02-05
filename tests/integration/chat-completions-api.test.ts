@@ -2,9 +2,8 @@
  * Integration tests for /v1/chat/completions endpoint
  */
 
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestServer, parseSSEEvents, type TestServer } from '../helpers/test-server.js';
-import { resetCallCounts } from '../../src/mock/mock-api.js';
 import { getToolsConfig } from '../../src/app/config.js';
 
 /** POST /v1/chat/completions with JSON body, returning the raw Response. */
@@ -138,7 +137,6 @@ describe('/v1/chat/completions', () => {
       (getToolsConfig() as any).enabled = false;
       await nativeTs.close();
     });
-    beforeEach(() => { resetCallCounts(); });
 
     it('non-streaming: bounces confused call and returns tool_calls from text detection', async () => {
       const res = await postChat(nativeTs, {

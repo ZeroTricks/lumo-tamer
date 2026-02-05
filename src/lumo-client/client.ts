@@ -61,11 +61,11 @@ function isConfusedToolCall(toolCall: ParsedToolCall | undefined): boolean {
     return !!toolCall && !KNOWN_NATIVE_TOOLS.has(toolCall.name);
 }
 
-/** Build the bounce instruction from config template, substituting the confused tool call as example. */
+/** Build the bounce instruction: config text + the confused tool call as JSON example. */
 function buildBounceInstruction(toolCall: ParsedToolCall): string {
-    const template = getInstructionsConfig().forConfusedToolBounce;
+    const instruction = getInstructionsConfig().forConfusedToolBounce;
     const toolCallJson = JSON.stringify({ name: toolCall.name, arguments: toolCall.arguments }, null, 2);
-    return template.replace('{toolCall}', toolCallJson);
+    return `${instruction}\n${toolCallJson}`;
 }
 
 export class LumoClient {

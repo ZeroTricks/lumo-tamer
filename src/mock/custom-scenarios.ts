@@ -5,50 +5,44 @@
  * these are lumo-tamer-specific scenarios for features we built on top.
  */
 
+import type { Turn } from '../lumo-client/types.js';
+import type { ProtonApiOptions } from '../lumo-client/types.js';
 import type { ScenarioGenerator } from './mock-api.js';
+import { getInstructionsConfig } from '../app/config.js';
 
 const formatSSEMessage = (data: unknown) => `data: ${JSON.stringify(data)}\n\n`;
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Call counter per scenario name.
- * Useful for scenarios that need to vary behavior across consecutive calls.
- * Reset via resetCallCounts() when creating a new mock instance.
- */
-const callCounts = new Map<string, number>();
-
-export function resetCallCounts(): void {
-    callCounts.clear();
+/** Extract turns from the mock request payload (unencrypted only). */
+function getTurns(options: ProtonApiOptions): Turn[] {
+    return (options.data as any)?.Prompt?.turns ?? [];
 }
 
-function incrementCallCount(scenario: string): number {
-    const count = (callCounts.get(scenario) ?? 0) + 1;
-    callCounts.set(scenario, count);
-    return count;
+/** Find the last turn with a given role. */
+function lastTurnWithRole(turns: Turn[], role: Turn['role']): Turn | undefined {
+    for (let i = turns.length - 1; i >= 0; i--) {
+        if (turns[i].role === role) return turns[i];
+    }
 }
 
 export const customScenarios: Record<string, ScenarioGenerator> = {
-    confusedToolCall: async function* () {
+    confusedToolCall: async function* (options) {
         // Simulates a "confused" tool call: Lumo routes a custom (client-defined) tool
         // through its native pipeline instead of outputting it as text. Always fails server-side.
         // Based on real logs: concatenated retried tool calls, error results, then fallback text.
         //
-        // Call 1: confused native tool call (triggers bounce)
-        // Call 2: bounce response - JSON code fence (what Lumo should have done)
-        // Call 3+: normal text response (after client sends tool result back)
-        const callNum = incrementCallCount('confusedToolCall');
-        if (callNum > 2) {
-            // Normal response after tool result - prevents loop with clients like Home Assistant
-            yield formatSSEMessage({ type: 'ingesting', target: 'message' });
-            await delay(200);
-            const tokens = ['(Mocked) ', 'Tool ', 'result ', 'received, ', 'thanks!'];
-            for (let i = 0; i < tokens.length; i++) {
-                yield formatSSEMessage({ type: 'token_data', target: 'message', count: i, content: tokens[i] });
-            }
-            yield formatSSEMessage({ type: 'done' });
-            return;
-        }
-        if (callNum === 2) {
+        // Phase detection is turn-based:
+        //   Bounce:   last user turn contains the bounce instruction ("built-in tool system")
+        //   Follow-up: turns contain an assistant turn (multi-turn) or more than 1 turn
+        //   Confused:  everything else (simple first user message)
+
+        const turns = getTurns(options);
+        const lastUserTurn = lastTurnWithRole(turns, 'user');
+        const bounceText = getInstructionsConfig().forConfusedToolBounce;
+        const isBounce = !!lastUserTurn?.content?.includes(bounceText.trim());
+        const hasAssistantTurn = turns.some(t => t.role === 'assistant');
+
+        if (isBounce) {
             // Bounce response: output the tool call as JSON text (what Lumo should have done)
             yield formatSSEMessage({ type: 'ingesting', target: 'message' });
             await delay(200);
@@ -61,6 +55,21 @@ export const customScenarios: Record<string, ScenarioGenerator> = {
             return;
         }
 
+        if (hasAssistantTurn || turns.length > 1) {
+            // Follow-up: normal text response (tool result received, multi-turn, etc.)
+            // Include a snippet of the last user turn to show the tool result was "seen"
+            const snippet = lastUserTurn?.content?.slice(0, 150) ?? '';
+            yield formatSSEMessage({ type: 'ingesting', target: 'message' });
+            await delay(200);
+            const tokens = ['(Mocked) ', 'Got tool result: ', snippet];
+            for (let i = 0; i < tokens.length; i++) {
+                yield formatSSEMessage({ type: 'token_data', target: 'message', count: i, content: tokens[i] });
+            }
+            yield formatSSEMessage({ type: 'done' });
+            return;
+        }
+
+        // Initial call: confused native tool call
         yield formatSSEMessage({ type: 'ingesting', target: 'message' });
         await delay(200);
 
