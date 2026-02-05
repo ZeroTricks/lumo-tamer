@@ -63,7 +63,7 @@ function isConfusedToolCall(toolCall: ParsedToolCall | undefined): boolean {
 
 /** Build the bounce instruction: config text + the confused tool call as JSON example. */
 function buildBounceInstruction(toolCall: ParsedToolCall): string {
-    const instruction = getInstructionsConfig().forConfusedToolBounce;
+    const instruction = getInstructionsConfig().forToolBounce;
     const toolCallJson = JSON.stringify({ name: toolCall.name, arguments: toolCall.arguments }, null, 2);
     return `${instruction}\n${toolCallJson}`;
 }

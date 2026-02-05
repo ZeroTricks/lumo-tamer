@@ -38,7 +38,7 @@ export const customScenarios: Record<string, ScenarioGenerator> = {
 
         const turns = getTurns(options);
         const lastUserTurn = lastTurnWithRole(turns, 'user');
-        const bounceText = getInstructionsConfig().forConfusedToolBounce;
+        const bounceText = getInstructionsConfig().forToolBounce;
         const isBounce = !!lastUserTurn?.content?.includes(bounceText.trim());
         const hasAssistantTurn = turns.some(t => t.role === 'assistant');
 

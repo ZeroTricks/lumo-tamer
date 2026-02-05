@@ -163,7 +163,7 @@ server:
 
     # Bounce instruction sent when Lumo routes a custom tool through its native tool pipeline.
     # The actual tool call JSON is appended at runtime.
-    forConfusedToolBounce: |
+    forToolBounce: |
       You tried to call a custom tool using your built-in tool system, but custom tools must be called by outputting JSON text. Please output the tool call as JSON, like this:
 
 

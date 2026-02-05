@@ -203,7 +203,7 @@ Instead of silently converting the failed call, lumo-tamer bounces confused call
 
 1. **Detection**: `LumoClient.processStream()` tracks SSE `tool_call` targets. When a tool name is not in `KNOWN_NATIVE_TOOLS`, it's identified as confused.
 2. **Suppression**: `onChunk` stops firing immediately - the client suppresses Lumo's fallback text ("I don't have access...") internally.
-3. **Bounce**: `chatWithHistory()` appends the failed assistant response + a corrective user message (from `instructions.forConfusedToolBounce` config) to the conversation turns and makes a second call.
+3. **Bounce**: `chatWithHistory()` appends the failed assistant response + a corrective user message (from `instructions.forToolBounce` config) to the conversation turns and makes a second call.
 4. **Result**: Lumo re-outputs the tool call as JSON text in the bounce response. This flows through normal `StreamingToolDetector` / `tool-parser.ts` detection.
 
 API handlers are completely unaware of confused calls - the bounce happens inside `LumoClient`.
@@ -229,7 +229,7 @@ The bounce instruction template in `config.defaults.yaml`:
 
 ```yaml
 instructions:
-  forConfusedToolBounce: |
+  forToolBounce: |
     You tried to call a custom tool using your built-in tool system, but custom tools
     must be called by outputting JSON text. Please output the tool call as JSON, like this:
     {toolCall}
