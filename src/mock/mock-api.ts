@@ -136,25 +136,40 @@ const upstreamScenarios: Record<string, ScenarioGenerator> = {
 // Merged: upstream + custom scenarios
 const scenarios: Record<string, ScenarioGenerator> = { ...upstreamScenarios, ...customScenarios };
 
+// List of scenarios to cycle through (excludes 'cycle' itself)
+const cycleScenarioNames = Object.keys(scenarios);
+
+// Cycle state: tracks current index for the 'cycle' scenario
+let cycleIndex = 0;
+
 /**
  * Create a mock ProtonApi function that returns simulated SSE streams
  */
 export function createMockProtonApi(scenario: Scenario): ProtonApi {
     callCounts.clear();
+    cycleIndex = 0;
     return async (options: ProtonApiOptions) => {
         logger.debug({ url: options.url, method: options.method, output: options.output }, 'Mock API request');
 
         if (options.output === 'stream') {
-            if (scenario === 'weeklyLimit') {
+            // Resolve actual scenario (handle 'cycle' mode)
+            let activeScenario = scenario;
+            if (scenario === 'cycle') {
+                activeScenario = cycleScenarioNames[cycleIndex % cycleScenarioNames.length] as Scenario;
+                cycleIndex++;
+                logger.debug({ cycleIndex, activeScenario }, 'Mock API: cycle mode');
+            }
+
+            if (activeScenario === 'weeklyLimit') {
                 const error = new Error('Too many requests. Please try again later.');
                 (error as any).status = 429;
                 (error as any).Code = 2028;
                 throw error;
             }
 
-            const generator = scenarios[scenario];
-            logger.debug({ scenario }, 'Mock API: returning SSE stream');
-            return createStream(scenario, generator, options);
+            const generator = scenarios[activeScenario];
+            logger.debug({ scenario: activeScenario }, 'Mock API: returning SSE stream');
+            return createStream(activeScenario, generator, options);
         }
 
         // Non-stream requests: return generic Proton success

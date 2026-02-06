@@ -47,7 +47,7 @@ test:
   mock:
     # Enable mock mode: bypass authentication, return simulated Lumo responses
     enabled: false
-    # Scenario: success, error, timeout, rejected, toolCall, confusedToolCall, weeklyLimit
+    # Scenario: success, error, timeout, rejected, toolCall, confusedToolCall, weeklyLimit, cycle
     scenario: "success"
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
@@ -121,11 +121,23 @@ server:
     # Useful for removing or rewriting phrases that may confuse Lumo about tool calling.
     # Each entry: { pattern: "regex", replacement: "text" } - omit replacement to strip.
     replacePatterns:
-      - pattern: "use only native tool calling"
-      - pattern: "no text-based formats"
-      - pattern: "\\(no text-based formats[^)]*\\)"
+      - pattern: "(?<=(?:(?:native|custom|internal|external)\\s)?)(?=tool)"
+        replacement: "custom "
+
 
   instructions:
+
+    # Template for assembling instructions when tools are provided.
+    # Variables: {forTools}, {clientInstructions}, {toolsJson}
+    template: |
+      {forTools}
+      
+      {clientInstructions}
+      
+      Below are all the custom tools you can use. Remember, all tools prefixed with `user:` are custom tools and must be called by outputting the JSON to the user.
+      
+      {toolsJson}
+
     # Default instructions when no system/developer message is provided in the request
     default: |
       Always answer in plain text. Don't use tables, quote blocks, lists, etc. Be concise.
@@ -133,29 +145,25 @@ server:
     # Instructions prepended to tool definitions when tools are provided in the request.
     forTools: |
       === CUSTOM TOOL PROTOCOL ===
-      The tools below are CUSTOM tools, prefixed with "user:".
+      The tools below are CUSTOM tools, prefixed with `user:`.
 
       IMPORTANT: Custom tools are NOT part of your built-in tool system.
-      You MUST call them by outputting JSON text, like this:
-
+      You MUST call them by outputting JSON as text in a code block to the user, like this:
+      ```json
       {"name": "user:example_tool", "arguments": {"param": "value"}}
-
-      DO NOT try to call custom tools through your internal tool mechanism - it will fail with error:true.
-      DO NOT remove the "user:" prefix when calling these tools.
+      ```
+      DO NOT try to call custom tools through your internal tool mechanism, it will fail with error:true. If you receive such an error, don't try again with different arguments, but output the JSON as text to the user.
+      DO NOT remove the `user:` prefix when calling these tools.
 
       The user's system will execute them and return results.
       === END PROTOCOL ===
 
-      Available custom tools:
-
     # Bounce instruction sent when Lumo routes a custom tool through its native tool pipeline.
     # The actual tool call JSON is appended at runtime.
     forToolBounce: |
-      You tried to call a custom tool using your built-in tool system, but custom tools must be called by outputting JSON text. Please output the tool call as JSON, like this:
+      You tried to call a custom tool using your built-in tool system, but custom tools must be called by outputting JSON text within a code block. Please output the tool call as JSON, like this:
 
-    # Template for assembling instructions when tools are provided.
-    # Variables: {forTools}, {clientInstructions}, {toolsJson}
-    template: "{forTools}\n\n{clientInstructions}\n\n{toolsJson}"
+
 
 
 # CLI Configuration
