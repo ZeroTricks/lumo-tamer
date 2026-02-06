@@ -7,8 +7,14 @@
  * Ported from tests/code-block-detector.test.ts (ad-hoc harness)
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { initConfig } from '../../src/app/config.js';
 import { CodeBlockDetector, type CodeBlock } from '../../src/cli/code-block-detector.js';
+
+// CLI tests need CLI mode config
+beforeAll(() => {
+  initConfig('cli');
+});
 
 /** Feed chunks through detector and return accumulated text + blocks */
 function processAll(detector: CodeBlockDetector, chunks: string[]) {

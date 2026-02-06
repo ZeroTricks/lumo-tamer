@@ -12,7 +12,9 @@
 
 import { isToolCallJson, type ParsedToolCall } from './tool-parser.js';
 import { JsonBraceTracker } from './json-brace-tracker.js';
-import { logger } from '../app/logger.js';
+import { logger } from '../../app/logger.js';
+import { getCustomToolsConfig } from '../../app/config.js';
+import { stripToolPrefix } from './prefix.js';
 
 type DetectorState = 'normal' | 'in_code_fence' | 'in_raw_json';
 
@@ -215,13 +217,15 @@ export class StreamingToolDetector {
 
   /**
    * Try to parse content as a tool call JSON.
+   * Strips the configured prefix from the tool name.
    */
   private tryParseToolCall(content: string): ParsedToolCall | null {
     try {
       const parsed = JSON.parse(content);
       if (isToolCallJson(parsed)) {
+        const prefix = getCustomToolsConfig().prefix;
         return {
-          name: parsed.name,
+          name: stripToolPrefix(parsed.name, prefix),
           arguments: parsed.arguments as Record<string, unknown>,
         };
       }

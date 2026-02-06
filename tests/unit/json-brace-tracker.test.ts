@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { JsonBraceTracker } from '../../src/api/json-brace-tracker.js';
+import { JsonBraceTracker } from '../../src/api/tools/json-brace-tracker.js';
 
 describe('JsonBraceTracker', () => {
   it('extracts a single complete JSON object', () => {

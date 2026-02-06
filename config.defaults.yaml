@@ -13,7 +13,7 @@ auth:
     keychain:
       service: "lumo-tamer"
       account: "vault-key"
-      
+
     # Fallback key file path when OS keychain is unavailable (e.g., Docker, headless servers)
     # WARNING: use keyFilePath with Docker Swarm secrets or another secrets management tool for production environments
     keyFilePath: "/run/secrets/lumo-vault-key"
@@ -66,7 +66,7 @@ log:
 conversations:
   # Max conversations to keep in memory (LRU eviction)
   maxInMemory: 100
-  
+
   # WORKAROUND for clients without conversation_id support (e.g., Home Assistant).
   # Derives conversation ID from the `user` field in the request.
   # Home Assistant sends its internal conversation_id as user, making it unique per chat session.
@@ -91,51 +91,6 @@ conversations:
     # Auto-sync vs manual /save command
     autoSync: true
 
-# Shared Tools Configuration (can be overridden in server/cli sections)
-tools:
-  # Enable client-side tool detection in responses from Lumo.
-  # WARNING:
-  # - When enabled, Lumo can trigger actions on your machine/client!
-  # - Status: experimental
-  #
-  # API: Detects JSON tool calls ({"name":"...", "arguments":{...}}) for calling functions provided in the request.
-  # CLI: Detects code blocks (```bash, ```python) and prompts for execution.
-  # Each action requires confirmation, but only enable if you understand the implications.
-  enabled: false
-
-  # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
-  enableWebSearch: true
-
-  # ```read blocks: Lumo can read local files without user confirmation (CLI only)
-  fileReads:
-    # Enable ```read blocks
-    # Note that if this is false, Lumo can still ask to read a file using shell tools (ie. cat)
-    enabled: true
-    # Max file size in KB. Files larger than this are skipped with an error.
-    maxFileSizeKB: 512
-
-  # Executors for code block execution (CLI only)
-  # Maps language tag → [command, ...args]. Code is appended as last arg.
-  # To actually make Lumo use these, specify them in cli.instructions.forTools
-  # Override in config.yaml to restrict or extend
-  executors:
-    # Unix shells
-    bash: ["bash", "-c"]
-    sh: ["sh", "-c"]
-    zsh: ["zsh", "-c"]
-    # Windows shells
-    powershell: ["powershell", "-Command"]
-    ps1: ["powershell", "-Command"]
-    cmd: ["cmd", "/c"]
-    # Scripting languages
-    python: ["python3", "-c"]
-    python3: ["python3", "-c"]
-    node: ["node", "-e"]
-    javascript: ["node", "-e"]
-    js: ["node", "-e"]
-    ruby: ["ruby", "-e"]
-    perl: ["perl", "-e"]
-
 # Shared Commands Configuration (can be overridden in server/cli sections)
 commands:
   # Enable slash commands (/save, /help, /logout, etc.)
@@ -148,20 +103,48 @@ server:
   apiKey: "your-secret-api-key-here"
   apiModelName: "lumo"
 
+  # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
+  enableWebSearch: true
+
+  # Custom tool detection for API clients
+  # Enable detection of JSON tool calls in Lumo's responses
+  # WARNING: When enabled, Lumo can trigger actions via API clients!
+  customTools:
+    enabled: false
+
+    # Prefix added to custom tool names to distinguish from Lumo's native tools.
+    # Applied to tool definitions sent to Lumo, stripped from tool calls returned to client.
+    # Set to "" to disable prefixing.
+    prefix: "user:"
+
+    # Search/replace patterns applied to client instructions (case-insensitive regex).
+    # Useful for removing or rewriting phrases that may confuse Lumo about tool calling.
+    # Each entry: { pattern: "regex", replacement: "text" } - omit replacement to strip.
+    replacePatterns:
+      - pattern: "use only native tool calling"
+      - pattern: "no text-based formats"
+      - pattern: "\\(no text-based formats[^)]*\\)"
+
   instructions:
     # Default instructions when no system/developer message is provided in the request
-    default: | 
+    default: |
       Always answer in plain text. Don't use tables, quote blocks, lists, etc. Be concise.
 
-    # true: append request instructions to default
-    # false, request replaces default
-    append: false
-
-    # Description text for tools (prepended to stringified tools JSON if tools.enabled and tools are provided in the request)
+    # Instructions prepended to tool definitions when tools are provided in the request.
     forTools: |
-      The tools listed below are custom tools. Unlike your built-in tools (proton_info, web_search, etc.),
-      custom tools MUST be called by outputting JSON text to the user.
-      You have the power to execute these functions by providing the JSON directly to the user, without trying to call them yourself. The user will execute these functions and return the results to you. This is crucial. Do NOT tell a tool is unavailable, instead just output the JSON for the tool call.
+      === CUSTOM TOOL PROTOCOL ===
+      The tools below are CUSTOM tools, prefixed with "user:".
+
+      IMPORTANT: Custom tools are NOT part of your built-in tool system.
+      You MUST call them by outputting JSON text, like this:
+
+      {"name": "user:example_tool", "arguments": {"param": "value"}}
+
+      DO NOT try to call custom tools through your internal tool mechanism - it will fail with error:true.
+      DO NOT remove the "user:" prefix when calling these tools.
+
+      The user's system will execute them and return results.
+      === END PROTOCOL ===
 
       Available custom tools:
 
@@ -170,6 +153,10 @@ server:
     forToolBounce: |
       You tried to call a custom tool using your built-in tool system, but custom tools must be called by outputting JSON text. Please output the tool call as JSON, like this:
 
+    # Template for assembling instructions when tools are provided.
+    # Variables: {forTools}, {clientInstructions}, {toolsJson}
+    template: "{forTools}\n\n{clientInstructions}\n\n{toolsJson}"
+
 
 # CLI Configuration
 cli:
@@ -177,16 +164,49 @@ cli:
     target: "file"
     filePath: "lumo-tamer-cli.log"
 
-  # tools:
-    # enable Lumo to create and edit files, and run commands in your terminal
-    # enabled: true
+  # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
+  enableWebSearch: true
+
+  # Local actions: code block detection and execution
+  localActions:
+    # Enable code block detection (```bash, ```read, ```edit, etc.)
+    # WARNING: When enabled, Lumo can trigger actions on your machine!
+    enabled: false
+
+    # ```read blocks: Lumo can read local files without user confirmation
+    fileReads:
+      # Enable ```read blocks
+      # Note that if this is false, Lumo can still ask to read a file using shell tools (ie. cat)
+      enabled: true
+      # Max file size in KB. Files larger than this are skipped with an error.
+      maxFileSizeKB: 512
+
+    # Executors for code block execution
+    # Maps language tag -> [command, ...args]. Code is appended as last arg.
+    # Override in config.yaml to restrict or extend
+    executors:
+      # Unix shells
+      bash: ["bash", "-c"]
+      sh: ["sh", "-c"]
+      zsh: ["zsh", "-c"]
+      # Windows shells
+      powershell: ["powershell", "-Command"]
+      ps1: ["powershell", "-Command"]
+      cmd: ["cmd", "/c"]
+      # Scripting languages
+      python: ["python3", "-c"]
+      python3: ["python3", "-c"]
+      node: ["node", "-e"]
+      javascript: ["node", "-e"]
+      js: ["node", "-e"]
+      ruby: ["ruby", "-e"]
+      perl: ["perl", "-e"]
 
   instructions:
     default: |
       You are a command line assistant. Your output will be read in a terminal. Keep the formatting to a minimum and be concise.
-    append: false
 
-    # forTools is appended when tools.enabled=true
+    # Appended when localActions.enabled=true
     forTools: |
       You can read, edit and create files, and you can execute bash and python commands on the user's machine.
       To execute code, use a code block like ```bash or ```python. The user will be prompted to execute it and the result will be returned to you. Don't explain the user can execute commands, it will be handled automatically. Keep commands simple and safe.
@@ -210,8 +230,8 @@ cli:
       >>>>>>> REPLACE
       ```
     forToolBounce: |
-      You tried to execute an action using your built-in tool system, but these actions must be called by providing a code block. Use for example
+      You tried to execute an action using your built-in tool system, but these actions must be called by providing a code block. Use for example:
       ```read
       README.md
       ```
-      And not by calling a tool like this:
+      Instead of calling a tool like this:

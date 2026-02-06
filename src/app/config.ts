@@ -9,10 +9,14 @@ const configDefaults = load(readFileSync(resolveProjectPath('config.defaults.yam
 
 // Config loading
 export type ConfigMode = 'server' | 'cli';
-// Shared keys that can be overridden per mode (instructions is mode-specific only)
-const SHARED_KEYS = ['log', 'conversations', 'tools', 'commands'] as const;
 
-// Schemas (validation only, no defaults - defaults come from config.defaults.yaml)
+// Shared keys that can be overridden per mode
+const SHARED_KEYS = ['log', 'conversations', 'commands'] as const;
+
+// ============================================
+// Schemas (validation only, no defaults)
+// ============================================
+
 const logConfigSchema = z.object({
   level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']),
   target: z.enum(['stdout', 'file']),
@@ -20,27 +24,6 @@ const logConfigSchema = z.object({
   messageContent: z.boolean(),
 });
 
-const instructionsConfigSchema = z.object({
-  default: z.string(),
-  append: z.boolean(),
-  forTools: z.string(),
-  forToolBounce: z.string(),
-});
-
-const toolsConfigSchema = z.object({
-  enabled: z.boolean(),
-  enableWebSearch: z.boolean(),
-  fileReads: z.object({
-    enabled: z.boolean(),
-    maxFileSizeKB: z.number().positive(),
-  }),
-  // Maps code block language tag → [command, ...args]. Code is appended as last arg.
-  executors: z.record(z.string(), z.array(z.string())),
-});
-
-const commandsConfigSchema = z.object({
-  enabled: z.boolean(),
-});
 
 const conversationsConfigSchema = z.object({
   maxInMemory: z.number(),
@@ -52,6 +35,39 @@ const conversationsConfigSchema = z.object({
     includeSystemMessages: z.boolean(),
     autoSync: z.boolean(),
   }),
+});
+
+// Replace pattern entry schema
+const replacePatternSchema = z.object({
+  pattern: z.string(),
+  replacement: z.string().optional(),
+});
+
+// Server-specific custom tools config
+const customToolsConfigSchema = z.object({
+  enabled: z.boolean(),
+  prefix: z.string(),
+  replacePatterns: z.array(replacePatternSchema),
+});
+
+// Instructions schemas (CLI base, server extends with template)
+const cliInstructionsConfigSchema = z.object({
+  default: z.string(),
+  forTools: z.string(),
+  forToolBounce: z.string(),
+});
+const serverInstructionsConfigSchema = cliInstructionsConfigSchema.extend({
+  template: z.string(),
+});
+
+// CLI local actions config
+const localActionsConfigSchema = z.object({
+  enabled: z.boolean(),
+  fileReads: z.object({
+    enabled: z.boolean(),
+    maxFileSizeKB: z.number().positive(),
+  }),
+  executors: z.record(z.string(), z.array(z.string())),
 });
 
 export const authMethodSchema = z.enum(['login', 'browser', 'rclone']);
@@ -81,30 +97,38 @@ const authConfigSchema = z.object({
   }),
 });
 
-const modeConfigSchema = z.object({
+// Server merged config schema
+const serverMergedConfigSchema = z.object({
+  auth: authConfigSchema,
   log: logConfigSchema,
   conversations: conversationsConfigSchema,
-  instructions: instructionsConfigSchema,
-  tools: toolsConfigSchema,
-  commands: commandsConfigSchema,
-});
-
-const mergedConfigSchema = modeConfigSchema.extend({
-  auth: authConfigSchema,
-});
-
-const serverFieldsSchema = z.object({
+  commands: z.object({ enabled: z.boolean() }),
+  enableWebSearch: z.boolean(),
+  customTools: customToolsConfigSchema,
+  instructions: serverInstructionsConfigSchema,
   port: z.number().int().positive(),
   apiKey: z.string().min(1, 'server.apiKey is required'),
   apiModelName: z.string().min(1),
 });
 
-const serverMergedConfigSchema = mergedConfigSchema.extend(serverFieldsSchema.shape);
+// CLI merged config schema
+const cliMergedConfigSchema = z.object({
+  auth: authConfigSchema,
+  log: logConfigSchema,
+  conversations: conversationsConfigSchema,
+  commands: z.object({ enabled: z.boolean() }),
+  enableWebSearch: z.boolean(),
+  localActions: localActionsConfigSchema,
+  instructions: cliInstructionsConfigSchema,
+});
 
-type MergedConfig = z.infer<typeof mergedConfigSchema>;
 type ServerMergedConfig = z.infer<typeof serverMergedConfigSchema>;
+type CliMergedConfig = z.infer<typeof cliMergedConfigSchema>;
+type MergedConfig = ServerMergedConfig | CliMergedConfig;
 
-
+// ============================================
+// Config Loading
+// ============================================
 
 // Cache user config (loaded once)
 let userConfigCache: Record<string, unknown> | null = null;
@@ -113,7 +137,6 @@ function loadUserYaml(): Record<string, unknown> {
 
   const configPath = resolveProjectPath('config.yaml');
   if (!existsSync(configPath)) {
-    // using console here as logger is not initialized yet
     console.log('No config.yaml found, using defaults from config.defaults.yaml');
     userConfigCache = {};
   } else {
@@ -122,13 +145,13 @@ function loadUserYaml(): Record<string, unknown> {
   return userConfigCache;
 }
 
-function loadMergedConfig(mode: ConfigMode): MergedConfig | ServerMergedConfig {
+function loadMergedConfig(mode: ConfigMode): MergedConfig {
   try {
     const userConfig = loadUserYaml();
     const defaultModeConfig = (mode === 'server' ? configDefaults.server : configDefaults.cli) as Record<string, unknown>;
     const userModeConfig = (mode === 'server' ? userConfig.server : userConfig.cli) as Record<string, unknown> | undefined;
 
-    // Stage 1: defaults → user (for all keys including mode-specific)
+    // Stage 1: defaults -> user (for all keys including mode-specific)
     const merged = merge({}, configDefaults, defaultModeConfig, userConfig, userModeConfig);
 
     // Stage 2: apply user mode overrides for shared keys only
@@ -142,7 +165,7 @@ function loadMergedConfig(mode: ConfigMode): MergedConfig | ServerMergedConfig {
     delete merged.server;
     delete merged.cli;
 
-    return (mode === 'server' ? serverMergedConfigSchema : mergedConfigSchema).parse(merged);
+    return (mode === 'server' ? serverMergedConfigSchema : cliMergedConfigSchema).parse(merged);
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.error('Configuration validation failed:');
@@ -153,13 +176,36 @@ function loadMergedConfig(mode: ConfigMode): MergedConfig | ServerMergedConfig {
   }
 }
 
+// ============================================
 // State
-let config: MergedConfig | ServerMergedConfig | null = null;
+// ============================================
+
+let config: MergedConfig | null = null;
 let configMode: ConfigMode | null = null;
+
+/**
+ * Validate regex patterns in customTools.replacePatterns.
+ * Logs warnings for invalid patterns but doesn't fail.
+ */
+function validateReplacePatterns(config: MergedConfig, mode: ConfigMode): void {
+  if (mode !== 'server') return;
+
+  const serverConfig = config as ServerMergedConfig;
+  const patterns = serverConfig.customTools?.replacePatterns ?? [];
+
+  for (const entry of patterns) {
+    try {
+      new RegExp(entry.pattern, 'gi');
+    } catch (e) {
+      console.warn(`Invalid regex in customTools.replacePatterns: "${entry.pattern}" - ${(e as Error).message}`);
+    }
+  }
+}
 
 export function initConfig(mode: ConfigMode): void {
   configMode = mode;
   config = loadMergedConfig(mode);
+  validateReplacePatterns(config, mode);
 }
 
 export function getConfigMode(): ConfigMode | null {
@@ -171,19 +217,57 @@ function getConfig(): MergedConfig {
   return config;
 }
 
+// ============================================
 // Getters
+// ============================================
+
 export const getLogConfig = () => getConfig().log;
 export const getConversationsConfig = () => getConfig().conversations;
-export const getInstructionsConfig = () => getConfig().instructions;
-export const getToolsConfig = () => getConfig().tools;
 export const getCommandsConfig = () => getConfig().commands;
+export const getEnableWebSearch = () => getConfig().enableWebSearch;
 
+// Server-specific getters
 export function getServerConfig(): ServerMergedConfig {
   if (configMode !== 'server' || !config) throw new Error('Server configuration required. Run in server mode.');
   return config as ServerMergedConfig;
 }
 
-// Legacy export (for scripts before initConfig (auth))
+export function getCustomToolsConfig() {
+  const cfg = getServerConfig();
+  return cfg.customTools;
+}
+
+export function getServerInstructionsConfig() {
+  const cfg = getServerConfig();
+  return cfg.instructions;
+}
+
+// CLI-specific getters
+export function getCliConfig(): CliMergedConfig {
+  if (configMode !== 'cli' || !config) throw new Error('CLI configuration required. Run in CLI mode.');
+  return config as CliMergedConfig;
+}
+
+export function getLocalActionsConfig() {
+  const cfg = getCliConfig();
+  return cfg.localActions;
+}
+
+export function getCliInstructionsConfig() {
+  const cfg = getCliConfig();
+  return cfg.instructions;
+}
+
+// Generic instructions getter (works for both modes)
+export function getInstructionsConfig() {
+  return getConfig().instructions;
+}
+
+// ============================================
+// Legacy/Eager Configs
+// ============================================
+
+// Legacy export (for scripts before initConfig, e.g. auth)
 export const authConfig = ((): z.infer<typeof authConfigSchema> => {
   const userConfig = loadUserYaml();
   const merged = merge({}, configDefaults.auth, userConfig.auth);
@@ -204,13 +288,11 @@ export const mockConfig = ((): z.infer<typeof mockConfigSchema> => {
   return mockConfigSchema.parse(merged);
 })();
 
-export type MockConfig = z.infer<typeof mockConfigSchema>;
+// ============================================
+// Types (only export those used externally)
+// ============================================
 
-// Types
-export type AuthConfig = z.infer<typeof authConfigSchema>;
-export type ServerConfig = z.infer<typeof serverFieldsSchema>;
-export type CliConfig = z.infer<typeof modeConfigSchema>;
+export type MockConfig = z.infer<typeof mockConfigSchema>;
 export type LogConfig = z.infer<typeof logConfigSchema>;
-export type ToolsConfig = z.infer<typeof toolsConfigSchema>;
-export type InstructionsConfig = z.infer<typeof instructionsConfigSchema>;
 export type ConversationsConfig = z.infer<typeof conversationsConfigSchema>;
+

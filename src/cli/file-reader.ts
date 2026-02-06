@@ -13,7 +13,7 @@
 import { readFileSync, statSync, openSync, readSync, closeSync } from 'fs';
 import type { CodeBlock, BlockHandler } from './block-handlers.js';
 import { FILE_PREFIX } from './edit-applier.js';
-import { getToolsConfig } from '../app/config.js';
+import { getLocalActionsConfig } from '../app/config.js';
 
 export interface ReadResult {
   type: 'read';
@@ -66,7 +66,7 @@ export function getFileSizeKB(filePath: string): number {
  * Read files listed in a read block and return their contents.
  */
 export async function applyReadBlock(block: CodeBlock): Promise<ReadResult> {
-  const { fileReads } = getToolsConfig();
+  const { fileReads } = getLocalActionsConfig();
   const maxFileSizeKB = fileReads.maxFileSizeKB;
 
   const paths = block.content.split('\n').map(l => l.trim()).filter(Boolean);
@@ -124,11 +124,11 @@ export const readHandler: BlockHandler = {
   requiresConfirmation: false,
   confirmOptions: () => ({ label: '', prompt: '', verb: '', errorLabel: '' }),
   apply: (block) => {
-    if (!getToolsConfig().fileReads.enabled) {
+    if (!getLocalActionsConfig().fileReads.enabled) {
       return Promise.resolve({
         type: 'read',
         success: false,
-        output: 'File reads are disabled in configuration (tools.fileReads.enabled)',
+        output: 'File reads are disabled in configuration (localActions.fileReads.enabled)',
         files: [],
       } as ReadResult);
     }

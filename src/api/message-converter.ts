@@ -4,65 +4,81 @@
 
 import type { ChatMessage, ResponseInputItem, OpenAITool } from './types.js';
 import type { Turn } from '../lumo-client/index.js';
-import { getInstructionsConfig, getToolsConfig } from '../app/config.js';
+import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
 import { isCommand } from '../app/commands.js';
+import { applyToolPrefix, applyReplacePatterns, interpolateTemplate } from './tools/prefix.js';
+
+// ── Tool instruction building ────────────────────────────────────────
 
 /**
  * Build tool instructions to append to message.
- * Combines instructions.forTools config with JSON representation of provided tools.
+ * Uses template from config to assemble forTools, client instructions, and tools JSON.
  * Returns undefined if tools are disabled or no tools provided.
  *
  * @param tools - Optional array of OpenAI tool definitions
+ * @param clientInstructions - Optional instructions from client (system/developer message)
  * @returns Formatted instruction string for tools, or undefined
  */
-function buildToolsInstruction(tools?: OpenAITool[]): string | undefined {
-  const toolsConfig = getToolsConfig();
+function buildToolsInstruction(tools?: OpenAITool[], clientInstructions?: string): string | undefined {
+  const toolsConfig = getCustomToolsConfig();
   if (!toolsConfig.enabled || !tools || tools.length === 0) {
     return undefined;
   }
-  const instructionsConfig = getInstructionsConfig();
-  const forTools = instructionsConfig.forTools;
-  const toolsJson = JSON.stringify(tools, null, 2);
-  return `${forTools}\n${toolsJson}`;
+
+  const instructionsConfig = getServerInstructionsConfig();
+  const { prefix, replacePatterns } = toolsConfig;
+
+  // Apply prefix to tool names
+  const prefixedTools = applyToolPrefix(tools, prefix);
+
+  // Apply replace patterns to client instructions
+  const cleanedInstructions = clientInstructions
+    ? applyReplacePatterns(clientInstructions, replacePatterns)
+    : '';
+
+  // Build template variables
+  const toolsJson = JSON.stringify(prefixedTools, null, 2);
+  const vars: Record<string, string> = {
+    forTools: instructionsConfig.forTools,
+    clientInstructions: cleanedInstructions,
+    toolsJson,
+  };
+
+  // Interpolate template
+  return interpolateTemplate(instructionsConfig.template, vars);
 }
 
 /**
  * Compute effective instructions by combining config defaults with request instructions.
  *
- * - If request has instructions and append=true: default + request
- * - If request has instructions and append=false: request only
- * - If no request instructions: default (or undefined)
- * - If toolsInstruction provided, append it at the end
+ * When tools are provided:
+ * - The toolsInstruction includes forTools, cleaned client instructions, and tools JSON
+ *
+ * When no tools:
+ * - If request has instructions: use request instructions
+ * - If no request instructions: use default (or undefined)
  *
  * @param requestInstructions - System/developer message from request
- * @param toolsInstruction - Optional tools instruction (from buildToolsInstruction)
+ * @param toolsInstruction - Optional tools instruction (from buildToolsInstruction, already includes client instructions)
  */
 function getEffectiveInstructions(
   requestInstructions?: string,
   toolsInstruction?: string
 ): string | undefined {
-  const instructionsConfig = getInstructionsConfig();
+  const instructionsConfig = getServerInstructionsConfig();
   const defaultInstructions = instructionsConfig?.default;
-  const append = instructionsConfig.append;
 
-  let result: string | undefined;
-
-  if (requestInstructions) {
-    if (append && defaultInstructions) {
-      result = `${defaultInstructions}\n\n${requestInstructions}`;
-    } else {
-      result = requestInstructions;
-    }
-  } else {
-    result = defaultInstructions;
-  }
-
-  // Append tools instruction if provided
+  // When tools are provided, use the assembled tools instruction
   if (toolsInstruction) {
-    result = result ? `${result}\n\n${toolsInstruction}` : toolsInstruction;
+    return toolsInstruction;
   }
 
-  return result;
+  // No tools - use request instructions or fall back to default
+  if (requestInstructions) {
+    return requestInstructions;
+  }
+
+  return defaultInstructions;
 }
 
 /**
@@ -116,7 +132,8 @@ function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: stri
  */
 export function convertMessagesToTurns(messages: ChatMessage[], tools?: OpenAITool[]): Turn[] {
   const systemContent = extractSystemMessage(messages);
-  const instructions = getEffectiveInstructions(systemContent, buildToolsInstruction(tools));
+  const toolsInstruction = buildToolsInstruction(tools, systemContent);
+  const instructions = getEffectiveInstructions(systemContent, toolsInstruction);
   return convertChatMessagesToTurns(messages, instructions);
 }
 
@@ -140,7 +157,8 @@ export function convertResponseInputToTurns(
       return [{ role: 'user', content: input }];
     }
 
-    const instructions = getEffectiveInstructions(requestInstructions, buildToolsInstruction(tools));
+    const toolsInstruction = buildToolsInstruction(tools, requestInstructions);
+    const instructions = getEffectiveInstructions(requestInstructions, toolsInstruction);
     let content = input;
     if (instructions) {
       content = `${content}\n\n[Personal context: ${instructions}]`;
@@ -179,6 +197,7 @@ export function convertResponseInputToTurns(
   }
 
   const systemContent = extractSystemMessage(chatMessages);
-  const instructions = getEffectiveInstructions(systemContent, buildToolsInstruction(tools));
+  const toolsInstruction = buildToolsInstruction(tools, systemContent);
+  const instructions = getEffectiveInstructions(systemContent, toolsInstruction);
   return convertChatMessagesToTurns(chatMessages, instructions);
 }
