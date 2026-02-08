@@ -16,6 +16,7 @@ import {
   buildRequestContext,
   persistTitle,
   persistResponse,
+  persistResponseWithToolCalls,
   extractToolsFromResponse,
   createStreamingToolProcessor,
   generateResponseId,
@@ -35,6 +36,22 @@ interface BuildOutputOptions {
   text: string;
   toolCalls?: ToolCall[] | null;
   itemId?: string;
+}
+
+/** Tool call with generated call_id for persistence and response building. */
+export interface ToolCallWithId {
+  name: string;
+  arguments: string;
+  call_id: string;
+}
+
+/** Generate call_ids for tool calls. */
+export function assignCallIds(toolCalls: Array<{ name: string; arguments: string }>): ToolCallWithId[] {
+  return toolCalls.map(tc => ({
+    name: tc.name,
+    arguments: typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments),
+    call_id: generateCallId(),
+  }));
 }
 
 function buildOutputItems(options: BuildOutputOptions): OutputItem[] {
@@ -62,10 +79,13 @@ function buildOutputItems(options: BuildOutputOptions): OutputItem[] {
         ? toolCall.arguments
         : JSON.stringify(toolCall.arguments);
 
+      // Use pre-generated call_id if available, otherwise generate new one
+      const callId = 'call_id' in toolCall ? (toolCall as ToolCallWithId).call_id : generateCallId();
+
       output.push({
         type: 'function_call',
         id: generateFunctionCallId(),
-        call_id: generateCallId(),
+        call_id: callId,
         status: 'completed',
         name: toolCall.name,
         arguments: argumentsJson,
@@ -203,15 +223,25 @@ export async function handleStreamingRequest(
         0
       );
 
+      // Convert emitted tool calls to format with call_id for persistence and output
+      const toolCallsWithIds: ToolCallWithId[] = processor.toolCallsEmitted.map(tc => ({
+        name: tc.function.name,
+        arguments: tc.function.arguments,
+        call_id: tc.id,
+      }));
+
       const output = buildOutputItems({
         text: accumulatedText,
         itemId,
-        toolCalls: processor.toolCallsEmitted.length > 0
-          ? processor.toolCallsEmitted.map(tc => ({ name: tc.function.name, arguments: tc.function.arguments }))
-          : undefined,
+        toolCalls: toolCallsWithIds.length > 0 ? toolCallsWithIds : undefined,
       });
 
-      persistResponse(deps, conversationId, accumulatedText);
+      // Persist with tool calls if any
+      if (toolCallsWithIds.length > 0) {
+        persistResponseWithToolCalls(deps, conversationId, accumulatedText, toolCallsWithIds);
+      } else {
+        persistResponse(deps, conversationId, accumulatedText);
+      }
       emitter.emitResponseCompleted(createCompletedResponse(id, createdAt, request, output));
       res.end();
     } catch (error) {
@@ -242,7 +272,13 @@ export async function handleNonStreamingRequest(
   persistTitle(result, deps, conversationId);
   const { content, toolCalls } = extractToolsFromResponse(result.response, ctx.hasCustomTools);
 
-  persistResponse(deps, conversationId, content);
+  // Generate call_ids and persist (including tool calls if any)
+  const toolCallsWithIds = toolCalls.length > 0 ? assignCallIds(toolCalls) : [];
+  if (toolCallsWithIds.length > 0) {
+    persistResponseWithToolCalls(deps, conversationId, content, toolCallsWithIds);
+  } else {
+    persistResponse(deps, conversationId, content);
+  }
 
   const id = generateResponseId();
   const itemId = generateItemId();
@@ -250,7 +286,7 @@ export async function handleNonStreamingRequest(
   const output = buildOutputItems({
     text: content,
     itemId,
-    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+    toolCalls: toolCallsWithIds.length > 0 ? toolCallsWithIds : undefined,
   });
 
   res.json(createCompletedResponse(id, createdAt, request, output));

@@ -3,13 +3,14 @@ import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse, OpenAIToolCall } from '../types.js';
 import { getServerConfig, getConversationsConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
-import { convertMessagesToTurns } from '../message-converter.js';
+import { convertMessagesToTurns, normalizeInputItem } from '../message-converter.js';
 import type { Turn } from '../../lumo-client/index.js';
 import type { ConversationId } from '../../conversations/index.js';
 import {
   buildRequestContext,
   persistTitle,
   persistResponse,
+  persistResponseWithToolCalls,
   extractToolsFromResponse,
   generateCallId,
   generateChatCompletionId,
@@ -60,10 +61,21 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
 
       // ===== Persist incoming messages (with deduplication) =====
       if (deps.conversationStore) {
-        const allMessages = request.messages.map(m => ({
-          role: m.role,
-          content: m.content
-        }));
+        const allMessages: Array<{ role: string; content: string }> = [];
+        for (const msg of request.messages) {
+          // Use normalizeInputItem for tool-related messages (role: 'tool', tool_calls)
+          const normalized = normalizeInputItem(msg);
+          if (normalized) {
+            const normalizedArray = Array.isArray(normalized) ? normalized : [normalized];
+            allMessages.push(...normalizedArray);
+          } else {
+            // Regular message - ensure content is a string
+            allMessages.push({
+              role: msg.role,
+              content: typeof msg.content === 'string' ? msg.content : '',
+            });
+          }
+        }
         deps.conversationStore.appendMessages(conversationId, allMessages);
         logger.debug({ conversationId, messageCount: allMessages.length }, 'Persisted conversation messages');
       }
@@ -247,7 +259,16 @@ async function handleStreamingRequest(
       processor.finalize();
       persistTitle(result, deps, conversationId);
 
-      persistResponse(deps, conversationId, result.response);
+      // Persist with tool calls if any
+      if (processor.toolCallsEmitted.length > 0) {
+        persistResponseWithToolCalls(deps, conversationId, result.response, processor.toolCallsEmitted.map(tc => ({
+          name: tc.function.name,
+          arguments: tc.function.arguments,
+          call_id: tc.id,
+        })));
+      } else {
+        persistResponse(deps, conversationId, result.response);
+      }
 
       // Send final chunk with finish_reason
       const finalChunk: OpenAIStreamChunk = {
@@ -299,8 +320,6 @@ async function handleNonStreamingRequest(
   persistTitle(chatResult, deps, conversationId);
   const { content, toolCalls: processedTools } = extractToolsFromResponse(chatResult.response, ctx.hasCustomTools);
 
-  persistResponse(deps, conversationId, content);
-
   // Convert to OpenAI format with call IDs
   const toolCalls: OpenAIToolCall[] | undefined = processedTools.length > 0
     ? processedTools.map(tc => ({
@@ -309,6 +328,17 @@ async function handleNonStreamingRequest(
         function: { name: tc.name, arguments: tc.arguments },
       }))
     : undefined;
+
+  // Persist with tool calls if any
+  if (toolCalls && toolCalls.length > 0) {
+    persistResponseWithToolCalls(deps, conversationId, content, toolCalls.map(tc => ({
+      name: tc.function.name,
+      arguments: tc.function.arguments,
+      call_id: tc.id,
+    })));
+  } else {
+    persistResponse(deps, conversationId, content);
+  }
 
   const response: OpenAIChatResponse = {
     id: generateChatCompletionId(),

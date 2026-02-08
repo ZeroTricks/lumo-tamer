@@ -55,6 +55,42 @@ export function persistResponse(deps: EndpointDependencies, conversationId: Conv
   }
 }
 
+/**
+ * Persist assistant response with tool calls.
+ * Each tool call is stored as a separate assistant message with normalized JSON content.
+ * Also registers call_ids for deduplication tracking.
+ *
+ * NOTE: We intentionally don't store the stripped text content separately.
+ * The OpenAI client sees the response as just the function_call items, not the
+ * text that preceded them. Storing the text would cause a mismatch when the
+ * client echoes back the conversation history.
+ */
+export function persistResponseWithToolCalls(
+  deps: EndpointDependencies,
+  conversationId: ConversationId,
+  _content: string, // Kept for API compatibility but not stored
+  toolCalls: Array<{ name: string; arguments: string; call_id: string }>
+): void {
+  if (!deps.conversationStore) return;
+
+  // Store each tool call as a normalized assistant message and register call_id
+  for (const tc of toolCalls) {
+    // Normalize arguments: parse then re-stringify for consistent formatting
+    // This ensures stored format matches what normalizeInputItem produces
+    const normalizedArgs = JSON.stringify(JSON.parse(tc.arguments));
+    const normalizedContent = JSON.stringify({
+      type: 'function_call',
+      call_id: tc.call_id,
+      name: tc.name,
+      arguments: normalizedArgs,
+    });
+    deps.conversationStore.appendAssistantResponse(conversationId, normalizedContent);
+    deps.conversationStore.addGeneratedCallId(conversationId, tc.call_id);
+  }
+
+  logger.debug({ conversationId, toolCount: toolCalls.length }, 'Persisted assistant response with tool calls');
+}
+
 // ── Non-streaming tool extraction ──────────────────────────────────
 
 export interface ProcessedToolCall {
