@@ -92,13 +92,13 @@ describe('convertResponseInputToTurns', () => {
 
   it('handles message array with system message', () => {
     const turns = convertResponseInputToTurns([
-      { role: 'system', content: 'System instructions' },
+      { role: 'system', content: 'Custom system instructions here' },
       { role: 'user', content: 'Hello' },
     ]);
 
-    // System message extracted, injected into user message
+    // System message extracted and used as clientInstructions in template
     expect(turns).toHaveLength(1);
-    expect(turns[0].content).toContain('System instructions');
+    expect(turns[0].content).toContain('Custom system instructions here');
   });
 
   it('filters out function_call_output items', () => {

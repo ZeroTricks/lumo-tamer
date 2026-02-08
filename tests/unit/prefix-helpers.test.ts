@@ -1,8 +1,10 @@
 /**
- * Unit tests for prefix helpers and template interpolation
+ * Unit tests for prefix helpers
  *
- * Tests the helper functions used for custom tool prefixing,
- * pattern replacement, and template assembly.
+ * Tests the helper functions used for custom tool prefixing
+ * and pattern replacement.
+ *
+ * Note: Template interpolation tests are in template.test.ts
  */
 
 import { describe, it, expect } from 'vitest';
@@ -11,7 +13,6 @@ import {
   stripToolPrefix,
   applyToolNamePrefix,
   applyReplacePatterns,
-  interpolateTemplate,
 } from '../../src/api/tools/prefix.js';
 import type { OpenAITool } from '../../src/api/types.js';
 
@@ -275,56 +276,3 @@ describe('applyReplacePatterns', () => {
   });
 });
 
-describe('interpolateTemplate', () => {
-  it('replaces single variable', () => {
-    const template = 'Hello {name}!';
-    const result = interpolateTemplate(template, { name: 'World' });
-
-    expect(result).toBe('Hello World!');
-  });
-
-  it('replaces multiple variables', () => {
-    const template = '{forTools}\n\n{clientInstructions}\n\n{toolsJson}';
-    const result = interpolateTemplate(template, {
-      forTools: 'Tool protocol here',
-      clientInstructions: 'Client says this',
-      toolsJson: '{"tools": []}',
-    });
-
-    expect(result).toBe('Tool protocol here\n\nClient says this\n\n{"tools": []}');
-  });
-
-  it('replaces all occurrences of same variable', () => {
-    const template = '{x} + {x} = 2{x}';
-    const result = interpolateTemplate(template, { x: '1' });
-
-    expect(result).toBe('1 + 1 = 21');
-  });
-
-  it('leaves unmatched placeholders unchanged', () => {
-    const template = '{known} and {unknown}';
-    const result = interpolateTemplate(template, { known: 'value' });
-
-    expect(result).toBe('value and {unknown}');
-  });
-
-  it('handles empty vars object', () => {
-    const template = 'No {vars} here';
-    const result = interpolateTemplate(template, {});
-
-    expect(result).toBe('No {vars} here');
-  });
-
-  it('handles empty template', () => {
-    const result = interpolateTemplate('', { key: 'value' });
-
-    expect(result).toBe('');
-  });
-
-  it('handles multiline content in variables', () => {
-    const template = 'Start\n{content}\nEnd';
-    const result = interpolateTemplate(template, { content: 'Line1\nLine2\nLine3' });
-
-    expect(result).toBe('Start\nLine1\nLine2\nLine3\nEnd');
-  });
-});

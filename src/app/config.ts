@@ -52,7 +52,7 @@ const customToolsConfigSchema = z.object({
 
 // Instructions schemas (CLI base, server extends with template)
 const cliInstructionsConfigSchema = z.object({
-  default: z.string(),
+  fallback: z.string(),
   forTools: z.string(),
   forToolBounce: z.string(),
 });

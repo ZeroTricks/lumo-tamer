@@ -127,33 +127,48 @@ server:
 
   instructions:
 
-    # Template for assembling instructions when tools are provided.
-    # Variables: {forTools}, {clientInstructions}, {toolsJson}
+    # Template for assembling instructions.
+    # Uses Handlebars-like syntax: {{varName}}, {{#if varName}}...{{/if}}, {{#if}}...{{else}}...{{/if}}
+    # Available variables:
+    #   - tools: JSON-stringified tool definitions (truthy when tools provided)
+    #   - clientInstructions: system/developer message from request
+    #   - forTools: the forTools block below (pre-interpolated with {{prefix}})
+    #   - fallback: the fallback block below
+    #   - prefix: tool prefix from customTools.prefix
     template: |
-      {forTools}
-      
-      {clientInstructions}
-      
-      Below are all the custom tools you can use. Remember, all tools prefixed with `user:` are custom tools and must be called by outputting the JSON to the user.
-      
-      {toolsJson}
+      {{#if tools}}
+      {{forTools}}
+      {{/if}}
 
-    # Default instructions when no system/developer message is provided in the request
-    default: |
+      {{#if clientInstructions}}
+      {{clientInstructions}}
+      {{else}}
+      {{fallback}}
+      {{/if}}
+
+      {{#if tools}}
+      Below are all the custom tools you can use. Remember, all tools prefixed with `{{prefix}}` are custom tools and must be called by outputting the JSON to the user.
+
+      {{tools}}
+      {{/if}}
+
+    # Fallback instructions when no system/developer message is provided in the request
+    fallback: |
       Always answer in plain text. Don't use tables, quote blocks, lists, etc. Be concise.
 
-    # Instructions prepended to tool definitions when tools are provided in the request.
+    # Instructions prepended when tools are provided in the request.
+    # Can use {{prefix}} variable.
     forTools: |
       === CUSTOM TOOL PROTOCOL ===
-      The tools below are CUSTOM tools, prefixed with `user:`.
+      The tools below are CUSTOM tools, prefixed with `{{prefix}}`.
 
       IMPORTANT: Custom tools are NOT part of your built-in tool system.
       You MUST call them by outputting JSON as text in a code block to the user, like this:
       ```json
-      {"name": "user:example_tool", "arguments": {"param": "value"}}
+      {"name": "{{prefix}}example_tool", "arguments": {"param": "value"}}
       ```
       DO NOT try to call custom tools through your internal tool mechanism, it will fail with error:true. If you receive such an error, don't try again with different arguments, but output the JSON as text to the user.
-      DO NOT remove the `user:` prefix when calling these tools.
+      DO NOT remove the `{{prefix}}` prefix when calling these tools.
 
       The user's system will execute them and return results.
       === END PROTOCOL ===
@@ -211,7 +226,7 @@ cli:
       perl: ["perl", "-e"]
 
   instructions:
-    default: |
+    fallback: |
       You are a command line assistant. Your output will be read in a terminal. Keep the formatting to a minimum and be concise.
 
     # Appended when localActions.enabled=true

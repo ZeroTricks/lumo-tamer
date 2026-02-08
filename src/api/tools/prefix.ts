@@ -1,11 +1,14 @@
 /**
- * Tool prefix helpers and template interpolation
+ * Tool prefix helpers and pattern replacement
  *
- * Utilities for prefixing/stripping custom tool names,
- * applying replace patterns, and template interpolation.
+ * Utilities for prefixing/stripping custom tool names
+ * and applying replace patterns.
  */
 
 import type { OpenAITool } from '../types.js';
+
+// Re-export template helper
+export { interpolateTemplate } from './template.js';
 
 // ── Prefix helpers ───────────────────────────────────────────────────
 
@@ -100,16 +103,3 @@ export function applyReplacePatterns(text: string, patterns: ReplacePattern[]): 
   return result.replace(/\n{3,}/g, '\n\n').replace(/  +/g, ' ').trim();
 }
 
-// ── Template interpolation ───────────────────────────────────────────
-
-/**
- * Interpolate template with provided variables.
- * Variables are specified as {varName} in the template.
- */
-export function interpolateTemplate(template: string, vars: Record<string, string>): string {
-  let result = template;
-  for (const [key, value] of Object.entries(vars)) {
-    result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
-  }
-  return result;
-}

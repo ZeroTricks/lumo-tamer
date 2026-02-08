@@ -41,6 +41,7 @@
     "@types/toposort": "^2.0.7",
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
+    "handlebars": "^4.7.8",
     "js-yaml": "^4.1.1",
     "json-stable-stringify": "^1.3.0",
     "keytar": "^7.9.0",

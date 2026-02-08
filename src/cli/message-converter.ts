@@ -18,7 +18,7 @@ function buildEffectiveInstructions(): string | undefined {
   const instructionsConfig = getCliInstructionsConfig();
   const localActionsConfig = getLocalActionsConfig();
 
-  let instructions = instructionsConfig?.default;
+  let instructions = instructionsConfig?.fallback;
 
   // Append forTools instructions when local actions enabled
   if (localActionsConfig.enabled && instructionsConfig?.forTools) {
