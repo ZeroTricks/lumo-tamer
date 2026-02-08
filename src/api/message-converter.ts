@@ -6,7 +6,7 @@ import type { ChatMessage, ResponseInputItem, OpenAITool, OpenAIToolCall } from 
 import type { Turn } from '../lumo-client/index.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
 import { isCommand } from '../app/commands.js';
-import { applyToolPrefix, applyReplacePatterns, interpolateTemplate } from './tools/prefix.js';
+import { applyToolPrefix, applyToolNamePrefix, applyReplacePatterns, interpolateTemplate } from './tools/prefix.js';
 
 // ── Input normalization ───────────────────────────────────────────────
 
@@ -118,13 +118,19 @@ function buildToolsInstruction(tools?: OpenAITool[], clientInstructions?: string
   const instructionsConfig = getServerInstructionsConfig();
   const { prefix, replacePatterns } = toolsConfig;
 
-  // Apply prefix to tool names
+  // Apply prefix to tool names in definitions
   const prefixedTools = applyToolPrefix(tools, prefix);
 
-  // Apply replace patterns to client instructions
-  const cleanedInstructions = clientInstructions
+  // Extract original tool names for text prefixing
+  const toolNames = tools
+    .map(t => t.function?.name || (t as unknown as { name?: string }).name)
+    .filter((n): n is string => Boolean(n));
+
+  // Apply replace patterns, then prefix tool names in instructions
+  let cleanedInstructions = clientInstructions
     ? applyReplacePatterns(clientInstructions, replacePatterns)
     : '';
+  cleanedInstructions = applyToolNamePrefix(cleanedInstructions, toolNames, prefix);
 
   // Build template variables
   const toolsJson = JSON.stringify(prefixedTools, null, 2);

@@ -44,6 +44,36 @@ export function stripToolPrefix(name: string, prefix: string): string {
   return name.startsWith(prefix) ? name.slice(prefix.length) : name;
 }
 
+// ── Regex helpers ────────────────────────────────────────────────────
+
+/**
+ * Escape special regex characters in a string.
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Apply prefix to tool names appearing in text.
+ * Only prefixes tool names that match the provided list exactly (word boundaries).
+ * Skips names that are already prefixed.
+ */
+export function applyToolNamePrefix(
+  text: string,
+  toolNames: string[],
+  prefix: string
+): string {
+  if (!prefix || !text || !toolNames || toolNames.length === 0) return text;
+
+  let result = text;
+  for (const name of toolNames) {
+    // Match tool name at word boundaries, skip if already prefixed
+    const regex = new RegExp(`(?<!${escapeRegex(prefix)})\\b${escapeRegex(name)}\\b`, 'g');
+    result = result.replace(regex, `${prefix}${name}`);
+  }
+  return result;
+}
+
 // ── Pattern replacement ──────────────────────────────────────────────
 
 export interface ReplacePattern {
