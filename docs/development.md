@@ -37,8 +37,7 @@ cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
 
 ```
 src/
-├── server.ts                  # API server entry point
-├── cli.ts                     # CLI entry point
+├── tamer.ts                   # Entry point (CLI, server, auth)
 ├── api/                       # OpenAI-compatible API
 │   └── routes/                # /v1/responses, /v1/chat/completions, etc.
 ├── app/                       # Shared application logic
