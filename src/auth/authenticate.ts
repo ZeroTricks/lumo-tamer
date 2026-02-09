@@ -34,8 +34,8 @@ import { printStatus, printSummary, runStatus } from './status.js';
 import { updateAuthConfig } from './update-config.js';
 import type { AuthMethod, AuthProvider } from './types.js';
 
-const numToMethod: Record<string, AuthMethod> = { '1': 'browser', '2': 'login', '3': 'rclone' };
-const methodToNum: Record<AuthMethod, string> = { browser: '1', login: '2', rclone: '3' };
+const numToMethod: Record<string, AuthMethod> = { '1': 'login', '2': 'browser', '3': 'rclone' };
+const methodToNum: Record<AuthMethod, string> = { login: '1', browser: '2', rclone: '3' };
 
 /**
  * Prompt user to select authentication method
@@ -44,8 +44,8 @@ async function promptForMethod(defaultMethod: AuthMethod): Promise<AuthMethod> {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
     console.log('Select authentication method:');
-    console.log('  1. browser - Extract from logged-in browser session');
-    console.log('  2. login   - Enter Proton credentials (requires go binary)');
+    console.log('  1. login   - Enter Proton credentials (requires go binary)');
+    console.log('  2. browser - Extract from logged-in browser session');
     console.log('  3. rclone  - Paste rclone config section');
     console.log('');
 

@@ -21,7 +21,7 @@ This is an unofficial, personal project in early stages of development, not affi
 
 - A Proton account (free works; [Lumo Plus](https://lumo.proton.me/) gives unlimited chats and faster responses)
 - Node.js 18+ & npm
-- Go 1.24+ (optional, only for the `login` auth method)
+- Go 1.24+ (for the `login` auth method)
 - Docker (optional, for containerized setup)
 
 ## Quick Start
@@ -33,6 +33,7 @@ git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
 npm install
 npm run build
+make auth-build
 # Optionally install globally , so you can use command `tamer` everywhere
 npm link
 ```
@@ -43,46 +44,17 @@ For Docker installation, see [Docker](#docker).
 
 ### 2. Authenticate
 
-Authenticating to Proton is not straightforward: different flows depending on user settings (2FA, hardware keys), CAPTCHA challenges, and auth tokens not having the necessary scopes. The good news is you only have to log in "once"; after that, secrets are securely saved in an encrypted vault (key stored in your OS keychain) and tokens are refreshed automatically.
-
-Choose one of three methods:
-
-#### Browser
-Use a Chrome browser with remote debugging enabled to log in. Tokens will be extracted "once". This is the only method that supports full conversation sync, and it lets you pass a CAPTCHA in the browser if needed.
-
-To launch a browser with remote debugging:
-
-- Use your own Chrome(-based) browser with remote debugging enabled: `chrome --remote-debugging-port=9222`. You'll probably need to add more command line arguments, like `--user-data-dir=<custom dir> --remote-debugging-address=0.0.0.0 --remote-debugging-allowed-origins=*` See [Chrome DevTools Protocol documentation](https://chromedevtools.github.io/devtools-protocol/) for more information.
-- Use the provided Docker image: `docker compose up lumo-tamer-browser` (access browser GUI at http://localhost:3001)
-
-Once the browser is running, use it to log in to https://lumo.proton.me .
-
-#### Login
-A secure and lightweight option where you provide your credentials in a prompt. Requires Go. No support for CAPTCHA or conversation sync.
+- Run `tamer-auth`
+- Choose **login**
+- Enter your Proton credentials and (optionally) 2FA code.
 
 > **Tip:** If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first. This may clear the challenge for subsequent login attempts.
 
-```bash
-# Requires Go 1.24+
-make auth-build # or
-cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
-```
+Alternative methods:
+- **browser**: Extract tokens from a Chrome session. Required when you want to sync conversations with Lumo's webclient.
+- **rclone**: Paste tokens from an rclone configuration with proton-drive.
 
-#### Rclone
-Use rclone to log in and copy the tokens from its config file. No conversation sync.
-
-> **Warning:** This method reuses tokens/keys that are stored insecurely by rclone. Use it as a fallback if the other two methods don't work. If you already use rclone for Proton Drive, add a separate remote for lumo-tamer, as lumo-tamer will refresh tokens and invalidate the ones used by rclone.
-
-1. Install rclone
-2. Add a "proton drive" remote named "lumo-tamer" as described here: https://rclone.org/protondrive/. If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first.
-3. Test if rclone succeeds: `rclone about lumo-tamer:`
-4. Find your rclone config file: `~/.config/rclone/rclone.conf` (Linux/macOS) or `%APPDATA%\rclone\rclone.conf` (Windows)
-5. Copy the tokens under lumo-tamer manually or `grep -A 6 "lumo-tamer" rclone.conf`
-
-
-Whichever method you choose, run `tamer-auth` and follow the steps.
-
-Read more tips on setup and troubleshooting in [docs/authentication.md](docs/authentication.md).
+See [docs/authentication.md](docs/authentication.md) for details and troubleshooting.
 
 
 ### 3. Run

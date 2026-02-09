@@ -7,8 +7,8 @@ Authenticating to Proton is not straightforward: different flows depending on us
 ```bash
 tamer-auth
 # Select method:
-#   1. browser - Extract from logged-in browser session (recommended)
-#   2. login   - Enter Proton credentials
+#   1. login   - Enter Proton credentials (recommended)
+#   2. browser - Extract from logged-in browser session
 #   3. rclone  - Paste rclone config section
 ```
 
@@ -16,7 +16,61 @@ After successful authentication, `config.yaml` is updated with your selected met
 
 ---
 
-## Browser (Recommended)
+## Login (Recommended)
+
+A secure and lightweight option where you provide your credentials in a prompt. Requires Go. No support for CAPTCHA or conversation sync.
+
+Uses Proton's SRP (Secure Remote Password) protocol via a Go binary built from [go-proton-api](https://github.com/henrybear327/go-proton-api).
+
+### Why Login?
+
+- **No browser dependency**: Pure API-based authentication
+- **Direct keyPassword access**: Derives the mailbox password needed for encryption
+- **Token refresh**: Supports automatic token refresh
+
+### Setup
+
+1. Build the Go binary:
+   ```bash
+   # Requires Go 1.24+
+   cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
+   ```
+2. Run `tamer-auth` and select `login`.
+3. Enter username, password, and TOTP code (if 2FA is enabled).
+
+> **Tip:** If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first. This may clear the challenge for subsequent login attempts.
+
+### Config
+
+```yaml
+auth:
+  method: login
+  login:
+    binaryPath: "./dist/proton-auth"
+    # Headers to help avoid CAPTCHA
+    appVersion: "macos-drive@1.0.0-alpha.1+rclone"
+    userAgent: "Mozilla/5.0 ..."
+```
+
+### Limitations
+
+- **CAPTCHA**: May trigger CAPTCHA on Proton's servers (see tip above)
+- **No conversation sync**: Cannot fetch userKeys/masterKeys due to API scope restrictions
+- **TOTP only**: Only supports TOTP for 2FA (no security keys)
+
+### Troubleshooting
+
+**"proton-auth binary not found"**
+- Build it: `cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -`
+
+**"Authentication failed"**
+- Verify username/password
+- Check if 2FA is enabled (will prompt for TOTP)
+- Try browser method as fallback
+
+---
+
+## Browser
 
 Use a Chrome browser with remote debugging enabled to log in. Tokens will be extracted once. This is the only method that supports full conversation sync, and it lets you pass a CAPTCHA in the browser if needed.
 
@@ -68,60 +122,6 @@ auth:
 
 **`tamer-auth` succeeds but `tamer` or `tamer-server` fails**
 - There might be multiple active sessions, confusing the extraction. Log out of Proton, clear all browser data for all proton.me domains (account, root, lumo), then log in again and re-run `tamer-auth`.
-
----
-
-## Login
-
-A secure and lightweight option where you provide your credentials in a prompt. Requires Go. No support for CAPTCHA or conversation sync.
-
-Uses Proton's SRP (Secure Remote Password) protocol via a Go binary built from [go-proton-api](https://github.com/henrybear327/go-proton-api).
-
-### Why Login?
-
-- **No browser dependency**: Pure API-based authentication
-- **Direct keyPassword access**: Derives the mailbox password needed for encryption
-- **Token refresh**: Supports automatic token refresh
-
-### Setup
-
-1. Build the Go binary:
-   ```bash
-   # Requires Go 1.24+
-   cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
-   ```
-2. Run `tamer-auth` and select `login`.
-3. Enter username, password, and TOTP code (if 2FA is enabled).
-
-> **Tip:** If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first. This may clear the challenge for subsequent login attempts.
-
-### Config
-
-```yaml
-auth:
-  method: login
-  login:
-    binaryPath: "./dist/proton-auth"
-    # Headers to help avoid CAPTCHA
-    appVersion: "macos-drive@1.0.0-alpha.1+rclone"
-    userAgent: "Mozilla/5.0 ..."
-```
-
-### Limitations
-
-- **CAPTCHA**: May trigger CAPTCHA on Proton's servers (see tip above)
-- **No conversation sync**: Cannot fetch userKeys/masterKeys due to API scope restrictions
-- **TOTP only**: Only supports TOTP for 2FA (no security keys)
-
-### Troubleshooting
-
-**"proton-auth binary not found"**
-- Build it: `cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -`
-
-**"Authentication failed"**
-- Verify username/password
-- Check if 2FA is enabled (will prompt for TOTP)
-- Try browser method as fallback
 
 ---
 
@@ -177,14 +177,14 @@ client_salted_key_pass = base64encodedKeyPassword==
 
 ## Comparison
 
-| Feature | Browser | Login | Rclone |
-|---------|---------|-------|--------|
-| Conversation sync | Yes | No | No |
+| Feature | Login | Browser | Rclone |
+|---------|-------|---------|--------|
+| Conversation sync | No | Yes | No |
 | keyPassword | Yes | Yes | Yes |
 | Token refresh | Automatic | Automatic | Automatic |
-| 2FA support | Any | TOTP only | Any (via rclone) |
-| CAPTCHA handling | Browser handles | May fail | rclone handles |
-| Extra tools needed | Browser + CDP | Go binary | rclone |
+| 2FA support | TOTP only | Any | Any (via rclone) |
+| CAPTCHA handling | May fail | Browser handles | rclone handles |
+| Extra tools needed | Go binary | Browser + CDP | rclone |
 | Setup complexity | Medium | Medium | Low |
 
 ### Conversation Sync
