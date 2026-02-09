@@ -306,7 +306,7 @@ See [docs/](docs/) for detailed documentation:
 ## Roadmap
 
 - **Getting feedback**: I'm curious how people use lumo-tamer and what they run into.
-- **More API endpoints**: Expand OpenAI compatibility.
+- **Test more API clients**: Test & improve integration with more API clients such as OpenClaw and nanocoder.
 - **Simpler auth**: Make the `login` method support conversation sync so you don't need a browser.
 - **On-disk conversation cache**: Encrypted local cache to reduce server load and enable full text search.
 
