@@ -1,28 +1,10 @@
 /**
- * Tool prefix helpers and pattern replacement
+ * Tool prefix helpers
  *
- * Utilities for prefixing/stripping custom tool names
- * and applying replace patterns.
+ * Utilities for prefixing/stripping custom tool names.
  */
 
 import type { OpenAITool } from '../types.js';
-import { logger } from '../../app/logger.js';
-import { getCustomToolsConfig, getConfigMode } from '../../app/config.js';
-
-// Validate replace patterns on module load (logger is available by now)
-if (getConfigMode() === 'server') {
-  const patterns = getCustomToolsConfig().replacePatterns ?? [];
-  for (const { pattern } of patterns) {
-    try {
-      new RegExp(pattern, 'gi');
-    } catch (e) {
-      logger.warn(`Invalid regex in customTools.replacePatterns: "${pattern}" - ${(e as Error).message}`);
-    }
-  }
-}
-
-// Re-export template helper
-export { interpolateTemplate } from './template.js';
 
 // ── Prefix helpers ───────────────────────────────────────────────────
 
@@ -91,29 +73,4 @@ export function applyToolNamePrefix(
   return result;
 }
 
-// ── Pattern replacement ──────────────────────────────────────────────
-
-export interface ReplacePattern {
-  pattern: string;
-  replacement?: string;
-}
-
-/**
- * Apply replace patterns to text (case-insensitive regex).
- * Each pattern can have an optional replacement; if omitted, matches are stripped.
- */
-export function applyReplacePatterns(text: string, patterns: ReplacePattern[]): string {
-  if (!patterns || patterns.length === 0) return text;
-  let result = text;
-  for (const { pattern, replacement } of patterns) {
-    try {
-      const regex = new RegExp(pattern, 'gi');
-      result = result.replace(regex, replacement ?? '');
-    } catch {
-      // Invalid regex pattern - skip it (already warned at config load)
-    }
-  }
-  // Clean up multiple consecutive newlines/spaces left by removals
-  return result.replace(/\n{3,}/g, '\n\n').replace(/  +/g, ' ').trim();
-}
 

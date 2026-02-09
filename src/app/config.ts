@@ -47,7 +47,6 @@ const replacePatternSchema = z.object({
 const customToolsConfigSchema = z.object({
   enabled: z.boolean(),
   prefix: z.string(),
-  replacePatterns: z.array(replacePatternSchema),
 });
 
 // Instructions schemas
@@ -61,6 +60,7 @@ const serverInstructionsConfigSchema = z.object({
   forTools: z.string(),
   fallback: z.string(),
   forToolBounce: z.string(),
+  replacePatterns: z.array(replacePatternSchema),
 });
 
 // CLI local actions config
@@ -189,7 +189,7 @@ let configMode: ConfigMode | null = null;
 export function initConfig(mode: ConfigMode): void {
   configMode = mode;
   config = loadMergedConfig(mode);
-  // Note: replacePatterns regex validation happens in src/api/tools/prefix.ts
+  // Note: replacePatterns regex validation happens in src/api/instructions/
   // at module load time, when logger is available
 }
 
