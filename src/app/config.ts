@@ -186,29 +186,11 @@ function loadMergedConfig(mode: ConfigMode): MergedConfig {
 let config: MergedConfig | null = null;
 let configMode: ConfigMode | null = null;
 
-/**
- * Validate regex patterns in customTools.replacePatterns.
- * Logs warnings for invalid patterns but doesn't fail.
- */
-function validateReplacePatterns(config: MergedConfig, mode: ConfigMode): void {
-  if (mode !== 'server') return;
-
-  const serverConfig = config as ServerMergedConfig;
-  const patterns = serverConfig.customTools?.replacePatterns ?? [];
-
-  for (const entry of patterns) {
-    try {
-      new RegExp(entry.pattern, 'gi');
-    } catch (e) {
-      console.warn(`Invalid regex in customTools.replacePatterns: "${entry.pattern}" - ${(e as Error).message}`);
-    }
-  }
-}
-
 export function initConfig(mode: ConfigMode): void {
   configMode = mode;
   config = loadMergedConfig(mode);
-  validateReplacePatterns(config, mode);
+  // Note: replacePatterns regex validation happens in src/api/tools/prefix.ts
+  // at module load time, when logger is available
 }
 
 export function getConfigMode(): ConfigMode | null {

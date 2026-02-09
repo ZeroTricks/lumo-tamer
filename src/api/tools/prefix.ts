@@ -6,6 +6,20 @@
  */
 
 import type { OpenAITool } from '../types.js';
+import { logger } from '../../app/logger.js';
+import { getCustomToolsConfig, getConfigMode } from '../../app/config.js';
+
+// Validate replace patterns on module load (logger is available by now)
+if (getConfigMode() === 'server') {
+  const patterns = getCustomToolsConfig().replacePatterns ?? [];
+  for (const { pattern } of patterns) {
+    try {
+      new RegExp(pattern, 'gi');
+    } catch (e) {
+      logger.warn(`Invalid regex in customTools.replacePatterns: "${pattern}" - ${(e as Error).message}`);
+    }
+  }
+}
 
 // Re-export template helper
 export { interpolateTemplate } from './template.js';
