@@ -20,10 +20,11 @@ export interface RequestContext {
 
 /**
  * Build the common request context shared by all handler variants.
+ * When conversationId is undefined (stateless request), requestTitle is false.
  */
 export function buildRequestContext(
   deps: EndpointDependencies,
-  conversationId: ConversationId,
+  conversationId: ConversationId | undefined,
   tools?: OpenAITool[]
 ): RequestContext {
   const serverToolsConfig = getCustomToolsConfig();
@@ -34,31 +35,33 @@ export function buildRequestContext(
       conversationId,
       authManager: deps.authManager,
     },
-    requestTitle: deps.conversationStore?.get(conversationId)?.title === 'New Conversation',
+    // Only request title for stateful conversations that haven't been titled yet
+    requestTitle: conversationId
+      ? deps.conversationStore?.get(conversationId)?.title === 'New Conversation'
+      : false,
   };
 }
 
 // ── Persistence helpers ────────────────────────────────────────────
 
-/** Persist title if Lumo generated one. */
-export function persistTitle(result: ChatResult, deps: EndpointDependencies, conversationId: ConversationId): void {
-  if (result.title && deps.conversationStore) {
-    deps.conversationStore.setTitle(conversationId, postProcessTitle(result.title));
-  }
+/** Persist title if Lumo generated one. No-op for stateless requests. */
+export function persistTitle(result: ChatResult, deps: EndpointDependencies, conversationId: ConversationId | undefined): void {
+  if (!conversationId || !result.title || !deps.conversationStore) return;
+  deps.conversationStore.setTitle(conversationId, postProcessTitle(result.title));
 }
 
-/** Persist assistant response text. */
-export function persistResponse(deps: EndpointDependencies, conversationId: ConversationId, content: string): void {
-  if (deps.conversationStore) {
-    deps.conversationStore.appendAssistantResponse(conversationId, content);
-    logger.debug({ conversationId }, 'Persisted assistant response');
-  }
+/** Persist assistant response text. No-op for stateless requests. */
+export function persistResponse(deps: EndpointDependencies, conversationId: ConversationId | undefined, content: string): void {
+  if (!conversationId || !deps.conversationStore) return;
+  deps.conversationStore.appendAssistantResponse(conversationId, content);
+  logger.debug({ conversationId }, 'Persisted assistant response');
 }
 
 /**
  * Persist assistant response with tool calls.
  * Each tool call is stored as a separate assistant message with normalized JSON content.
  * Also registers call_ids for deduplication tracking.
+ * No-op for stateless requests.
  *
  * NOTE: We intentionally don't store the stripped text content separately.
  * The OpenAI client sees the response as just the function_call items, not the
@@ -67,11 +70,11 @@ export function persistResponse(deps: EndpointDependencies, conversationId: Conv
  */
 export function persistResponseWithToolCalls(
   deps: EndpointDependencies,
-  conversationId: ConversationId,
+  conversationId: ConversationId | undefined,
   _content: string, // Kept for API compatibility but not stored
   toolCalls: Array<{ name: string; arguments: string; call_id: string }>
 ): void {
-  if (!deps.conversationStore) return;
+  if (!conversationId || !deps.conversationStore) return;
 
   // Store each tool call as a normalized assistant message and register call_id
   for (const tc of toolCalls) {

@@ -257,3 +257,46 @@ curl -X POST http://localhost:3000/v1/responses \
 # Check logs for "Auto-sync completed" or manually /save
 # Verify in Proton Lumo WebClient - conversation should appear
 ```
+
+## Troubleshooting
+
+### "I enabled sync but my chats don't appear in Lumo"
+
+**Cause:** Your API client isn't providing a conversation identifier, so lumo-tamer treats requests as stateless (no persistence, no sync).
+
+lumo-tamer needs a way to know which messages belong to the same conversation. Without this, each request is treated as independent and nothing gets synced.
+
+**Solution:** Configure your client to send a conversation identifier.
+
+**For `/v1/responses` (OpenAI Responses API):**
+- Include `"conversation": "your-conversation-id"` in your request, OR
+- Use `previous_response_id` to chain responses together, OR
+- Include `"user": "unique-session-id"` with `deriveIdFromUser: true`
+
+**For `/v1/chat/completions` (OpenAI Chat Completions API):**
+Include `"user": "unique-session-id"` in your request and nable `conversations.deriveIdFromUser: true` in config.yaml
+
+**Example with `user` field (works for both endpoints):**
+```yaml
+# config.yaml
+conversations:
+  deriveIdFromUser: true
+  sync:
+    enabled: true
+```
+
+```json
+// Your API request
+{
+  "model": "lumo",
+  "user": "session-abc123",
+  "messages": [{"role": "user", "content": "Hello"}]
+}
+```
+
+**How to verify it's working:**
+- Check logs for `Persisted conversation messages` (stateful) vs no persistence log (stateless)
+- Check logs for `Generated title` on first message of a new conversation
+- After sync, check Proton Lumo WebClient for the conversation
+
+**Note for Home Assistant users:** Home Assistant automatically sets the `user` field to its internal conversation ID, so enabling `deriveIdFromUser: true` is usually all you need.
