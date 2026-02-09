@@ -40,8 +40,7 @@ For Docker installation, see [Docker](#docker).
 
 ### 2. Authenticate
 
-- Run `tamer-auth`
-- Choose **login**
+- Run `tamer auth login`
 - Enter your Proton credentials and (optionally) 2FA code.
 
 > **Tip:** If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first. This may clear the challenge for subsequent login attempts.
@@ -63,7 +62,7 @@ tamer "What is 2+2?"
 tamer
 ```
 
-Other commands: `tamer-server` (start API server), `tamer-auth` (authenticate). See [Usage](#usage) for details.
+Other commands: `tamer-server` (start API server), `tamer auth` (authenticate). See [Usage](#usage) for details.
 
 
 
@@ -71,7 +70,7 @@ Other commands: `tamer-server` (start API server), `tamer-auth` (authenticate). 
 
 Add configuration options to `config.yaml`. Use [`config.defaults.yaml`](config.defaults.yaml) for inspiration. Don't edit config.defaults.yaml directly.
 
-Apart from auth settings (which are set by `tamer-auth`), all settings are optional. By default, lumo-tamer is conservative: experimental or resource-heavy features are disabled.
+Apart from auth settings (which are set by `tamer auth`), all settings are optional. By default, lumo-tamer is conservative: experimental or resource-heavy features are disabled.
 
 Options in sections `log`, `conversations`, `commands` and `tools` can be set globally (used by server & cli), and can be overwritten within `cli` and `server` sections.
 
@@ -103,7 +102,7 @@ Set general and tool-specific instructions for the CLI and server with `cli.inst
 
 Enable conversation sync in `config.yaml`:
 
-> **Note:** Only supported with the `browser` authentication method. Enabling conversation sync requires additional user secrets; if you enable this after initial setup, re-run `tamer-auth`.
+> **Note:** Only supported with the `browser` authentication method. Enabling conversation sync requires additional user secrets; if you enable this after initial setup, re-run `tamer auth browser`.
 
 ```yaml
 conversations:
@@ -246,7 +245,7 @@ chmod 600 secrets/lumo-vault-key
 
 #### Authenticate
 
-```docker compose run --rm -it app tamer-auth```
+```docker compose run --rm -it app tamer auth```
 
 #### Run
 Run server:

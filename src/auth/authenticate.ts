@@ -1,29 +1,24 @@
-#!/usr/bin/env node
 /**
- * Unified authentication script
+ * Authentication module for lumo-tamer
  *
- * Usage:
- *   npm run auth            - Interactive authentication
- *   npm run auth-status     - Show current auth status
- *   tamer-auth [status]     - Binary usage
+ * Usage (via CLI):
+ *   tamer auth              - Interactive authentication
+ *   tamer auth login        - Use login method directly
+ *   tamer auth browser      - Use browser method directly
+ *   tamer auth rclone       - Use rclone method directly
+ *   tamer auth status       - Show current auth status
  *
  * Prompts for auth method (with config value as default) and runs extraction:
+ * - login: Run interactive SRP authentication (requires Go binary)
  * - browser: Extract tokens from browser session via CDP
  * - rclone: Prompt user to paste rclone config section
- * - srp: Run interactive SRP authentication
  *
  * Updates config.yaml with selected values after successful auth.
  */
 
-// Initialize config mode and logger before other imports
-import { initConfig, getLogConfig } from '../app/config.js';
-initConfig('cli');
-
-import { initLogger, logger } from '../app/logger.js';
-initLogger(getLogConfig(), { consoleShim: false });
-
 import * as readline from 'readline';
 import { authConfig, authMethodSchema, getConversationsConfig } from '../app/config.js';
+import { logger } from '../app/logger.js';
 import { runBrowserAuthentication } from './browser/authenticate.js';
 import { runRcloneAuthentication } from './rclone/authenticate.js';
 import { runLoginAuthentication } from './login/authenticate.js';
@@ -41,123 +36,128 @@ const methodToNum: Record<AuthMethod, string> = { login: '1', browser: '2', rclo
  * Prompt user to select authentication method
  */
 async function promptForMethod(defaultMethod: AuthMethod): Promise<AuthMethod> {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-    console.log('Select authentication method:');
-    console.log('  1. login   - Enter Proton credentials (requires go binary)');
-    console.log('  2. browser - Extract from logged-in browser session');
-    console.log('  3. rclone  - Paste rclone config section');
-    console.log('');
+  console.log('Select authentication method:');
+  console.log('  1. login   - Enter Proton credentials (requires Go binary)');
+  console.log('  2. browser - Extract from logged-in browser session');
+  console.log('  3. rclone  - Paste rclone config section');
+  console.log('');
 
-    const defaultNum = methodToNum[defaultMethod] || '1';
+  const defaultNum = methodToNum[defaultMethod] || '1';
 
-    return new Promise(resolve => {
-        rl.question(`Choice [${defaultNum}]: `, answer => {
-            rl.close();
-            const input = answer.trim() || defaultNum;
+  return new Promise(resolve => {
+    rl.question(`Choice [${defaultNum}]: `, answer => {
+      rl.close();
+      const input = answer.trim() || defaultNum;
 
-            // Try parsing as number first, then as method name
-            const method = numToMethod[input] ?? authMethodSchema.safeParse(input).data ?? 'browser';
-            resolve(method);
-        });
+      // Try parsing as number first, then as method name
+      const method = numToMethod[input] ?? authMethodSchema.safeParse(input).data ?? 'login';
+      resolve(method);
     });
+  });
 }
 
 interface BrowserAuthResult {
-    cdpEndpoint: string;
+  cdpEndpoint: string;
 }
 
 async function authenticateBrowser(): Promise<BrowserAuthResult> {
-    const result = await runBrowserAuthentication();
+  const result = await runBrowserAuthentication();
 
-    // Log warnings
-    for (const warning of result.warnings) {
-        logger.warn(warning);
-    }
+  // Log warnings
+  for (const warning of result.warnings) {
+    logger.warn(warning);
+  }
 
-    // Summary
-    const syncEnabled = getConversationsConfig().sync.enabled;
-    if (!syncEnabled) {
-        logger.info('Sync disabled - encryption keys not fetched');
-    } else if (result.tokens.persistedSession?.blob && result.tokens.persistedSession?.clientKey) {
-        logger.info('Extended auth data extracted - conversation persistence enabled');
-    } else if (result.tokens.persistedSession?.blob) {
-        logger.warn('Conversation persistence may not work without ClientKey');
-    } else {
-        logger.warn('Conversation persistence will use local-only encryption');
-    }
+  // Summary
+  const syncEnabled = getConversationsConfig().sync.enabled;
+  if (!syncEnabled) {
+    logger.info('Sync disabled - encryption keys not fetched');
+  } else if (result.tokens.persistedSession?.blob && result.tokens.persistedSession?.clientKey) {
+    logger.info('Extended auth data extracted - conversation persistence enabled');
+  } else if (result.tokens.persistedSession?.blob) {
+    logger.warn('Conversation persistence may not work without ClientKey');
+  } else {
+    logger.warn('Conversation persistence will use local-only encryption');
+  }
 
-    return { cdpEndpoint: result.cdpEndpoint };
+  return { cdpEndpoint: result.cdpEndpoint };
 }
 
-async function main(): Promise<void> {
-    if (process.argv[2] === 'status') {
-        return runStatus();
+/**
+ * Run the auth command with the given arguments.
+ * Called from CLI after config/logger are initialized.
+ */
+export async function runAuthCommand(argv: string[]): Promise<void> {
+  const subArg = argv[0];
+
+  // Handle status subcommand
+  if (subArg === 'status') {
+    return runStatus();
+  }
+
+  console.log('=== lumo-tamer authentication ===\n');
+
+  // Determine method: from arg or interactive prompt
+  const methodFromArg = authMethodSchema.safeParse(subArg).data;
+  const defaultMethod = authConfig.method;
+  const method = methodFromArg ?? await promptForMethod(defaultMethod);
+
+  console.log(`\nUsing method: ${method}\n`);
+
+  try {
+    let cdpEndpoint: string | undefined;
+
+    switch (method) {
+      case 'browser': {
+        const result = await authenticateBrowser();
+        cdpEndpoint = result.cdpEndpoint;
+        break;
+      }
+      case 'rclone':
+        await runRcloneAuthentication();
+        break;
+      case 'login':
+        await runLoginAuthentication();
+        break;
+      default:
+        throw new Error(`Unknown auth method: ${method}`);
     }
 
-    console.log('=== lumo-tamer authentication ===\n');
+    // Flush logger before showing status (pino is async)
+    logger.flush();
+    await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Prompt for method (with config value as default)
-    const defaultMethod = authConfig.method;
-    const method = await promptForMethod(defaultMethod);
+    // Update config.yaml with selected values
+    updateAuthConfig({
+      method,
+      cdpEndpoint,
+    });
 
-    console.log(`\nUsing method: ${method}\n`);
-
-    try {
-        let cdpEndpoint: string | undefined;
-
-        switch (method) {
-            case 'browser': {
-                const result = await authenticateBrowser();
-                cdpEndpoint = result.cdpEndpoint;
-                break;
-            }
-            case 'rclone':
-                await runRcloneAuthentication();
-                break;
-            case 'login':
-                await runLoginAuthentication();
-                break;
-            default:
-                throw new Error(`Unknown auth method: ${method}`);
-        }
-
-        // Flush logger before showing status (pino is async)
-        logger.flush();
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Update config.yaml with selected values
-        updateAuthConfig({
-            method,
-            cdpEndpoint,
-        });
-
-        // Show status after extraction
-        // Create provider directly based on selected method (not from config, which hasn't reloaded)
-        let provider: AuthProvider;
-        switch (method) {
-            case 'login':
-                provider = new LoginAuthProvider();
-                break;
-            case 'rclone':
-                provider = new RcloneAuthProvider();
-                break;
-            default:
-                provider = new BrowserAuthProvider();
-                break;
-        }
-        await provider.initialize();
-        const status = provider.getStatus();
-        printStatus(status);
-        printSummary(status, provider.supportsPersistence());
-
-        console.log('\nYou can now run: tamer or tamer-server');
-        process.exit(0);
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error({ err: error }, `Authentication failed: ${message}`);
-        process.exit(1);
+    // Show status after extraction
+    // Create provider directly based on selected method (not from config, which hasn't reloaded)
+    let provider: AuthProvider;
+    switch (method) {
+      case 'login':
+        provider = new LoginAuthProvider();
+        break;
+      case 'rclone':
+        provider = new RcloneAuthProvider();
+        break;
+      default:
+        provider = new BrowserAuthProvider();
+        break;
     }
+    await provider.initialize();
+    const status = provider.getStatus();
+    printStatus(status);
+    printSummary(status, provider.supportsPersistence());
+
+    console.log('\nYou can now run: tamer or tamer-server');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error({ err: error }, `Authentication failed: ${message}`);
+    process.exit(1);
+  }
 }
-
-main();

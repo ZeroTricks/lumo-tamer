@@ -60,6 +60,6 @@ RUN npm link
 EXPOSE 3003
 
 # Default to server, override at runtime for auth/cli:
-#   docker compose run --rm -it app tamer-auth
-#   docker compose run --rm app tamer "prompt"
+#   docker compose run --rm -it app tamer auth
+#   docker compose run --rm -it app tamer
 CMD ["tamer-server"]
