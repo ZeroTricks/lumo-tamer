@@ -9,25 +9,28 @@
 import type { Turn } from '../lumo-client/index.js';
 import { getCliInstructionsConfig, getLocalActionsConfig } from '../app/config.js';
 import { isCommand } from '../app/commands.js';
+import { interpolateTemplate } from '../api/tools/template.js';
 
 /**
- * Build effective instructions for CLI.
- * Combines default instructions with forTools when tools are enabled.
+ * Build effective instructions for CLI using template system.
  */
 function buildEffectiveInstructions(): string | undefined {
   const instructionsConfig = getCliInstructionsConfig();
   const localActionsConfig = getLocalActionsConfig();
 
-  let instructions = instructionsConfig?.fallback;
+  // Build executor list (comma-separated language tags)
+  const executorKeys = Object.keys(localActionsConfig.executors || {});
+  const executors = executorKeys.join(', ');
 
-  // Append forTools instructions when local actions enabled
-  if (localActionsConfig.enabled && instructionsConfig?.forTools) {
-    instructions = instructions
-      ? `${instructions}\n\n${instructionsConfig.forTools}`
-      : instructionsConfig.forTools;
-  }
+  // Pre-interpolate forLocalActions with executors
+  const forLocalActions = interpolateTemplate(instructionsConfig.forLocalActions, { executors });
 
-  return instructions;
+  // Interpolate main template
+  return interpolateTemplate(instructionsConfig.template, {
+    localActions: localActionsConfig.enabled ? 'true' : undefined,
+    forLocalActions,
+    executors,
+  });
 }
 
 /**

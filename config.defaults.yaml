@@ -206,33 +206,32 @@ cli:
 
     # Executors for code block execution
     # Maps language tag -> [command, ...args]. Code is appended as last arg.
-    # Override in config.yaml to restrict or extend
+    # Override to restrict or extend
     executors:
-      # Unix shells
       bash: ["bash", "-c"]
+      python: ["python", "-c"]
       sh: ["sh", "-c"]
-      zsh: ["zsh", "-c"]
-      # Windows shells
-      powershell: ["powershell", "-Command"]
-      ps1: ["powershell", "-Command"]
-      cmd: ["cmd", "/c"]
-      # Scripting languages
-      python: ["python3", "-c"]
-      python3: ["python3", "-c"]
-      node: ["node", "-e"]
-      javascript: ["node", "-e"]
-      js: ["node", "-e"]
-      ruby: ["ruby", "-e"]
-      perl: ["perl", "-e"]
+      # zsh: ["zsh", "-c"]
+      # powershell: ["powershell", "-Command"]
+      # ps1: ["powershell", "-Command"]
+      # cmd: ["cmd", "/c"]
+      # node: ["node", "-e"]
+      # javascript: ["node", "-e"]
+      # js: ["node", "-e"]
+      # perl: ["perl", "-e"]
 
   instructions:
-    fallback: |
+    template: |
       You are a command line assistant. Your output will be read in a terminal. Keep the formatting to a minimum and be concise.
 
-    # Appended when localActions.enabled=true
-    forTools: |
-      You can read, edit and create files, and you can execute bash and python commands on the user's machine.
-      To execute code, use a code block like ```bash or ```python. The user will be prompted to execute it and the result will be returned to you. Don't explain the user can execute commands, it will be handled automatically. Keep commands simple and safe.
+      {{#if localActions}}
+      {{forLocalActions}}
+      {{/if}}
+
+    # Injected as {{forLocalActions}} when localActions.enabled=true
+    forLocalActions: |
+      You can read, edit and create files, and you can execute {{executors}} commands on the user's machine.
+      To execute code, use a code block like ```python. The user will be prompted to execute it and the result will be returned to you. Don't explain the user can execute commands, it will be handled automatically. Keep commands simple and safe.
       To read files, use a ```read block with one file path per line. Contents will be returned to you automatically without prompting the user. Example:
       ```read
       README.md
@@ -252,6 +251,7 @@ cli:
       new text
       >>>>>>> REPLACE
       ```
+
     forToolBounce: |
       You tried to execute an action using your built-in tool system, but these actions must be called by providing a code block. Use for example:
       ```read

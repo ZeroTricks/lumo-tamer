@@ -50,14 +50,17 @@ const customToolsConfigSchema = z.object({
   replacePatterns: z.array(replacePatternSchema),
 });
 
-// Instructions schemas (CLI base, server extends with template)
+// Instructions schemas
 const cliInstructionsConfigSchema = z.object({
-  fallback: z.string(),
-  forTools: z.string(),
+  template: z.string(),
+  forLocalActions: z.string(),
   forToolBounce: z.string(),
 });
-const serverInstructionsConfigSchema = cliInstructionsConfigSchema.extend({
+const serverInstructionsConfigSchema = z.object({
   template: z.string(),
+  forTools: z.string(),
+  fallback: z.string(),
+  forToolBounce: z.string(),
 });
 
 // CLI local actions config
