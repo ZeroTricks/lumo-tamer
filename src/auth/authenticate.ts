@@ -32,17 +32,22 @@ import type { AuthMethod, AuthProvider } from './types.js';
 const numToMethod: Record<string, AuthMethod> = { '1': 'login', '2': 'browser', '3': 'rclone' };
 const methodToNum: Record<AuthMethod, string> = { login: '1', browser: '2', rclone: '3' };
 
+/** Write to stdout (bypasses console shim) */
+function print(msg: string): void {
+  process.stdout.write(msg + '\n');
+}
+
 /**
  * Prompt user to select authentication method
  */
 async function promptForMethod(defaultMethod: AuthMethod): Promise<AuthMethod> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-  console.log('Select authentication method:');
-  console.log('  1. login   - Enter Proton credentials (requires Go binary)');
-  console.log('  2. browser - Extract from logged-in browser session');
-  console.log('  3. rclone  - Paste rclone config section');
-  console.log('');
+  print('Select authentication method:');
+  print('  1. login   - Enter Proton credentials (requires Go binary)');
+  print('  2. browser - Extract from logged-in browser session');
+  print('  3. rclone  - Paste rclone config section');
+  print('');
 
   const defaultNum = methodToNum[defaultMethod] || '1';
 
@@ -97,14 +102,14 @@ export async function runAuthCommand(argv: string[]): Promise<void> {
     return runStatus();
   }
 
-  console.log('=== lumo-tamer authentication ===\n');
+  print('=== lumo-tamer authentication ===\n');
 
   // Determine method: from arg or interactive prompt
   const methodFromArg = authMethodSchema.safeParse(subArg).data;
   const defaultMethod = authConfig.method;
   const method = methodFromArg ?? await promptForMethod(defaultMethod);
 
-  console.log(`\nUsing method: ${method}\n`);
+  print(`\nUsing method: ${method}\n`);
 
   try {
     let cdpEndpoint: string | undefined;
@@ -154,7 +159,7 @@ export async function runAuthCommand(argv: string[]): Promise<void> {
     printStatus(status);
     printSummary(status, provider.supportsPersistence());
 
-    console.log('\nYou can now run: tamer or tamer-server');
+    print('\nYou can now run: tamer or tamer server');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error({ err: error }, `Authentication failed: ${message}`);

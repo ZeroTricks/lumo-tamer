@@ -5,59 +5,64 @@
 import { createAuthProvider, type AuthProviderStatus } from './index.js';
 import { authConfig, getConversationsConfig } from '../app/config.js';
 
+/** Write to stdout (bypasses console shim) */
+function print(msg: string): void {
+    process.stdout.write(msg + '\n');
+}
+
 export function printStatus(status: AuthProviderStatus): void {
     const statusIcon = status.valid ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
 
-    console.log(`\n${statusIcon} Auth Method: \x1b[1m${status.method}\x1b[0m`);
-    console.log(`  Source: ${status.source}`);
-    console.log('  Details:');
+    print(`\n${statusIcon} Auth Method: \x1b[1m${status.method}\x1b[0m`);
+    print(`  Source: ${status.source}`);
+    print('  Details:');
 
     for (const [key, value] of Object.entries(status.details)) {
         const displayValue = typeof value === 'boolean'
             ? (value ? '\x1b[32myes\x1b[0m' : '\x1b[33mno\x1b[0m')
             : value;
-        console.log(`    ${key}: ${displayValue}`);
+        print(`    ${key}: ${displayValue}`);
     }
 
     const autoRefresh = authConfig.autoRefresh;
     const autoRefreshDisplay = autoRefresh.enabled
         ? `\x1b[32myes\x1b[0m (every ${autoRefresh.intervalHours}h)`
         : '\x1b[33mno\x1b[0m';
-    console.log(`    autoRefresh: ${autoRefreshDisplay}`);
+    print(`    autoRefresh: ${autoRefreshDisplay}`);
 
     if (status.warnings.length > 0) {
-        console.log('  Warnings:');
+        print('  Warnings:');
         for (const warning of status.warnings) {
-            console.log(`    \x1b[33m⚠\x1b[0m ${warning}`);
+            print(`    \x1b[33m⚠\x1b[0m ${warning}`);
         }
     }
 }
 
 export function printSummary(status: AuthProviderStatus, supportsPersistence: boolean): void {
-    console.log('\n--- Summary ---');
+    print('\n--- Summary ---');
     if (status.valid) {
-        console.log('\x1b[32mAuthentication is configured and valid.\x1b[0m');
+        print('\x1b[32mAuthentication is configured and valid.\x1b[0m');
         const syncEnabled = getConversationsConfig().sync.enabled;
         if (!syncEnabled) {
-            console.log('Conversation persistence: \x1b[33mdisabled\x1b[0m (by configuration)');
+            print('Conversation persistence: \x1b[33mdisabled\x1b[0m (by configuration)');
         } else if (!supportsPersistence) {
-            console.log(`Conversation persistence: \x1b[33mdisabled\x1b[0m (${status.method} auth doesn't support it)`);
+            print(`Conversation persistence: \x1b[33mdisabled\x1b[0m (${status.method} auth doesn't support it)`);
         } else if (!status.details.hasKeyPassword) {
-            console.log('Conversation persistence: \x1b[33menabled but no keyPassword\x1b[0m');
+            print('Conversation persistence: \x1b[33menabled but no keyPassword\x1b[0m');
         } else {
-            console.log('Conversation persistence: \x1b[32menabled\x1b[0m');
+            print('Conversation persistence: \x1b[32menabled\x1b[0m');
         }
     } else {
-        console.log('\x1b[31mAuthentication needs attention.\x1b[0m');
-        console.log('See warnings above for remediation steps.');
+        print('\x1b[31mAuthentication needs attention.\x1b[0m');
+        print('See warnings above for remediation steps.');
     }
 }
 
 export async function runStatus(): Promise<void> {
-    console.log('=== lumo-tamer auth status ===');
+    print('=== lumo-tamer auth status ===');
 
     const method = authConfig.method;
-    console.log(`\nConfigured method: ${method}`);
+    print(`\nConfigured method: ${method}`);
 
     try {
         const provider = await createAuthProvider();
@@ -65,15 +70,15 @@ export async function runStatus(): Promise<void> {
         printStatus(status);
         printSummary(status, provider.supportsPersistence());
 
-        console.log('');
+        print('');
         process.exit(status.valid ? 0 : 1);
     } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
-        console.error(`\n\x1b[31m✗\x1b[0m Failed to initialize auth provider`);
-        console.error(`  Error: ${errorMsg}`);
-        console.log('\n--- Summary ---');
-        console.log('\x1b[31mAuthentication needs attention.\x1b[0m');
-        console.log('');
+        print(`\n\x1b[31m✗\x1b[0m Failed to initialize auth provider`);
+        print(`  Error: ${errorMsg}`);
+        print('\n--- Summary ---');
+        print('\x1b[31mAuthentication needs attention.\x1b[0m');
+        print('');
         process.exit(1);
     }
 }

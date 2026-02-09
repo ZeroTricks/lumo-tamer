@@ -21,10 +21,12 @@ Usage:
   tamer "your prompt"        One-shot query
   tamer auth [method]        Authenticate to Proton
   tamer auth status          Show authentication status
+  tamer server               Start API server
   tamer --help               Show this help
 
 Commands:
   auth                       Authenticate to Proton (login, browser, or rclone)
+  server                     Start OpenAI-compatible API server
 
 Options:
   -h, --help    Show help
@@ -50,53 +52,84 @@ Methods:
 `);
 }
 
+function printServerHelp(): void {
+  console.log(`
+tamer server - Start OpenAI-compatible API server
+
+Usage:
+  tamer server               Start the API server
+  tamer server --help        Show this help
+
+The server listens on the port configured in config.yaml (default: 3003).
+`);
+}
+
 // Handle --help before config/logger init (console.log gets shimmed after init)
 if (args['--help'] && args._.length === 0) {
   printHelp();
   process.exit(0);
 }
 
-// Handle tamer auth --help / tamer auth -h
 if (args._[0] === 'auth' && (args._.includes('--help') || args._.includes('-h'))) {
   printAuthHelp();
   process.exit(0);
 }
 
-// Handle auth subcommand - init logger without console shim so console.log works
-if (args._[0] === 'auth') {
-  const { initConfig, getLogConfig } = await import('./app/config.js');
-  initConfig('cli');
-  const { initLogger } = await import('./app/logger.js');
-  initLogger(getLogConfig(), { consoleShim: false });
-  const { runAuthCommand } = await import('./auth/authenticate.js');
-  await runAuthCommand(args._.slice(1));
+if (args._[0] === 'server' && (args._.includes('--help') || args._.includes('-h'))) {
+  printServerHelp();
   process.exit(0);
 }
 
-// Initialize config and logger for other commands
-import { initConfig, getLogConfig } from './app/config.js';
-initConfig('cli');
-
+// Single init point - static imports now safe (help cases exited above)
+import { initConfig, getLogConfig, getServerConfig } from './app/config.js';
 import { initLogger, logger } from './app/logger.js';
+
+const mode = args._[0] === 'server' ? 'server' : 'cli';
+initConfig(mode);
 initLogger(getLogConfig());
 
-// Default: run CLI client (chat)
-import { Application } from './app/index.js';
-import { CLIClient } from './cli/client.js';
-
-async function main() {
-  logger.info('Starting lumo-tamer cli...');
-
-  const app = await Application.create();
-  const cliClient = new CLIClient(app);
-  await cliClient.run();
-
-  process.exit(0);
-}
-
-main().catch(async (error) => {
+function handleFatalError(error: unknown): never {
   logger.fatal({ error });
   logger.flush();
-  await new Promise(resolve => setTimeout(resolve, 200));
-  process.exit(1);
-});
+  setTimeout(() => process.exit(1), 200);
+  throw error; // never reached, satisfies return type
+}
+
+// Route commands
+try {
+  if (args._[0] === 'auth') {
+    const { runAuthCommand } = await import('./auth/authenticate.js');
+    await runAuthCommand(args._.slice(1));
+    process.exit(0);
+  }
+
+  if (args._[0] === 'server') {
+    const { Application } = await import('./app/index.js');
+    const { APIServer } = await import('./api/server.js');
+    const { validateTemplateOnce } = await import('./api/instructions.js');
+
+    const serverConfig = getServerConfig();
+    validateTemplateOnce(serverConfig.instructions.template);
+    logger.info('Starting lumo-tamer API Server...');
+
+    const app = await Application.create();
+    const apiServer = new APIServer(app);
+    await apiServer.start();
+
+    process.on('SIGINT', () => { logger.info('\nShutting down...'); process.exit(0); });
+    process.on('SIGTERM', () => { logger.info('\nShutting down...'); process.exit(0); });
+  }
+  else {
+    // Default: CLI chat
+    const { Application } = await import('./app/index.js');
+    const { CLIClient } = await import('./cli/client.js');
+
+    logger.info('Starting lumo-tamer cli...');
+    const app = await Application.create();
+    const cliClient = new CLIClient(app);
+    await cliClient.run();
+    process.exit(0);
+  }
+} catch (error) {
+  handleFatalError(error);
+}

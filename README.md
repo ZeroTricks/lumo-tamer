@@ -62,7 +62,7 @@ tamer "What is 2+2?"
 tamer
 ```
 
-Other commands: `tamer-server` (start API server), `tamer auth` (authenticate). See [Usage](#usage) for details.
+Other commands: `tamer server` (start API server), `tamer auth` (authenticate). See [Usage](#usage) for details.
 
 
 
@@ -175,7 +175,7 @@ A few in-chat commands are supported in both CLI and API mode. Send the command 
 ### API
 
 Start by setting `server.apiKey` in `config.yaml`
-Run `tamer-server`
+Run `tamer server`
 
 Now, connect your favorite OpenAI-compatible app.
 
