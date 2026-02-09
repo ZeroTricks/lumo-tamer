@@ -8,7 +8,7 @@ Three types of tool calls in lumo-tamer:
 |------|-----------|----------|---------|
 | **Native** | Lumo-native, server-side execution | SSE `tool_call`/`tool_result` targets | `web_search`, `proton_info` |
 | **Custom** | Client-defined, client-side execution | Instructed as text JSON in message | `get_weather`, `HassTurnOff` |
-| **Confused** | Custom tool Lumo mistakenly routes as native | SSE `tool_call` target, always fails | `GetLiveContext` via native pipeline |
+| **Misrouted** | Custom tool Lumo mistakenly routes as native | SSE `tool_call` target, always fails | `GetLiveContext` via native pipeline |
 | **CLI** | CLI-only, code block with language tag | `CodeBlockDetector` + `BlockHandler` | `read`, `edit`, `create`, bash |
 
 ## Native Tools
@@ -181,13 +181,13 @@ instructions:
 - **Less reliable than native**: Depends on Lumo consistently outputting valid JSON
 - **Prompt engineering required**: Must instruct Lumo to output JSON for these tools
 
-## Confused Tool Calls
+## Misrouted Tool Calls
 
 ### The Problem
 
 Sometimes Lumo routes a custom tool through the native SSE pipeline instead of outputting it as text. This always fails server-side because the backend doesn't know how to execute client-defined tools. Proton sees these as tool errors.
 
-### SSE Stream for a Confused Call
+### SSE Stream for a Misrouted Call
 
 ```
 data: {"type":"token_data","target":"tool_call","content":"{\"name\":\"GetLiveContext\",\"arguments\":{}}"}
@@ -199,24 +199,24 @@ The tool_call contains the custom tool name, tool_result is always `{"error":tru
 
 ### How lumo-tamer Bounces These
 
-Instead of silently converting the failed call, lumo-tamer bounces confused calls back to Lumo with a corrective instruction. This teaches Lumo within the conversation to output custom tool calls as JSON text.
+Instead of silently converting the failed call, lumo-tamer bounces misrouted calls back to Lumo with a corrective instruction. This teaches Lumo within the conversation to output custom tool calls as JSON text.
 
-1. **Detection**: `LumoClient.processStream()` tracks SSE `tool_call` targets. When a tool name is not in `KNOWN_NATIVE_TOOLS`, it's identified as confused.
+1. **Detection**: `LumoClient.processStream()` tracks SSE `tool_call` targets. When a tool name is not in `KNOWN_NATIVE_TOOLS`, it's identified as misrouted.
 2. **Suppression**: `onChunk` stops firing immediately - the client suppresses Lumo's fallback text ("I don't have access...") internally.
 3. **Bounce**: `chatWithHistory()` appends the failed assistant response + a corrective user message (from `instructions.forToolBounce` config) to the conversation turns and makes a second call.
 4. **Result**: Lumo re-outputs the tool call as JSON text in the bounce response. This flows through normal `StreamingToolDetector` / `tool-parser.ts` detection.
 
-API handlers are completely unaware of confused calls - the bounce happens inside `LumoClient`.
+API handlers are completely unaware of misrouted calls - the bounce happens inside `LumoClient`.
 
 ### Streaming Sequence
 
 ```
 Handler -> LumoClient.chatWithHistory(turns, onChunk, options)
   LumoClient -> Lumo: first call
-  Lumo -> LumoClient: confused tool_call (name not in KNOWN_NATIVE_TOOLS)
+  Lumo -> LumoClient: misrouted tool_call (name not in KNOWN_NATIVE_TOOLS)
   LumoClient: sets suppressChunks=true, stops calling onChunk
   Lumo -> LumoClient: tool_result error + fallback text (onChunk not called)
-  LumoClient: stream ends, confused flag set
+  LumoClient: stream ends, misrouted flag set
   LumoClient -> Lumo: bounce call (passes onChunk through)
   Lumo -> LumoClient: text with JSON tool call -> onChunk fires -> handler streams it
   LumoClient: returns bounce ChatResult
@@ -235,14 +235,14 @@ instructions:
     {toolCall}
 ```
 
-The `{toolCall}` placeholder is replaced at runtime with the actual confused tool call JSON.
+The `{toolCall}` placeholder is replaced at runtime with the actual misrouted tool call JSON.
 
 ### Key code
 
-- `src/lumo-client/client.ts` - `isConfusedToolCall()`, `buildBounceInstruction()`, bounce in `chatWithHistory()`
+- `src/lumo-client/client.ts` - `isMisroutedToolCall()`, `buildBounceInstruction()`, bounce in `chatWithHistory()`
 - `src/api/native-tool-parser.ts` - `parseNativeToolCallJson()`, `isErrorResult()`
 - `src/api/json-brace-tracker.ts` - SSE target JSON extraction
-- Mock scenario: `confusedToolCall`
+- Mock scenario: `misroutedToolCall`
 
 ## CLI Tools
 
@@ -273,7 +273,7 @@ Native tools and custom tools can be enabled simultaneously:
 - `tools.enableWebSearch: true` enables Lumo's native `web_search` tool (config)
 - Providing `tools` array in OpenAI request enables custom tool detection
 - Both work together: native tools execute server-side, custom tools are detected client-side
-- Confused tool calls are automatically bounced back to Lumo for correction
+- Misrouted tool calls are automatically bounced back to Lumo for correction
 
 ## Data Structures
 

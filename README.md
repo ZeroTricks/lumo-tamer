@@ -182,13 +182,13 @@ server:
 
 > **Warning:** Server-side tool support is experimental. Under the hood, lumo-tamer instructs Lumo to send tool calls as JSON, which it will then detect and translate into real tool calls. This can fail because:
 > - Lumo gets confused by the API client providing too many tools.
-> - Lumo tries to call tools server-side, which fails, so Lumo reports tools as unavailable. If this happens, try manually asking it to output the JSON.
+> - Lumo misroutes custom tools through its native pipeline, which fails server-side. lumo-tamer bounces these back with corrective instructions, but this adds latency and isn't always reliable.
 > - Lumo sets the wrong tool name or arguments.
 > - JSON code blocks are not properly detected or parsed by lumo-tamer.
 >
 > This requires some trial and error. Experiment with `server.instructions.forTools` to improve results.
 
-See [docs/tools.md](docs/tools.md) for the full tools architecture (native, custom, confused, CLI).
+See [docs/tools.md](docs/tools.md) for the full tools architecture (native, custom, bouncing misrouted tool calls).
 
 ## Usage
 
@@ -307,7 +307,7 @@ See [docs/](docs/) for detailed documentation:
 - [Authentication](docs/authentication.md): Auth methods, setup and troubleshooting
 - [Conversations](docs/conversations.md): Conversation persistence and sync
 - [Development](docs/development.md): Development setup and workflow
-- [Tools](docs/tools.md): Tools architecture (native, custom, confused, CLI)
+- [Tools](docs/tools.md): Tools architecture (native, custom, misrouted, CLI)
 - [Upstream Files](docs/upstream.md): Proton WebClients files, shims and path aliases
 
 ## Roadmap

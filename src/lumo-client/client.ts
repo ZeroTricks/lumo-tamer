@@ -43,7 +43,7 @@ export interface ChatResult {
     title?: string;
     /** First valid native tool call from SSE tool_call target, if any.
      *  "Native" here means Lumo-native SSE pipeline - this includes both legitimate
-     *  native calls (e.g. web_search) and "confused" calls (custom tools Lumo
+     *  native calls (e.g. web_search) and "misrouted" calls (custom tools Lumo
      *  mistakenly routed through the native pipeline). */
     nativeToolCall?: ParsedToolCall;
     /** Whether the native tool call failed server-side (tool_result contained error). */
@@ -55,12 +55,12 @@ const DEFAULT_EXTERNAL_TOOLS: ToolName[] = ['web_search', 'weather', 'stock', 'c
 const KNOWN_NATIVE_TOOLS = new Set<string>([...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]);
 const DEFAULT_ENDPOINT = 'ai/v1/chat';
 
-/** A confused tool call is a custom tool Lumo mistakenly routed through its native SSE pipeline. */
-function isConfusedToolCall(toolCall: ParsedToolCall | undefined): boolean {
+/** A misrouted tool call is a custom tool Lumo mistakenly routed through its native SSE pipeline. */
+function isMisroutedToolCall(toolCall: ParsedToolCall | undefined): boolean {
     return !!toolCall && !KNOWN_NATIVE_TOOLS.has(toolCall.name);
 }
 
-/** Build the bounce instruction: config text + the confused tool call as JSON example.
+/** Build the bounce instruction: config text + the misrouted tool call as JSON example.
  *  Includes the prefix in the example JSON so Lumo outputs it correctly. */
 function buildBounceInstruction(toolCall: ParsedToolCall): string {
     const instruction = getInstructionsConfig().forToolBounce;
@@ -128,7 +128,7 @@ export class LumoClient {
         const toolResultTracker = new JsonBraceTracker();
         let firstNativeToolCall: ParsedToolCall | null = null;
         let nativeToolCallFailed = false;
-        // Suppress onChunk when a confused tool call is detected mid-stream
+        // Suppress onChunk when a misrouted tool call is detected mid-stream
         let suppressChunks = false;
 
         const processMessage = async (msg: GenerationToFrontendMessage) => {
@@ -168,9 +168,9 @@ export class LumoClient {
                         logger.debug({ raw: json }, 'Native SSE tool_call');
                         if (!firstNativeToolCall) {
                             firstNativeToolCall = parseNativeToolCallJson(json);
-                            if (firstNativeToolCall && isConfusedToolCall(firstNativeToolCall)) {
+                            if (firstNativeToolCall && isMisroutedToolCall(firstNativeToolCall)) {
                                 suppressChunks = true;
-                                logger.debug({ name: firstNativeToolCall.name }, 'Confused tool call detected, suppressing chunks');
+                                logger.debug({ name: firstNativeToolCall.name }, 'Misrouted tool call detected, suppressing chunks');
                             }
                         }
                     }
@@ -333,10 +333,10 @@ export class LumoClient {
             }
         }
 
-        // Bounce confused tool calls: ask Lumo to re-output as JSON text
-        if (!isBounce && isConfusedToolCall(result.nativeToolCall)) {
+        // Bounce misrouted tool calls: ask Lumo to re-output as JSON text
+        if (!isBounce && isMisroutedToolCall(result.nativeToolCall)) {
             const bounceInstruction = buildBounceInstruction(result.nativeToolCall!);
-            logger.info({ name: result.nativeToolCall!.name }, 'Bouncing confused tool call');
+            logger.info({ name: result.nativeToolCall!.name }, 'Bouncing misrouted tool call');
 
             const bounceTurns: Turn[] = [
                 ...turns,

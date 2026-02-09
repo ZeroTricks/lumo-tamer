@@ -131,12 +131,12 @@ describe('/v1/responses', () => {
     });
   });
 
-  describe('confusedToolCall scenario (bounce)', () => {
+  describe('misroutedToolCall scenario (bounce)', () => {
     let ts: TestServer;
     const dummyTools = [{ type: 'function', function: { name: 'GetLiveContext', parameters: {} } }];
 
     beforeAll(async () => {
-      ts = await createTestServer('confusedToolCall');
+      ts = await createTestServer('misroutedToolCall');
       // Enable custom tool detection so the bounce response JSON is parsed
       (getCustomToolsConfig() as any).enabled = true;
     });
@@ -145,7 +145,7 @@ describe('/v1/responses', () => {
       await ts.close();
     });
 
-    it('non-streaming: bounces confused call and returns function_call from text detection', async () => {
+    it('non-streaming: bounces misrouted call and returns function_call from text detection', async () => {
       const res = await postResponses(ts, { input: 'Hello', stream: false, tools: dummyTools });
 
       expect(res.status).toBe(200);
@@ -160,7 +160,7 @@ describe('/v1/responses', () => {
       expect(functionCall.status).toBe('completed');
     });
 
-    it('streaming: bounces confused call and emits function_call events', async () => {
+    it('streaming: bounces misrouted call and emits function_call events', async () => {
       const res = await postResponses(ts, { input: 'Hello', stream: true, tools: dummyTools });
 
       expect(res.status).toBe(200);

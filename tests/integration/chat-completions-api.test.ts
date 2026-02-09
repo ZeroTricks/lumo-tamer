@@ -125,12 +125,12 @@ describe('/v1/chat/completions', () => {
     });
   });
 
-  describe('confusedToolCall scenario (bounce)', () => {
+  describe('misroutedToolCall scenario (bounce)', () => {
     let nativeTs: TestServer;
     const dummyTools = [{ type: 'function', function: { name: 'GetLiveContext', parameters: {} } }];
 
     beforeAll(async () => {
-      nativeTs = await createTestServer('confusedToolCall');
+      nativeTs = await createTestServer('misroutedToolCall');
       (getCustomToolsConfig() as any).enabled = true;
     });
     afterAll(async () => {
@@ -138,7 +138,7 @@ describe('/v1/chat/completions', () => {
       await nativeTs.close();
     });
 
-    it('non-streaming: bounces confused call and returns tool_calls from text detection', async () => {
+    it('non-streaming: bounces misrouted call and returns tool_calls from text detection', async () => {
       const res = await postChat(nativeTs, {
         model: 'lumo',
         messages: userMessage('Hello'),
@@ -160,7 +160,7 @@ describe('/v1/chat/completions', () => {
       expect(choice.message.tool_calls[0].function.name).toBe('GetLiveContext');
     });
 
-    it('streaming: bounces confused call and emits tool call delta', async () => {
+    it('streaming: bounces misrouted call and emits tool call delta', async () => {
       const res = await postChat(nativeTs, {
         model: 'lumo',
         messages: userMessage('Hello'),

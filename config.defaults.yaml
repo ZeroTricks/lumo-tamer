@@ -47,7 +47,7 @@ test:
   mock:
     # Enable mock mode: bypass authentication, return simulated Lumo responses
     enabled: false
-    # Scenario: success, error, timeout, rejected, toolCall, confusedToolCall, weeklyLimit, cycle
+    # Scenario: success, error, timeout, rejected, toolCall, misroutedToolCall, weeklyLimit, cycle
     scenario: "success"
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
