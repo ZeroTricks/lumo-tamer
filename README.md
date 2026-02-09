@@ -31,14 +31,10 @@ This is an unofficial, personal project in early stages of development, not affi
 ```bash
 git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
-npm install
-npm run build
-make auth-build
-# Optionally install globally , so you can use command `tamer` everywhere
+npm install && npm run build:all
+# Optionally install globally, so you can use command `tamer` everywhere
 npm link
 ```
-
-A [`Makefile`](Makefile) is included as a convenience wrapper. Optionally, run `make help` to see available shortcuts.
 
 For Docker installation, see [Docker](#docker).
 
