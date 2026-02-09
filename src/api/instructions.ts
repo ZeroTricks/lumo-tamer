@@ -107,7 +107,7 @@ function validateReplacePatternsOnce(): void {
     try {
       new RegExp(pattern, 'gi');
     } catch (e) {
-      logger.warn(`Invalid regex in instructions.replacePatterns: "${pattern}" - ${(e as Error).message}`);
+      logger.warn(`Ignoring "${pattern}" in instructions.replacePatterns:${(e as Error).message}`);
     }
   }
 }
