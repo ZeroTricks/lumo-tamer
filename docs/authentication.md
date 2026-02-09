@@ -243,8 +243,9 @@ Shows:
 
 ## Logout
 
-Use the `/logout`command in any chat (cli or api).
+Use the `/logout` command in any chat (CLI or API).
 
+```bash
 # API
 curl -X POST http://localhost:3003/v1/auth/logout \
   -H "Authorization: Bearer your-api-key"

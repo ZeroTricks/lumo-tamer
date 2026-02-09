@@ -180,15 +180,7 @@ server:
 ```
 
 
-> **Warning:** Server-side tool support is experimental. Under the hood, lumo-tamer instructs Lumo to send tool calls as JSON, which it will then detect and translate into real tool calls. This can fail because:
-> - Lumo gets confused by the API client providing too many tools.
-> - Lumo misroutes custom tools through its native pipeline, which fails server-side. lumo-tamer bounces these back with corrective instructions, but this adds latency and isn't always reliable.
-> - Lumo sets the wrong tool name or arguments.
-> - JSON code blocks are not properly detected or parsed by lumo-tamer.
->
-> This requires some trial and error. Experiment with `server.instructions.forTools` to improve results.
-
-See [docs/tools.md](docs/tools.md) for the full tools architecture (native, custom, bouncing misrouted tool calls).
+> **Warning:** Custom tool support is experimental and can fail in various ways. See [docs/custom-tools.md](docs/custom-tools.md) for details, configuration, and troubleshooting.
 
 ## Usage
 
@@ -306,8 +298,9 @@ See [docs/](docs/) for detailed documentation:
 
 - [Authentication](docs/authentication.md): Auth methods, setup and troubleshooting
 - [Conversations](docs/conversations.md): Conversation persistence and sync
+- [Custom Tools](docs/custom-tools.md): Tool support for API clients
+- [Local Actions](docs/local-actions.md): CLI file operations and code execution
 - [Development](docs/development.md): Development setup and workflow
-- [Tools](docs/tools.md): Tools architecture (native, custom, misrouted, CLI)
 - [Upstream Files](docs/upstream.md): Proton WebClients files, shims and path aliases
 
 ## Roadmap
@@ -324,7 +317,7 @@ See [docs/](docs/) for detailed documentation:
 - **Rate limiting and token usage.** Although care was put into making the app behave, it may make many API calls, potentially getting you rate-limited, or burn through your allowed tokens quickly. I have not experienced either of these issues on Lumo Plus.
 - **Security.** This app handles Proton user secrets. Although the code is vetted to the best of my knowledge and follows best practices, this is not my area of expertise. Please verify for yourself. Using the app without full conversation sync will only fetch API tokens and will not fetch user (PGP) keys in any way.
 - **API compatibility.** The API implements a subset of OpenAI-compatible endpoints and has been tested minimally.
-- **AI-assisted development.** This code was written with the extensive use of Claude Code. It's 2026, get over it.
+- **AI-assisted development.** This code was written with the extensive use of Claude Code.
 - **Tool execution.** Enabling tools gives Lumo the power to execute actions client-side (API or CLI). I am not responsible for Lumo's actions. The CLI will always ask for your confirmation before executing commands.
 
 ## License
