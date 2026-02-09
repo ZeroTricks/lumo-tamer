@@ -236,7 +236,7 @@ It is recommended to run lumo-tamer's server in a Docker container for a more se
 
 ```bash
 git clone https://github.com/ZeroTricks/lumo-tamer.git
-docker compose build app
+docker compose build tamer
 # use docker swarm secrets for something more secure
 mkdir -p secrets && chmod 700 secrets
 openssl rand -base64 32 > secrets/lumo-vault-key
@@ -245,18 +245,18 @@ chmod 600 secrets/lumo-vault-key
 
 #### Authenticate
 
-```docker compose run --rm -it app tamer auth```
+```docker compose run --rm -it tamer tamer auth```
 
 #### Run
 Run server:
-```docker compose up app```
+```docker compose up tamer```
 
 Running the CLI within Docker is possible but usability may be limited:
 - The image is Alpine-based, so your system may not have the commands Lumo tries to run. You can change `cli.instructions.forTools` in `config.yaml` to be more explicit what commands it should use, or you can rebase the `Dockerfile`.
 - Mount a directory to give Lumo access to your files:
 
 ```bash
-docker compose run --rm -it -v ./some-dir:/dir/ app tamer
+docker compose run --rm -it -v ./some-dir:/dir/ tamer tamer
 ```
 
 ## Further Reading

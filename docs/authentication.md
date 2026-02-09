@@ -87,7 +87,7 @@ Use a Chrome browser with remote debugging enabled to log in. Tokens will be ext
    - Or use the provided Docker image: `docker compose up lumo-tamer-browser` (access browser GUI at http://localhost:3001)
 2. Once the browser is running, log in to https://lumo.proton.me in it.
 3. Run `tamer auth browser`.
-4. Enter the CDP endpoint when prompted (ie. `http://localhost:9222`, or `http://browser:9222` when running both docker images `lumo-tamer-app` and `lumo-tamer-browser`).
+4. Enter the CDP endpoint when prompted (ie. `http://localhost:9222`, or `http://browser:9222` when using both  `lumo-tamer` and `lumo-tamer-browser` docker containers).
 
 ### Limitations
 
