@@ -104,7 +104,7 @@ server:
   apiModelName: "lumo"
 
   # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
-  enableWebSearch: true
+  enableWebSearch: false
 
   # Custom tool detection for API clients
   # Enable detection of JSON tool calls in Lumo's responses
@@ -189,7 +189,7 @@ cli:
     filePath: "lumo-tamer-cli.log"
 
   # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
-  enableWebSearch: true
+  enableWebSearch: false
 
   # Local actions: code block detection and execution
   localActions:

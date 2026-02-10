@@ -1,6 +1,6 @@
 # lumo-tamer
 
-Use [Proton Lumo](https://lumo.proton.me/) on the command line or integrate it in your favorite AI-enabled app.
+Use [Proton Lumo](https://lumo.proton.me/) in your favorite AI-enabled app or on the command line.
 
 [Lumo](https://lumo.proton.me/about) is Proton's privacy-first AI assistant, powered by open-source LLMs running exclusively on Proton-controlled servers. Your prompts and responses are never logged, stored, or used for training. See Proton's [security model](https://proton.me/blog/lumo-security-model) and [privacy policy](https://proton.me/support/lumo-privacy) for details.
 
@@ -8,8 +8,8 @@ lumo-tamer is a lightweight local proxy that talks to Proton's Lumo API using th
 
 ## Features
 
-- Server: OpenAI-compatible API
-- CLI: Interactive mode, let Lumo help you executing commands, read, create and edit files.
+- OpenAI-compatible API server.
+- Interactive CLI, let Lumo help you execute commands, read, create and edit files.
 - Sync your conversations with Proton to access them on https://lumo.proton.me or in mobile apps.
 
 
@@ -32,7 +32,7 @@ This is an unofficial, personal project in early stages of development, not affi
 git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
 npm install && npm run build:all
-# Optionally install globally, so you can use command `tamer` everywhere
+# Optionally install command `tamer` globally
 npm link
 ```
 
@@ -45,7 +45,7 @@ For Docker installation, see [Docker](#docker).
 
 > **Tip:** If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first. This may clear the challenge for subsequent login attempts.
 
-Alternative methods:
+Alternative auth methods:
 - **browser**: Extract tokens from a Chrome session. Required when you want to sync conversations with Lumo's webclient.
 - **rclone**: Paste tokens from an rclone configuration with proton-drive.
 
@@ -58,24 +58,71 @@ See [docs/authentication.md](docs/authentication.md) for details and troubleshoo
 # One-shot: ask a question directly
 tamer "What is 2+2?"
 
-# Interactive mode
+# Interactive CLI
 tamer
+
+# Start server
+tamer server
 ```
 
-Other commands: `tamer server` (start API server), `tamer auth` (authenticate). See [Usage](#usage) for details.
+
+## Usage
+
+### Server
+
+Set an API key in `config.yaml`
+```yaml
+server:
+  apiKey: my-super-secret-key
+```
+
+Run `tamer server`
+
+Then, point your favorite OpenAI-compatible app to `https://yourhost:3003/v1` and provide your API key.
+
+**Note:** The API implements a subset of OpenAI-compatible endpoints and has only been tested with a handful of clients (Home Assistant and Open WebUI).
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /v1/chat/completions` | [OpenAI chat completions](https://platform.openai.com/docs/api-reference/chat/create) |
+| `POST /v1/responses` | [OpenAI responses API](https://platform.openai.com/docs/api-reference/responses/create) |
+| `GET /v1/models` | List available models ('lumo') |
+| `GET /health` | Health check |
 
 
+### CLI
 
-## Configuration (optional)
+Run `tamer` to use Lumo interactively, or run `tamer "make me laugh"` for a one-time prompt.
 
-Add configuration options to `config.yaml`. Use [`config.defaults.yaml`](config.defaults.yaml) for inspiration. Don't edit config.defaults.yaml directly.
+Talk to Lumo from the command line like you would via the web interface. To give Lumo access to your files and let it execute commands locally, set `cli.localActions.enabled: true` in `config.yaml` (See [Local Actions](#local-actions-cli)).
+
+You can ask Lumo to give you a demo of its capabilities, or see this [demo chat](docs/demo-cli-chat.md) for inspiration.
+
+### In-chat commands
+
+Both CLI and API accept a few in-chat commands. Realistically, you'll only use `/title` and `/quit`.
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show available commands |
+| `/title <text>` | Set conversation title |
+| `/save`, `/sync` | Sync conversations to Proton server (not needed when `conversations.sync.autoSync: true`)|
+| `/refreshtokens` | Manually refresh auth tokens  (not needed when `auth.autoRefresh.enabled: true`) |
+| `/logout` | Revoke session and delete tokens |
+| `/quit` | Exit the app (CLI only) |
+
+## Configuration
+
+Add configuration options to `config.yaml`. Use [`config.defaults.yaml`](config.defaults.yaml) for inspiration. Don't edit `config.defaults.yaml` directly.
 
 Apart from auth settings (which are set by `tamer auth`), all settings are optional. By default, lumo-tamer is conservative: experimental or resource-heavy features are disabled.
 
-Options in sections `log`, `conversations`, `commands` and `tools` can be set globally (used by server & cli), and can be overwritten within `cli` and `server` sections.
+### Global options
+
+Options in sections `log`, `conversations` and `commands` can be set globally (used by server and CLI), and can optionally be overwritten within `cli` and `server`.
 
 
-For example:
+Example:
 ```yaml
 log:
   # Levels: trace, debug, info, warn, error, fatal
@@ -90,19 +137,7 @@ cli:
 
 This sets the default log output to your terminal at the `info` level, while the CLI logs to a file instead.
 
-### Instructions
-
-Set general and tool-specific instructions for the CLI and server with `cli.instructions.default` / `cli.instructions.forTools` and `server.instructions.default` / `server.instructions.forTools` respectively. Don't start from scratch but copy the defaults from [`config.defaults.yaml`](config.defaults.yaml) as a base and experiment from there.
-
-> **Note:**
-> - lumo-tamer injects these instructions into the first message you send (the same way the Lumo's webclient does under the hood). Instructions set in the webclient's personal or project settings will be ignored.
-> - Clients connecting to the lumo-tamer server can send their own instructions, which will overwrite `server.instructions.default`.
-
-### Conversation sync
-
-Enable conversation sync in `config.yaml`:
-
-> **Note:** Only supported with the `browser` authentication method. Enabling conversation sync requires additional user secrets; if you enable this after initial setup, re-run `tamer auth browser`.
+### Conversation Sync
 
 ```yaml
 conversations:
@@ -111,85 +146,93 @@ conversations:
     projectName: "lumo-tamer" # project conversations will belong to
     autoSync: true
 ```
+> **Note:** Only supported with the `browser` authentication method. Enabling conversation sync requires additional user secrets; if you enable this after initial setup, re-run `tamer auth browser`.
 
-> **Warning:** Projects in Lumo have a limit on the number of conversations. When hit, sync will fail. Deleting conversations won't help. Use a new `projectName` to work around this. See [#16](https://github.com/ZeroTricks/lumo-tamer/issues/16).
+> **Warning:** Projects in Lumo have a limit on the number of conversations per project. When hit, sync will fail. Deleting conversations won't help. Use a new `projectName` to work around this. See [#16](https://github.com/ZeroTricks/lumo-tamer/issues/16).
 
-### Tools
+### Web Search
 
-`config.yaml`:
-
-```yaml
-tools:
-  # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
-  enableWebSearch: true
-```
-
-#### CLI
-
-```yaml
-cli:
-  tools:
-    # enable Lumo to create and edit files, and run commands in your terminal
-    enabled: true
-    # enable Lumo to read text-based files on your system
-    fileReads:
-      enabled: true
-```
-> **Tip:** When you enable CLI tools, consider adapting `cli.instructions.forTools` to reference the languages and shells available in your environment.
-
-#### Server
+Enable Lumo's native web search (and other external tools: weather, stock, cryptocurrency):
 
 ```yaml
 server:
-  tools:
-    # enable Lumo to use tools provided by your OpenAI client
-    enabled: true 
+  enableWebSearch: true
+
+cli:
+  enableWebSearch: true
 ```
 
+### Instructions
 
-> **Warning:** Custom tool support is experimental and can fail in various ways. See [docs/custom-tools.md](docs/custom-tools.md) for details, configuration, and troubleshooting.
+Customize instructions with `server.instructions.template` and `cli.instructions.template`. See [`config.defaults.yaml`](config.defaults.yaml) for more options.
 
-## Usage
-
-### CLI
-
-Run `tamer` or `npm run cli`.
-
-Talk to Lumo from the command line like you would via the web interface. To let Lumo execute commands, read, create and edit files, set `cli.tools.enabled: true` in `config.yaml`. The app will always ask for your confirmation before executing commands.
-
-You can ask Lumo to give you a demo of its CLI capabilities, or see this [demo chat](docs/demo-cli-chat.md) for inspiration.
-
-### In-chat commands
-
-A few in-chat commands are supported in both CLI and API mode. Send the command as a message. Realistically, you'll only use `/title` and `/quit`.
-
-| Command | Description |
-|---------|-------------|
-| `/help` | Show available commands |
-| `/title <text>` | Set conversation title |
-| `/save`, `/sync` | Sync conversations to Proton server (not needed when `conversations.sync.autoSync: true`)|
-| `/refreshtokens` | Manually refresh auth tokens  (not needed when `auth.autoRefresh.enabled: true`) |
-| `/logout` | Revoke session and delete tokens |
-| `/quit` | Exit the app (CLI only) |
-
-### API
-
-Start by setting `server.apiKey` in `config.yaml`
-Run `tamer server`
-
-Now, connect your favorite OpenAI-compatible app.
-
-**Warning:** The API implements a subset of OpenAI-compatible endpoints and has only been tested with a handful of clients (Home Assistant and Open WebUI).
-
-| Endpoint | Description |
-|----------|-------------|
-| `POST /v1/chat/completions` | [OpenAI chat completions](https://platform.openai.com/docs/api-reference/chat/create) |
-| `POST /v1/responses` | [OpenAI responses API](https://platform.openai.com/docs/api-reference/responses/create) |
-| `GET /v1/models` | List available models (just 'lumo') |
-| `GET /health` | Health check |
+Instructions from API clients will be inserted in the main template. If you can, put instructions on personal preferences within your API client and only use `server.instructions` to define the internal interaction between Lumo and lumo-tamer.
 
 
-#### cURL
+> **Note:** Under the hood, lumo-tamer injects instructions into the first message you send (the same way it is done in Lumo's webclient). Instructions set in the webclient's personal or project settings will be ignored and left unchanged.
+
+### Custom Tools (Server)
+
+Let Lumo use tools provided by your OpenAI-compatible client.
+
+```yaml
+server:
+  customTools:
+    enabled: true
+```
+
+> **Warning:** Custom tool support is experimental and can fail in various ways. Experiment with `server.instructions` settings to improve results. See [docs/custom-tools.md](docs/custom-tools.md) for details, tweaking, and troubleshooting. 
+
+
+### Local Actions (CLI)
+
+Let Lumo read, create and edit files, and execute commands on your machine:
+
+```yaml
+cli:
+  localActions:
+    enabled: true
+    fileReads:
+      enabled: true
+    executors:
+      bash: ["bash", "-c"]
+      python: ["python", "-c"]
+```
+
+The CLI always asks for confirmation before executing commands or applying file changes. File reads are automatic.
+
+Configure available languages for your system in `executors`. By default, `bash`, `python`, and `sh` are enabled.
+
+See [docs/local-actions.md](docs/local-actions.md) for further configuration and troubleshooting.
+
+## API clients
+
+Following API clients have been tested and are known to work.
+
+### Home Assistant
+
+**Setup**
+
+- Pass the environment variable `OPENAI_BASE_URL=http://yourhost:3003/v1` to Home Assistant.
+- Add the OpenAI integration and follow the steps from the [Home Assistant guide](https://www.home-assistant.io/voice_control/assist_create_open_ai_personality/).
+- Open HA Assist in your dashboard or phone and chat away.
+
+**Tweak**
+
+- To let Lumo read the status of your home or control your devices, set `server.customTools.enabled: true` (Experimental, see [Custom Tools](docs/custom-tools.md)).
+- When `conversations.sync` is enabled, set `conversations.deriveIdFromUser: true` to group messages into conversations.
+- To improve tool call success rate:
+  - Experiment with changing the instructions sent by Home Assistant.
+  - Limit the number of exposed entities in Home Assistant's settings.
+  - Limit the number of entity aliases.
+
+### Open WebUI
+
+For your convenience, an Open WebUI service is included in `docker-compose.yml`. Launch `docker compose up open-webui` and open `http://localhost:8080`
+
+> **Note:** Open WebUI will by default prompt Lumo for extra information (to set title and tags). Disable these in Open WebUI's settings to avoid cluttering your debugging experience.
+
+### cURL
 
 ```bash
 curl http://localhost:3003/v1/chat/completions \
@@ -202,31 +245,18 @@ curl http://localhost:3003/v1/chat/completions \
   }'
 ```
 
-#### Home Assistant
+### Untested API clients
 
-**Setup**
+Many apps are untested but should work if they only use the `/v1/responses` or `/v1/chat/completions` endpoints. As a rule of thumb: basic chatting will probably work, but the more a client relies on custom tools, the more the experience is degraded.
 
-- Pass the environment variable `OPENAI_BASE_URL=http://localhost:3003/v1` when launching Home Assistant.
-- Add the OpenAI integration and follow the steps from the [Home Assistant guide](https://www.home-assistant.io/voice_control/assist_create_open_ai_personality/).
-- Open HA Assist in your dashboard or phone and chat away.
+To test an API client, increase log levels on both the client and lumo-tamer: `server.log.level: debug` and check for errors.
 
-**Tweak**
+Please share your experiences with new API clients (both issues and successes!) by [creating an issue](https://github.com/ZeroTricks/lumo-tamer/issues/new).
 
-- When `conversations.sync` is enabled, set `conversations.deriveIdFromUser: true` to group messages into conversations (uses the `user` field from the request, which HA sets to its conversation ID).
-- To let Lumo read the status of your home or control your devices, set `server.tools.enabled: true`. (Experimental, see [Tool Calls](#tool-calls).)
-- To improve tool call success rate:
-  - Experiment with changing the instructions sent by Home Assistant.
-  - Limit the number of exposed entities in Home Assistant's settings.
-  - Limit the number of entity aliases.
+### Unsupported API clients
 
-#### Open WebUI
-
-For your convenience, an Open WebUI service is included in `docker-compose.yml`. Launch `docker compose up open-webui` and open `http://localhost:8080`
-
-> **Note:** Open WebUI will by default prompt Lumo for extra information (to set title and tags). Disable these in Open WebUI's settings to avoid cluttering your debugging experience.
-
-
-
+Following clients are known not to work:
+- **Nanocoder:** Initial connection works, but nanocoder sends many instructions and relies on Lumo calling **a lot** of tools. Lumo will misroute many tool calls and will retry by calling tools with wrong parameters. Not usable, lumo-tamer needs better instructions on tool calls.
 
 ### Docker
 
@@ -245,19 +275,25 @@ chmod 600 secrets/lumo-vault-key
 
 #### Authenticate
 
-```docker compose run --rm -it tamer tamer auth```
+```bash
+docker compose run --rm -it tamer auth
+```
 
 #### Run
-Run server:
-```docker compose up tamer```
-
-Running the CLI within Docker is possible but usability may be limited:
-- The image is Alpine-based, so your system may not have the commands Lumo tries to run. You can change `cli.instructions.forTools` in `config.yaml` to be more explicit what commands it should use, or you can rebase the `Dockerfile`.
-- Mount a directory to give Lumo access to your files:
-
+Server:
 ```bash
-docker compose run --rm -it -v ./some-dir:/dir/ tamer tamer
+docker compose up tamer # starts server by default
 ```
+CLI:
+```bash
+docker compose run --rm -it -v ./some-dir:/dir/ tamer cli
+```
+
+> **Note:** Running the CLI within Docker may not be very useful:
+> - Lumo will not have access to your files unless you mount a directory.
+> - The image is Alpine-based, so your system may not have the commands Lumo tries to run. You can change config options `cli.localActions.executors` and `cli.instructions.forLocalActions` to be more explicit what commands Lumo should use, or you can rebase the `Dockerfile`.
+
+
 
 ## Further Reading
 
