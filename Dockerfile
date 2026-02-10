@@ -56,10 +56,22 @@ COPY --from=go-builder /build/proton-auth ./dist/proton-auth
 # Make tamer available as command
 RUN npm link
 
+
+
+# Command aliases for tamer subcommands auth, server, cli
+#   docker compose run --rm -it tamer auth
+#   docker compose run --rm -it tamer server
+#   docker compose run --rm -it tamer cli
+ENTRYPOINT ["sh", "-c", "\
+  case \"$1\" in \
+    auth)   shift; exec tamer auth \"$@\" ;; \
+    server) shift; exec tamer server \"$@\" ;; \
+    cli)    shift; exec tamer \"$@\" ;; \
+    '')     exec tamer server ;; \
+    *)      exec \"$@\" ;; \
+  esac", "--"]
+
 # Expose API port
 EXPOSE 3003
 
-# Default to server, override at runtime for auth/cli:
-#   docker compose run --rm -it tamer tamer auth
-#   docker compose run --rm -it tamer tamer
-CMD ["tamer", "server"]
+CMD ["server"]
