@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import arg from 'arg';
+import { initConfig, getLogConfig, getServerConfig } from './app/config.js';
+import { initLogger, logger } from './app/logger.js';
+import { printAuthHelp, printHelp, printServerHelp } from 'app/terminal.js';
 
-// Parse args before config init to handle --help without side effects
 // stopAtPositional ensures --help after a subcommand is passed to the subcommand
 const args = arg({
   '--help': Boolean,
@@ -12,81 +14,20 @@ const args = arg({
   argv: process.argv.slice(2)
 });
 
-function printHelp(): void {
-  console.log(`
-lumo-tamer - Use Proton Lumo on the command line
-
-Usage:
-  tamer                      Interactive chat mode
-  tamer "your prompt"        One-shot query
-  tamer auth [method]        Authenticate to Proton
-  tamer auth status          Show authentication status
-  tamer server               Start API server
-  tamer --help               Show this help
-
-Commands:
-  auth                       Authenticate to Proton (login, browser, or rclone)
-  server                     Start OpenAI-compatible API server
-
-Options:
-  -h, --help    Show help
-
-`);
-}
-
-function printAuthHelp(): void {
-  console.log(`
-tamer auth - Authenticate to Proton
-
-Usage:
-  tamer auth                 Interactive method selection
-  tamer auth <method>        Use specific method (login, browser, rclone)
-  tamer auth status          Show current authentication status
-  tamer auth --help          Show this help
-
-Methods:
-  login                      Enter Proton credentials
-  browser                    Extract tokens from logged-in browser session
-  rclone                     Paste rclone config section
-
-`);
-}
-
-function printServerHelp(): void {
-  console.log(`
-tamer server - Start OpenAI-compatible API server
-
-Usage:
-  tamer server               Start the API server
-  tamer server --help        Show this help
-
-The server listens on the port configured in config.yaml (default: 3003).
-`);
-}
-
-// Handle --help before config/logger init (console.log gets shimmed after init)
-if (args['--help'] && args._.length === 0) {
-  printHelp();
-  process.exit(0);
-}
-
-if (args._[0] === 'auth' && (args._.includes('--help') || args._.includes('-h'))) {
-  printAuthHelp();
-  process.exit(0);
-}
-
-if (args._[0] === 'server' && (args._.includes('--help') || args._.includes('-h'))) {
-  printServerHelp();
-  process.exit(0);
-}
-
-// Single init point - static imports now safe (help cases exited above)
-import { initConfig, getLogConfig, getServerConfig } from './app/config.js';
-import { initLogger, logger } from './app/logger.js';
-
 const mode = args._[0] === 'server' ? 'server' : 'cli';
 initConfig(mode);
 initLogger(getLogConfig());
+
+// Handle --help for main command and subcommands
+if (args['--help'] || args._.includes('--help') || args._.includes('-h')) {
+  switch (args._[0]) {
+    case 'auth': printAuthHelp(); break;
+    case 'server': printServerHelp(); break;
+    default: printHelp();
+  }
+  process.exit(0);
+}
+
 
 function handleFatalError(error: unknown): never {
   logger.fatal({ error });
