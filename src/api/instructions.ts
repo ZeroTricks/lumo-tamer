@@ -7,7 +7,9 @@
 
 import Handlebars from 'handlebars';
 import { logger } from '../app/logger.js';
-import { getServerInstructionsConfig } from '../app/config.js';
+import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
+import { applyToolPrefix, applyToolNamePrefix } from './tools/prefix.js';
+import type { OpenAITool } from './types.js';
 
 // ── Template interpolation ────────────────────────────────────────────
 
@@ -110,4 +112,65 @@ function validateReplacePatternsOnce(): void {
       logger.warn(`Ignoring "${pattern}" in instructions.replacePatterns:${(e as Error).message}`);
     }
   }
+}
+
+// ── Instruction building ─────────────────────────────────────────────
+
+/**
+ * Extract tool names from tool definitions (handles both nested and flat formats).
+ */
+function extractToolNames(tools?: OpenAITool[]): string[] {
+  if (!tools) return [];
+  return tools
+    .map(t => t.function?.name || (t as unknown as { name?: string }).name)
+    .filter((n): n is string => Boolean(n));
+}
+
+/**
+ * Build instructions using the template system.
+ * Uses conditionals in the template to handle all cases:
+ * - With/without tools
+ * - With/without client instructions (falls back to fallback)
+ *
+ * @param tools - Optional array of OpenAI tool definitions
+ * @param clientInstructions - Optional instructions from client (system/developer message)
+ * @returns Formatted instruction string
+ */
+export function buildInstructions(tools?: OpenAITool[], clientInstructions?: string): string {
+  const instructionsConfig = getServerInstructionsConfig();
+  const toolsConfig = getCustomToolsConfig();
+  const { prefix } = toolsConfig;
+  const { replacePatterns } = instructionsConfig;
+
+  // Determine if we should include tools
+  const includeTools = toolsConfig.enabled && tools && tools.length > 0;
+
+  // Pre-interpolate forTools block (it can use {{prefix}})
+  const forTools = interpolateTemplate(instructionsConfig.forTools, { prefix });
+
+  // Prepare tools JSON if enabled and provided
+  let toolsJson: string | undefined;
+  if (includeTools) {
+    const prefixedTools = applyToolPrefix(tools, prefix);
+    toolsJson = JSON.stringify(prefixedTools, null, 2);
+  }
+
+  // Clean and prefix client instructions
+  let cleanedClientInstructions: string | undefined;
+  if (clientInstructions) {
+    cleanedClientInstructions = applyReplacePatterns(clientInstructions, replacePatterns);
+    if (includeTools) {
+      const toolNames = extractToolNames(tools);
+      cleanedClientInstructions = applyToolNamePrefix(cleanedClientInstructions, toolNames, prefix);
+    }
+  }
+
+  // Interpolate main template with all variables
+  return interpolateTemplate(instructionsConfig.template, {
+    prefix,
+    tools: toolsJson,
+    clientInstructions: cleanedClientInstructions,
+    forTools,
+    fallback: instructionsConfig.fallback,
+  });
 }
