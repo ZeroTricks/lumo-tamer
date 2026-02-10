@@ -53,13 +53,13 @@ COPY config.defaults.yaml ./
 # Copy Go binary from go-builder
 COPY --from=go-builder /build/proton-auth ./dist/proton-auth
 
-# Make tamer and tamer-server available as commands
+# Make tamer available as command
 RUN npm link
 
 # Expose API port
 EXPOSE 3003
 
 # Default to server, override at runtime for auth/cli:
-#   docker compose run --rm -it app tamer-auth
-#   docker compose run --rm app tamer "prompt"
-CMD ["tamer-server"]
+#   docker compose run --rm -it tamer tamer auth
+#   docker compose run --rm -it tamer tamer
+CMD ["tamer", "server"]

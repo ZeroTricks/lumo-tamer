@@ -59,11 +59,9 @@ let _logger: pino.Logger;
 
 // Initialize the global logger with mode-specific config
 // Must be called early in entry point, before other modules use logger
-export function initLogger(config: LogConfig, options?: { consoleShim?: boolean }): void {
+export function initLogger(config: LogConfig): void {
   _logger = createLogger(config);
-  if (options?.consoleShim !== false) {
-    installConsoleShim();
-  }
+  installConsoleShim();
 }
 
 // Get the global logger instance

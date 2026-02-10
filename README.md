@@ -40,8 +40,7 @@ For Docker installation, see [Docker](#docker).
 
 ### 2. Authenticate
 
-- Run `tamer-auth`
-- Choose **login**
+- Run `tamer auth login`
 - Enter your Proton credentials and (optionally) 2FA code.
 
 > **Tip:** If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first. This may clear the challenge for subsequent login attempts.
@@ -63,7 +62,7 @@ tamer "What is 2+2?"
 tamer
 ```
 
-Other commands: `tamer-server` (start API server), `tamer-auth` (authenticate). See [Usage](#usage) for details.
+Other commands: `tamer server` (start API server), `tamer auth` (authenticate). See [Usage](#usage) for details.
 
 
 
@@ -71,7 +70,7 @@ Other commands: `tamer-server` (start API server), `tamer-auth` (authenticate). 
 
 Add configuration options to `config.yaml`. Use [`config.defaults.yaml`](config.defaults.yaml) for inspiration. Don't edit config.defaults.yaml directly.
 
-Apart from auth settings (which are set by `tamer-auth`), all settings are optional. By default, lumo-tamer is conservative: experimental or resource-heavy features are disabled.
+Apart from auth settings (which are set by `tamer auth`), all settings are optional. By default, lumo-tamer is conservative: experimental or resource-heavy features are disabled.
 
 Options in sections `log`, `conversations`, `commands` and `tools` can be set globally (used by server & cli), and can be overwritten within `cli` and `server` sections.
 
@@ -103,7 +102,7 @@ Set general and tool-specific instructions for the CLI and server with `cli.inst
 
 Enable conversation sync in `config.yaml`:
 
-> **Note:** Only supported with the `browser` authentication method. Enabling conversation sync requires additional user secrets; if you enable this after initial setup, re-run `tamer-auth`.
+> **Note:** Only supported with the `browser` authentication method. Enabling conversation sync requires additional user secrets; if you enable this after initial setup, re-run `tamer auth browser`.
 
 ```yaml
 conversations:
@@ -176,7 +175,7 @@ A few in-chat commands are supported in both CLI and API mode. Send the command 
 ### API
 
 Start by setting `server.apiKey` in `config.yaml`
-Run `tamer-server`
+Run `tamer server`
 
 Now, connect your favorite OpenAI-compatible app.
 
@@ -237,7 +236,7 @@ It is recommended to run lumo-tamer's server in a Docker container for a more se
 
 ```bash
 git clone https://github.com/ZeroTricks/lumo-tamer.git
-docker compose build app
+docker compose build tamer
 # use docker swarm secrets for something more secure
 mkdir -p secrets && chmod 700 secrets
 openssl rand -base64 32 > secrets/lumo-vault-key
@@ -246,18 +245,18 @@ chmod 600 secrets/lumo-vault-key
 
 #### Authenticate
 
-```docker compose run --rm -it app tamer-auth```
+```docker compose run --rm -it tamer tamer auth```
 
 #### Run
 Run server:
-```docker compose up app```
+```docker compose up tamer```
 
 Running the CLI within Docker is possible but usability may be limited:
 - The image is Alpine-based, so your system may not have the commands Lumo tries to run. You can change `cli.instructions.forTools` in `config.yaml` to be more explicit what commands it should use, or you can rebase the `Dockerfile`.
 - Mount a directory to give Lumo access to your files:
 
 ```bash
-docker compose run --rm -it -v ./some-dir:/dir/ app tamer
+docker compose run --rm -it -v ./some-dir:/dir/ tamer tamer
 ```
 
 ## Further Reading
