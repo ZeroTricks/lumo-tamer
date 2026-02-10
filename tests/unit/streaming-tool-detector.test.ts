@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { StreamingToolDetector } from '../../src/api/streaming-tool-detector.js';
+import { StreamingToolDetector } from '../../src/api/tools/streaming-tool-detector.js';
 
 /** Feed chunks through detector and return accumulated text + tool calls */
 function processAll(detector: StreamingToolDetector, chunks: string[]) {

@@ -129,7 +129,7 @@ Set general and tool-specific instructions for the CLI and server with `cli.inst
 
 > **Note:**
 > - lumo-tamer injects these instructions into the first message you send (the same way the Lumo's webclient does under the hood). Instructions set in the webclient's personal or project settings will be ignored.
-> - Clients connecting to the lumo-tamer server can send their own instructions, which will overwrite (or be appended to, depending on `server.instructions.append`) `server.instructions.default`.
+> - Clients connecting to the lumo-tamer server can send their own instructions, which will overwrite `server.instructions.default`.
 
 ### Conversation sync
 

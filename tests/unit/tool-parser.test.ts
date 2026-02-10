@@ -9,7 +9,7 @@ import {
   isToolCallJson,
   extractToolCallsFromResponse,
   stripToolCallsFromResponse,
-} from '../../src/api/tool-parser.js';
+} from '../../src/api/tools/tool-parser.js';
 
 describe('isToolCallJson', () => {
   it('accepts valid tool call with name and arguments', () => {

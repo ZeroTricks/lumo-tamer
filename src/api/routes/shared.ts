@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
-import { getToolsConfig } from '../../app/config.js';
+import { getCustomToolsConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
-import { StreamingToolDetector } from '../streaming-tool-detector.js';
-import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../tool-parser.js';
+import { StreamingToolDetector } from '../tools/streaming-tool-detector.js';
+import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../tools/tool-parser.js';
 import { postProcessTitle } from '../../proton-shims/lumo-api-client-utils.js';
-import type { ParsedToolCall } from '../tool-parser.js';
+import type { ParsedToolCall } from '../tools/tool-parser.js';
 import type { EndpointDependencies, OpenAITool, OpenAIToolCall } from '../types.js';
 import type { CommandContext } from '../../app/commands.js';
 import type { ConversationId } from '../../conversations/index.js';
@@ -13,7 +13,6 @@ import type { ChatResult } from '../../lumo-client/index.js';
 // ── Request context ────────────────────────────────────────────────
 
 export interface RequestContext {
-  enableExternalTools: boolean;
   hasCustomTools: boolean;
   commandContext: CommandContext;
   requestTitle: boolean;
@@ -27,10 +26,9 @@ export function buildRequestContext(
   conversationId: ConversationId,
   tools?: OpenAITool[]
 ): RequestContext {
-  const toolsConfig = getToolsConfig();
+  const serverToolsConfig = getCustomToolsConfig();
   return {
-    enableExternalTools: toolsConfig?.enableWebSearch ?? false,
-    hasCustomTools: toolsConfig.enabled && !!tools && tools.length > 0,
+    hasCustomTools: serverToolsConfig.enabled && !!tools && tools.length > 0,
     commandContext: {
       syncInitialized: deps.syncInitialized ?? false,
       conversationId,

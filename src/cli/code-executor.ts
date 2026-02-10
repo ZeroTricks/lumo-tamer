@@ -6,7 +6,7 @@
 
 import { spawn } from 'child_process';
 import type { CodeBlock, BlockHandler } from './block-handlers.js';
-import { getToolsConfig } from '../app/config.js';
+import { getLocalActionsConfig } from '../app/config.js';
 
 export interface ExecutionResult {
   type: 'execution';
@@ -32,7 +32,7 @@ export function summarizeExecutableBlock(language: string | null, content: strin
  */
 export function isExecutable(language: string | null): boolean {
   if (!language) return false;
-  const { executors } = getToolsConfig();
+  const { executors } = getLocalActionsConfig();
   return language in executors;
 }
 
@@ -43,7 +43,7 @@ export async function executeBlock(
   block: CodeBlock,
   onOutput: (chunk: string) => void
 ): Promise<ExecutionResult> {
-  const { executors } = getToolsConfig();
+  const { executors } = getLocalActionsConfig();
   const executor = block.language ? executors[block.language] : undefined;
 
   if (!executor) {

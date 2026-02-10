@@ -11,7 +11,7 @@
 import * as readline from 'readline';
 import { randomUUID } from 'crypto';
 import { logger } from '../app/logger.js';
-import { getToolsConfig, getCommandsConfig } from '../app/config.js';
+import { getLocalActionsConfig, getCommandsConfig } from '../app/config.js';
 import { isCommand, executeCommand, type CommandContext } from '../app/commands.js';
 import type { AppContext } from '../app/index.js';
 import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
@@ -56,8 +56,8 @@ export class CLIClient {
    * Handles streaming, detection, and display.
    */
   private async sendToLumo(options: { requestTitle?: boolean } = {}): Promise<LumoResponse> {
-    const toolsConfig = getToolsConfig();
-    const detector = toolsConfig.enabled
+    const localActionsConfig = getLocalActionsConfig();
+    const detector = localActionsConfig.enabled
       ? new CodeBlockDetector((lang) =>
           blockHandlers.some(h => h.matches({ language: lang, content: '' }))
         )
@@ -81,7 +81,7 @@ export class CLIClient {
         }
         chunkCount++;
       },
-      { enableEncryption: true, enableExternalTools: false, requestTitle: options.requestTitle }
+      { enableEncryption: true, requestTitle: options.requestTitle }
     );
 
     // Finalize detection
@@ -179,7 +179,7 @@ export class CLIClient {
           printToChat(chunk);
           chunkCount++;
         },
-        { enableEncryption: true, enableExternalTools: false }
+      { enableEncryption: true }
       );
 
       if (chunkCount === 0) clearBusyIndicator();

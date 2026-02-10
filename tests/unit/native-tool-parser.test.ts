@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseNativeToolCallJson, isErrorResult } from '../../src/api/native-tool-parser.js';
+import { parseNativeToolCallJson, isErrorResult } from '../../src/api/tools/native-tool-parser.js';
 
 describe('parseNativeToolCallJson', () => {
   it('parses valid tool call with arguments', () => {

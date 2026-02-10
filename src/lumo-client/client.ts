@@ -23,13 +23,12 @@ import type {
     Turn,
 } from './types.js';
 import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
-import { getCommandsConfig, getInstructionsConfig, getLogConfig } from '../app/config.js';
-import { JsonBraceTracker } from '../api/json-brace-tracker.js';
-import { parseNativeToolCallJson, isErrorResult } from '../api/native-tool-parser.js';
-import type { ParsedToolCall } from '../api/tool-parser.js';
+import { getCommandsConfig, getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
+import { JsonBraceTracker } from '../api/tools/json-brace-tracker.js';
+import { parseNativeToolCallJson, isErrorResult } from '../api/tools/native-tool-parser.js';
+import type { ParsedToolCall } from '../api/tools/tool-parser.js';
 
 export interface LumoClientOptions {
-    enableExternalTools?: boolean;
     enableEncryption?: boolean;
     endpoint?: string;
     commandContext?: CommandContext;
@@ -61,10 +60,22 @@ function isConfusedToolCall(toolCall: ParsedToolCall | undefined): boolean {
     return !!toolCall && !KNOWN_NATIVE_TOOLS.has(toolCall.name);
 }
 
-/** Build the bounce instruction: config text + the confused tool call as JSON example. */
+/** Build the bounce instruction: config text + the confused tool call as JSON example.
+ *  Includes the prefix in the example JSON so Lumo outputs it correctly. */
 function buildBounceInstruction(toolCall: ParsedToolCall): string {
     const instruction = getInstructionsConfig().forToolBounce;
-    const toolCallJson = JSON.stringify({ name: toolCall.name, arguments: toolCall.arguments }, null, 2);
+
+    // In server mode, add the prefix to the tool name in the example
+    // (the tool name in toolCall has already been stripped, so we re-add it)
+    let toolName = toolCall.name;
+    if (getConfigMode() === 'server') {
+        const prefix = getCustomToolsConfig().prefix;
+        if (prefix && !toolName.startsWith(prefix)) {
+            toolName = `${prefix}${toolName}`;
+        }
+    }
+
+    const toolCallJson = JSON.stringify({ name: toolName, arguments: toolCall.arguments }, null, 2);
     return `${instruction}\n${toolCallJson}`;
 }
 
@@ -229,7 +240,6 @@ export class LumoClient {
         isBounce = false,
     ): Promise<ChatResult> {
         const {
-            enableExternalTools = false,
             enableEncryption = this.defaultOptions?.enableEncryption ?? true,
             endpoint = DEFAULT_ENDPOINT,
             commandContext,
@@ -262,7 +272,8 @@ export class LumoClient {
             }
         }
 
-        const tools: ToolName[] = enableExternalTools
+        // Read from config - applies to both server and CLI modes
+        const tools: ToolName[] = getEnableWebSearch()
             ? [...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]
             : DEFAULT_INTERNAL_TOOLS;
 

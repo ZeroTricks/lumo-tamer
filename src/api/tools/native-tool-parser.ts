@@ -11,7 +11,7 @@
  */
 
 import type { ParsedToolCall } from './tool-parser.js';
-import { logger } from '../app/logger.js';
+import { logger } from '../../app/logger.js';
 
 /**
  * Parse a single complete JSON string as a native tool call.

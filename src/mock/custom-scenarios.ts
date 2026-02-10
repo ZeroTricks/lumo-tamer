@@ -8,7 +8,7 @@
 import type { Turn } from '../lumo-client/types.js';
 import type { ProtonApiOptions } from '../lumo-client/types.js';
 import type { ScenarioGenerator } from './mock-api.js';
-import { getInstructionsConfig } from '../app/config.js';
+import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
 
 const formatSSEMessage = (data: unknown) => `data: ${JSON.stringify(data)}\n\n`;
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -38,15 +38,18 @@ export const customScenarios: Record<string, ScenarioGenerator> = {
 
         const turns = getTurns(options);
         const lastUserTurn = lastTurnWithRole(turns, 'user');
-        const bounceText = getInstructionsConfig().forToolBounce;
+        const bounceText = getServerInstructionsConfig().forToolBounce;
         const isBounce = !!lastUserTurn?.content?.includes(bounceText.trim());
         const hasAssistantTurn = turns.some(t => t.role === 'assistant');
 
         if (isBounce) {
             // Bounce response: output the tool call as JSON text (what Lumo should have done)
+            // Include the prefix so the tool call matches what we instructed Lumo to output
             yield formatSSEMessage({ type: 'ingesting', target: 'message' });
             await delay(200);
-            const json = '```json\n{"name":"GetLiveContext","arguments":{}}\n```';
+            const prefix = getCustomToolsConfig().prefix;
+            const toolName = prefix ? `${prefix}GetLiveContext` : 'GetLiveContext';
+            const json = `\`\`\`json\n{"name":"${toolName}","arguments":{}}\n\`\`\``;
             const tokens = json.split('');
             for (let i = 0; i < tokens.length; i++) {
                 yield formatSSEMessage({ type: 'token_data', target: 'message', count: i, content: tokens[i] });

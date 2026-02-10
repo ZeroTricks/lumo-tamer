@@ -238,7 +238,6 @@ async function handleStreamingRequest(
         turns,
         processor.onChunk,
         {
-          enableExternalTools: ctx.enableExternalTools,
           commandContext: ctx.commandContext,
           requestTitle: ctx.requestTitle,
         }
@@ -292,7 +291,6 @@ async function handleNonStreamingRequest(
 
   const chatResult = await deps.queue.add(async () =>
     deps.lumoClient.chatWithHistory(turns, undefined, {
-      enableExternalTools: ctx.enableExternalTools,
       commandContext: ctx.commandContext,
       requestTitle: ctx.requestTitle,
     })

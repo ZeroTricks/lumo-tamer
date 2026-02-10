@@ -7,7 +7,7 @@
  */
 
 import type { Turn } from '../lumo-client/index.js';
-import { getInstructionsConfig, getToolsConfig } from '../app/config.js';
+import { getCliInstructionsConfig, getLocalActionsConfig } from '../app/config.js';
 import { isCommand } from '../app/commands.js';
 
 /**
@@ -15,13 +15,13 @@ import { isCommand } from '../app/commands.js';
  * Combines default instructions with forTools when tools are enabled.
  */
 function buildEffectiveInstructions(): string | undefined {
-  const instructionsConfig = getInstructionsConfig();
-  const toolsConfig = getToolsConfig();
+  const instructionsConfig = getCliInstructionsConfig();
+  const localActionsConfig = getLocalActionsConfig();
 
   let instructions = instructionsConfig?.default;
 
-  // Append forTools instructions when tools enabled
-  if (toolsConfig.enabled && instructionsConfig?.forTools) {
+  // Append forTools instructions when local actions enabled
+  if (localActionsConfig.enabled && instructionsConfig?.forTools) {
     instructions = instructions
       ? `${instructions}\n\n${instructionsConfig.forTools}`
       : instructionsConfig.forTools;
