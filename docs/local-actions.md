@@ -94,15 +94,16 @@ cli:
       To edit an existing file, use a ```edit block (one file per block). Read the file first if needed.
 ```
 
-### Native Tools (CLI)
+## User Confirmation
 
-The CLI also supports Lumo's native tools:
+| Action | Confirmation Required |
+|------------|----------------------|
+| `read` | No - automatic |
+| `edit` | Yes - shows diff |
+| `create` | Yes - shows content |
+| Code execution | Yes - shows command |
 
-```yaml
-cli:
-  # Enable Lumo's native web_search tool (and other external tools)
-  enableWebSearch: true
-```
+---
 
 ## Troubleshooting
 
@@ -192,18 +193,7 @@ print("Hello from Python!")
 
 Only languages configured in `executors` are allowed.
 
-### User Confirmation
-
-| Block Type | Confirmation Required |
-|------------|----------------------|
-| `read` | No - automatic |
-| `edit` | Yes - shows diff |
-| `create` | Yes - shows content |
-| Code execution | Yes - shows command |
-
----
-
-## Key Files
+### Key Files
 
 | File | Purpose |
 |------|---------|
