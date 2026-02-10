@@ -8,10 +8,14 @@ initLogger(getLogConfig());
 
 import { Application } from './app/index.js';
 import { APIServer } from './api/server.js';
+import { validateTemplateOnce } from './api/instructions.js';
 
 async function main() {
   // Validate server config early - will throw if missing
-  getServerConfig();
+  const serverConfig = getServerConfig();
+
+  // Validate template and replace patterns at startup
+  validateTemplateOnce(serverConfig.instructions.template);
 
   logger.info('Starting lumo-tamer API Server...');
 

@@ -6,7 +6,7 @@
  * Tool results arrive via `target: 'tool_result'` with content like
  * `{"error":true}` (on failure) or actual result data (on success).
  *
- * Used for both legitimate native calls (e.g. web_search) and "confused" calls
+ * Used for both legitimate native calls (e.g. web_search) and "misrouted" calls
  * (custom tools Lumo mistakenly routed through the native pipeline).
  */
 

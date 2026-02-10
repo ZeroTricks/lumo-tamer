@@ -1,8 +1,7 @@
 /**
- * Tool prefix helpers and template interpolation
+ * Tool prefix helpers
  *
- * Utilities for prefixing/stripping custom tool names,
- * applying replace patterns, and template interpolation.
+ * Utilities for prefixing/stripping custom tool names.
  */
 
 import type { OpenAITool } from '../types.js';
@@ -44,42 +43,34 @@ export function stripToolPrefix(name: string, prefix: string): string {
   return name.startsWith(prefix) ? name.slice(prefix.length) : name;
 }
 
-// ── Pattern replacement ──────────────────────────────────────────────
+// ── Regex helpers ────────────────────────────────────────────────────
 
-export interface ReplacePattern {
-  pattern: string;
-  replacement?: string;
+/**
+ * Escape special regex characters in a string.
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
- * Apply replace patterns to text (case-insensitive regex).
- * Each pattern can have an optional replacement; if omitted, matches are stripped.
+ * Apply prefix to tool names appearing in text.
+ * Only prefixes tool names that match the provided list exactly (word boundaries).
+ * Skips names that are already prefixed.
  */
-export function applyReplacePatterns(text: string, patterns: ReplacePattern[]): string {
-  if (!patterns || patterns.length === 0) return text;
+export function applyToolNamePrefix(
+  text: string,
+  toolNames: string[],
+  prefix: string
+): string {
+  if (!prefix || !text || !toolNames || toolNames.length === 0) return text;
+
   let result = text;
-  for (const { pattern, replacement } of patterns) {
-    try {
-      const regex = new RegExp(pattern, 'gi');
-      result = result.replace(regex, replacement ?? '');
-    } catch {
-      // Invalid regex pattern - skip it (already warned at config load)
-    }
-  }
-  // Clean up multiple consecutive newlines/spaces left by removals
-  return result.replace(/\n{3,}/g, '\n\n').replace(/  +/g, ' ').trim();
-}
-
-// ── Template interpolation ───────────────────────────────────────────
-
-/**
- * Interpolate template with provided variables.
- * Variables are specified as {varName} in the template.
- */
-export function interpolateTemplate(template: string, vars: Record<string, string>): string {
-  let result = template;
-  for (const [key, value] of Object.entries(vars)) {
-    result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+  for (const name of toolNames) {
+    // Match tool name at word boundaries, skip if already prefixed
+    const regex = new RegExp(`(?<!${escapeRegex(prefix)})\\b${escapeRegex(name)}\\b`, 'g');
+    result = result.replace(regex, `${prefix}${name}`);
   }
   return result;
 }
+
+

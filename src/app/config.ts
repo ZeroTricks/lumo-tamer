@@ -47,17 +47,20 @@ const replacePatternSchema = z.object({
 const customToolsConfigSchema = z.object({
   enabled: z.boolean(),
   prefix: z.string(),
-  replacePatterns: z.array(replacePatternSchema),
 });
 
-// Instructions schemas (CLI base, server extends with template)
+// Instructions schemas
 const cliInstructionsConfigSchema = z.object({
-  default: z.string(),
-  forTools: z.string(),
+  template: z.string(),
+  forLocalActions: z.string(),
   forToolBounce: z.string(),
 });
-const serverInstructionsConfigSchema = cliInstructionsConfigSchema.extend({
+const serverInstructionsConfigSchema = z.object({
   template: z.string(),
+  forTools: z.string(),
+  fallback: z.string(),
+  forToolBounce: z.string(),
+  replacePatterns: z.array(replacePatternSchema),
 });
 
 // CLI local actions config
@@ -183,29 +186,11 @@ function loadMergedConfig(mode: ConfigMode): MergedConfig {
 let config: MergedConfig | null = null;
 let configMode: ConfigMode | null = null;
 
-/**
- * Validate regex patterns in customTools.replacePatterns.
- * Logs warnings for invalid patterns but doesn't fail.
- */
-function validateReplacePatterns(config: MergedConfig, mode: ConfigMode): void {
-  if (mode !== 'server') return;
-
-  const serverConfig = config as ServerMergedConfig;
-  const patterns = serverConfig.customTools?.replacePatterns ?? [];
-
-  for (const entry of patterns) {
-    try {
-      new RegExp(entry.pattern, 'gi');
-    } catch (e) {
-      console.warn(`Invalid regex in customTools.replacePatterns: "${entry.pattern}" - ${(e as Error).message}`);
-    }
-  }
-}
-
 export function initConfig(mode: ConfigMode): void {
   configMode = mode;
   config = loadMergedConfig(mode);
-  validateReplacePatterns(config, mode);
+  // Note: replacePatterns regex validation happens in src/api/instructions/
+  // at module load time, when logger is available
 }
 
 export function getConfigMode(): ConfigMode | null {
@@ -277,7 +262,7 @@ export const authConfig = ((): z.infer<typeof authConfigSchema> => {
 // Mock config (eagerly loaded, needed before initConfig to decide auth vs mock)
 const mockConfigSchema = z.object({
   enabled: z.boolean(),
-  scenario: z.enum(['success', 'error', 'timeout', 'rejected', 'toolCall', 'confusedToolCall', 'weeklyLimit', 'cycle']),
+  scenario: z.enum(['success', 'error', 'timeout', 'rejected', 'toolCall', 'misroutedToolCall', 'weeklyLimit', 'cycle']),
 });
 
 export const mockConfig = ((): z.infer<typeof mockConfigSchema> => {

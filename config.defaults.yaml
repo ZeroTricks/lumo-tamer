@@ -47,7 +47,7 @@ test:
   mock:
     # Enable mock mode: bypass authentication, return simulated Lumo responses
     enabled: false
-    # Scenario: success, error, timeout, rejected, toolCall, confusedToolCall, weeklyLimit, cycle
+    # Scenario: success, error, timeout, rejected, toolCall, misroutedToolCall, weeklyLimit, cycle
     scenario: "success"
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
@@ -117,6 +117,34 @@ server:
     # Set to "" to disable prefixing.
     prefix: "user:"
 
+
+  instructions:
+
+    # Template for assembling instructions.
+    # Uses Handlebars-like syntax: {{varName}}, {{#if varName}}...{{/if}}, {{#if}}...{{else}}...{{/if}}
+    # Available variables:
+    #   - tools: JSON-stringified tool definitions (truthy when tools provided)
+    #   - clientInstructions: system/developer message from request
+    #   - forTools: the forTools block below (pre-interpolated with {{prefix}})
+    #   - fallback: the fallback block below
+    #   - prefix: tool prefix from customTools.prefix
+    template: |
+      {{#if tools}}
+      {{forTools}}
+      {{/if}}
+
+      {{#if clientInstructions}}
+      {{clientInstructions}}
+      {{else}}
+      {{fallback}}
+      {{/if}}
+
+      {{#if tools}}
+      Below are all the custom tools you can use. Remember, all tools prefixed with `{{prefix}}` are custom tools and must be called by outputting the JSON to the user.
+
+      {{tools}}
+      {{/if}}
+
     # Search/replace patterns applied to client instructions (case-insensitive regex).
     # Useful for removing or rewriting phrases that may confuse Lumo about tool calling.
     # Each entry: { pattern: "regex", replacement: "text" } - omit replacement to strip.
@@ -125,35 +153,23 @@ server:
         replacement: "custom "
 
 
-  instructions:
-
-    # Template for assembling instructions when tools are provided.
-    # Variables: {forTools}, {clientInstructions}, {toolsJson}
-    template: |
-      {forTools}
-      
-      {clientInstructions}
-      
-      Below are all the custom tools you can use. Remember, all tools prefixed with `user:` are custom tools and must be called by outputting the JSON to the user.
-      
-      {toolsJson}
-
-    # Default instructions when no system/developer message is provided in the request
-    default: |
+    # Fallback instructions when no system/developer message is provided in the request
+    fallback: |
       Always answer in plain text. Don't use tables, quote blocks, lists, etc. Be concise.
 
-    # Instructions prepended to tool definitions when tools are provided in the request.
+    # Instructions prepended when tools are provided in the request.
+    # Can use {{prefix}} variable.
     forTools: |
       === CUSTOM TOOL PROTOCOL ===
-      The tools below are CUSTOM tools, prefixed with `user:`.
+      The tools below are CUSTOM tools, prefixed with `{{prefix}}`.
 
       IMPORTANT: Custom tools are NOT part of your built-in tool system.
       You MUST call them by outputting JSON as text in a code block to the user, like this:
       ```json
-      {"name": "user:example_tool", "arguments": {"param": "value"}}
+      {"name": "{{prefix}}example_tool", "arguments": {"param": "value"}}
       ```
       DO NOT try to call custom tools through your internal tool mechanism, it will fail with error:true. If you receive such an error, don't try again with different arguments, but output the JSON as text to the user.
-      DO NOT remove the `user:` prefix when calling these tools.
+      DO NOT remove the `{{prefix}}` prefix when calling these tools.
 
       The user's system will execute them and return results.
       === END PROTOCOL ===
@@ -191,33 +207,32 @@ cli:
 
     # Executors for code block execution
     # Maps language tag -> [command, ...args]. Code is appended as last arg.
-    # Override in config.yaml to restrict or extend
+    # Override to restrict or extend
     executors:
-      # Unix shells
       bash: ["bash", "-c"]
+      python: ["python", "-c"]
       sh: ["sh", "-c"]
-      zsh: ["zsh", "-c"]
-      # Windows shells
-      powershell: ["powershell", "-Command"]
-      ps1: ["powershell", "-Command"]
-      cmd: ["cmd", "/c"]
-      # Scripting languages
-      python: ["python3", "-c"]
-      python3: ["python3", "-c"]
-      node: ["node", "-e"]
-      javascript: ["node", "-e"]
-      js: ["node", "-e"]
-      ruby: ["ruby", "-e"]
-      perl: ["perl", "-e"]
+      # zsh: ["zsh", "-c"]
+      # powershell: ["powershell", "-Command"]
+      # ps1: ["powershell", "-Command"]
+      # cmd: ["cmd", "/c"]
+      # node: ["node", "-e"]
+      # javascript: ["node", "-e"]
+      # js: ["node", "-e"]
+      # perl: ["perl", "-e"]
 
   instructions:
-    default: |
+    template: |
       You are a command line assistant. Your output will be read in a terminal. Keep the formatting to a minimum and be concise.
 
-    # Appended when localActions.enabled=true
-    forTools: |
-      You can read, edit and create files, and you can execute bash and python commands on the user's machine.
-      To execute code, use a code block like ```bash or ```python. The user will be prompted to execute it and the result will be returned to you. Don't explain the user can execute commands, it will be handled automatically. Keep commands simple and safe.
+      {{#if localActions}}
+      {{forLocalActions}}
+      {{/if}}
+
+    # Injected as {{forLocalActions}} when localActions.enabled=true
+    forLocalActions: |
+      You can read, edit and create files, and you can execute {{executors}} commands on the user's machine.
+      To execute code, use a code block like ```python. The user will be prompted to execute it and the result will be returned to you. Don't explain the user can execute commands, it will be handled automatically. Keep commands simple and safe.
       To read files, use a ```read block with one file path per line. Contents will be returned to you automatically without prompting the user. Example:
       ```read
       README.md
@@ -237,6 +252,7 @@ cli:
       new text
       >>>>>>> REPLACE
       ```
+
     forToolBounce: |
       You tried to execute an action using your built-in tool system, but these actions must be called by providing a code block. Use for example:
       ```read

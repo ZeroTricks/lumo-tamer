@@ -1,16 +1,16 @@
 /**
- * Unit tests for prefix helpers and template interpolation
+ * Unit tests for tool prefix helpers
  *
- * Tests the helper functions used for custom tool prefixing,
- * pattern replacement, and template assembly.
+ * Tests the helper functions used for custom tool prefixing.
+ *
+ * Note: Template interpolation and replace patterns tests are in template.test.ts
  */
 
 import { describe, it, expect } from 'vitest';
 import {
   applyToolPrefix,
   stripToolPrefix,
-  applyReplacePatterns,
-  interpolateTemplate,
+  applyToolNamePrefix,
 } from '../../src/api/tools/prefix.js';
 import type { OpenAITool } from '../../src/api/types.js';
 
@@ -132,126 +132,75 @@ describe('stripToolPrefix', () => {
   });
 });
 
-describe('applyReplacePatterns', () => {
-  it('removes matching patterns when no replacement specified (case-insensitive)', () => {
-    const text = 'Use only native tool calling. This is important.';
-    const patterns = [{ pattern: 'use only native tool calling' }];
+describe('applyToolNamePrefix', () => {
+  it('prefixes tool names in text', () => {
+    const text = 'Use find_files to search for documents.';
+    const result = applyToolNamePrefix(text, ['find_files'], 'user:');
 
-    expect(applyReplacePatterns(text, patterns)).toBe('. This is important.');
+    expect(result).toBe('Use user:find_files to search for documents.');
   });
 
-  it('replaces matching patterns with specified replacement', () => {
-    const text = 'Use only native tool calling. This is important.';
-    const patterns = [{ pattern: 'use only native tool calling', replacement: 'Follow protocol' }];
+  it('prefixes multiple tool names', () => {
+    const text = 'Use find_files to locate, then read_file to view contents.';
+    const result = applyToolNamePrefix(text, ['find_files', 'read_file'], 'user:');
 
-    expect(applyReplacePatterns(text, patterns)).toBe('Follow protocol. This is important.');
+    expect(result).toBe('Use user:find_files to locate, then user:read_file to view contents.');
   });
 
-  it('removes multiple patterns', () => {
-    const text = 'Use native calling (no text-based formats allowed). Be careful.';
-    const patterns = [
-      { pattern: 'use native calling' },
-      { pattern: '\\(no text-based formats[^)]*\\)' },
-    ];
+  it('prefixes all occurrences of a tool name', () => {
+    const text = 'Call find_files first, then find_files again if needed.';
+    const result = applyToolNamePrefix(text, ['find_files'], 'user:');
 
-    expect(applyReplacePatterns(text, patterns)).toBe('. Be careful.');
+    expect(result).toBe('Call user:find_files first, then user:find_files again if needed.');
   });
 
-  it('removes all occurrences of a pattern', () => {
-    const text = 'Use native. Then use native again.';
-    const patterns = [{ pattern: 'use native' }];
+  it('respects word boundaries (no partial matches)', () => {
+    const text = 'Use read_file but not read_file_sync or myread_file.';
+    const result = applyToolNamePrefix(text, ['read_file'], 'user:');
 
-    expect(applyReplacePatterns(text, patterns)).toBe('. Then again.');
+    expect(result).toBe('Use user:read_file but not read_file_sync or myread_file.');
   });
 
-  it('returns original text when no patterns match', () => {
-    const text = 'This is normal text.';
-    const patterns = [{ pattern: 'nonexistent pattern' }];
+  it('skips already-prefixed names', () => {
+    const text = 'Use user:find_files which is already prefixed.';
+    const result = applyToolNamePrefix(text, ['find_files'], 'user:');
 
-    expect(applyReplacePatterns(text, patterns)).toBe('This is normal text.');
+    expect(result).toBe('Use user:find_files which is already prefixed.');
   });
 
-  it('returns original text when patterns array is empty', () => {
-    const text = 'Original text here.';
+  it('returns unchanged when prefix is empty', () => {
+    const text = 'Use find_files to search.';
+    const result = applyToolNamePrefix(text, ['find_files'], '');
 
-    expect(applyReplacePatterns(text, [])).toBe('Original text here.');
+    expect(result).toBe('Use find_files to search.');
   });
 
-  it('cleans up extra whitespace left by removals', () => {
-    const text = 'Line one.\n\nBad pattern here.\n\n\nLine two.';
-    const patterns = [{ pattern: 'Bad pattern here\\.' }];
+  it('returns unchanged when tool names array is empty', () => {
+    const text = 'Use find_files to search.';
+    const result = applyToolNamePrefix(text, [], 'user:');
 
-    const result = applyReplacePatterns(text, patterns);
-    // Should collapse multiple newlines
-    expect(result).not.toContain('\n\n\n');
+    expect(result).toBe('Use find_files to search.');
   });
 
-  it('skips invalid regex patterns gracefully', () => {
-    const text = 'Some text here.';
-    const patterns = [{ pattern: '[invalid regex' }, { pattern: 'valid pattern' }];
-
-    // Should not throw, should process valid patterns
-    expect(() => applyReplacePatterns(text, patterns)).not.toThrow();
-  });
-
-  it('supports regex capture groups in replacement', () => {
-    const text = 'Call function foo() now.';
-    const patterns = [{ pattern: 'function (\\w+)\\(\\)', replacement: 'method $1' }];
-
-    expect(applyReplacePatterns(text, patterns)).toBe('Call method foo now.');
-  });
-});
-
-describe('interpolateTemplate', () => {
-  it('replaces single variable', () => {
-    const template = 'Hello {name}!';
-    const result = interpolateTemplate(template, { name: 'World' });
-
-    expect(result).toBe('Hello World!');
-  });
-
-  it('replaces multiple variables', () => {
-    const template = '{forTools}\n\n{clientInstructions}\n\n{toolsJson}';
-    const result = interpolateTemplate(template, {
-      forTools: 'Tool protocol here',
-      clientInstructions: 'Client says this',
-      toolsJson: '{"tools": []}',
-    });
-
-    expect(result).toBe('Tool protocol here\n\nClient says this\n\n{"tools": []}');
-  });
-
-  it('replaces all occurrences of same variable', () => {
-    const template = '{x} + {x} = 2{x}';
-    const result = interpolateTemplate(template, { x: '1' });
-
-    expect(result).toBe('1 + 1 = 21');
-  });
-
-  it('leaves unmatched placeholders unchanged', () => {
-    const template = '{known} and {unknown}';
-    const result = interpolateTemplate(template, { known: 'value' });
-
-    expect(result).toBe('value and {unknown}');
-  });
-
-  it('handles empty vars object', () => {
-    const template = 'No {vars} here';
-    const result = interpolateTemplate(template, {});
-
-    expect(result).toBe('No {vars} here');
-  });
-
-  it('handles empty template', () => {
-    const result = interpolateTemplate('', { key: 'value' });
+  it('returns unchanged when text is empty', () => {
+    const result = applyToolNamePrefix('', ['find_files'], 'user:');
 
     expect(result).toBe('');
   });
 
-  it('handles multiline content in variables', () => {
-    const template = 'Start\n{content}\nEnd';
-    const result = interpolateTemplate(template, { content: 'Line1\nLine2\nLine3' });
+  it('handles tool names with dots (special regex characters)', () => {
+    // Tool names with dots are escaped properly
+    const text = 'Use get.data to fetch information.';
+    const result = applyToolNamePrefix(text, ['get.data'], 'user:');
 
-    expect(result).toBe('Start\nLine1\nLine2\nLine3\nEnd');
+    expect(result).toBe('Use user:get.data to fetch information.');
+  });
+
+  it('handles prefix with special regex characters', () => {
+    const text = 'Use find_files tool.';
+    const result = applyToolNamePrefix(text, ['find_files'], 'ns:v1:');
+
+    expect(result).toBe('Use ns:v1:find_files tool.');
   });
 });
+

@@ -67,9 +67,9 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
     try {
       const request: OpenAIResponseRequest = req.body;
 
-      // ===== STEP 1: Determine conversation ID FIRST =====
-      // We need this before any deduplication checks since dedup is per-conversation
-      let conversationId: ConversationId;
+      // ===== STEP 1: Determine conversation ID =====
+      // Without a deterministic ID, treat the request as stateless (no persistence/dedup).
+      let conversationId: ConversationId | undefined;
       const conversationFromRequest = getConversationIdFromRequest(request);
 
       if (conversationFromRequest) {
@@ -82,11 +82,8 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
         // WORKAROUND for clients that don't provide conversation (e.g., Home Assistant).
         // Home Assistant sets `user` to its internal conversation_id, unique per chat session.
         conversationId = generateConversationIdFromUser(request.user);
-      } else {
-        // Default: generate random UUID for each new conversation
-        conversationId = randomUUID();
-        logger.debug({ conversationId }, 'Generated random conversation ID');
       }
+      // No else - leave undefined for stateless requests
 
       // ===== STEP 2: Validate input =====
       if (!request.input) {
@@ -108,7 +105,8 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       const turns = convertResponseInputToTurns(request.input, request.instructions, request.tools);
 
       // If there's a non-duplicate function_call_output, append it as a user turn
-      if (Array.isArray(request.input)) {
+      // Skip deduplication for stateless requests (no conversationId)
+      if (conversationId && Array.isArray(request.input)) {
         const functionOutputs = request.input
           .filter((item): item is FunctionCallOutput =>
             typeof item === 'object' && 'type' in item && item.type === 'function_call_output'
@@ -129,8 +127,8 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
         }
       }
 
-      // ===== STEP 4: Persist incoming messages =====
-      if (deps.conversationStore && Array.isArray(request.input)) {
+      // ===== STEP 4: Persist incoming messages (stateful only) =====
+      if (conversationId && deps.conversationStore && Array.isArray(request.input)) {
         const allMessages: Array<{ role: string; content: string }> = [];
         for (const item of request.input) {
           // Use normalizeInputItem for tool-related items (function_call, function_call_output)
@@ -148,7 +146,7 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
           deps.conversationStore.appendMessages(conversationId, allMessages);
           logger.debug({ conversationId, messageCount: allMessages.length }, 'Persisted conversation messages');
         }
-      } else if (deps.conversationStore && typeof request.input === 'string') {
+      } else if (conversationId && deps.conversationStore && typeof request.input === 'string') {
         deps.conversationStore.appendMessages(conversationId, [
           { role: 'user', content: request.input }
         ]);

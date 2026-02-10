@@ -147,7 +147,7 @@ export async function handleStreamingRequest(
   deps: EndpointDependencies,
   request: OpenAIResponseRequest,
   turns: Turn[],
-  conversationId: ConversationId
+  conversationId: ConversationId | undefined
 ): Promise<void> {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -182,8 +182,10 @@ export async function handleStreamingRequest(
           emitter.emitOutputTextDelta(itemId, 0, 0, text);
         },
         emitToolCall(callId, tc) {
-          // Track call ID per-conversation for function output deduplication
-          deps.conversationStore?.addGeneratedCallId(conversationId, callId);
+          // Track call ID per-conversation for function output deduplication (stateful only)
+          if (conversationId) {
+            deps.conversationStore?.addGeneratedCallId(conversationId, callId);
+          }
           emitter.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
         },
       });
@@ -258,7 +260,7 @@ export async function handleNonStreamingRequest(
   deps: EndpointDependencies,
   request: OpenAIResponseRequest,
   turns: Turn[],
-  conversationId: ConversationId
+  conversationId: ConversationId | undefined
 ): Promise<void> {
   const ctx = buildRequestContext(deps, conversationId, request.tools);
 

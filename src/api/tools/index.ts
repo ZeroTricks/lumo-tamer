@@ -8,9 +8,7 @@
 export {
   applyToolPrefix,
   stripToolPrefix,
-  applyReplacePatterns,
-  interpolateTemplate,
-  type ReplacePattern,
+  applyToolNamePrefix,
 } from './prefix.js';
 
 // Tool parsing

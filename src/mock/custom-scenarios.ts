@@ -26,15 +26,15 @@ function lastTurnWithRole(turns: Turn[], role: Turn['role']): Turn | undefined {
 }
 
 export const customScenarios: Record<string, ScenarioGenerator> = {
-    confusedToolCall: async function* (options) {
-        // Simulates a "confused" tool call: Lumo routes a custom (client-defined) tool
+    misroutedToolCall: async function* (options) {
+        // Simulates a "misrouted" tool call: Lumo routes a custom (client-defined) tool
         // through its native pipeline instead of outputting it as text. Always fails server-side.
         // Based on real logs: concatenated retried tool calls, error results, then fallback text.
         //
         // Phase detection is turn-based:
         //   Bounce:   last user turn contains the bounce instruction ("built-in tool system")
         //   Follow-up: turns contain an assistant turn (multi-turn) or more than 1 turn
-        //   Confused:  everything else (simple first user message)
+        //   Misrouted: everything else (simple first user message)
 
         const turns = getTurns(options);
         const lastUserTurn = lastTurnWithRole(turns, 'user');
@@ -72,7 +72,7 @@ export const customScenarios: Record<string, ScenarioGenerator> = {
             return;
         }
 
-        // Initial call: confused native tool call
+        // Initial call: misrouted native tool call
         yield formatSSEMessage({ type: 'ingesting', target: 'message' });
         await delay(200);
 

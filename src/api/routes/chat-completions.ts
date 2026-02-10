@@ -50,17 +50,16 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       // ===== Generate conversation ID for persistence =====
       // Chat Completions has no conversation parameter per OpenAI spec.
       // We use deriveIdFromUser to track conversations for Proton sync.
-      let conversationId: ConversationId;
+      // Without a deterministic ID, treat the request as stateless (no persistence).
+      let conversationId: ConversationId | undefined;
       if (getConversationsConfig()?.deriveIdFromUser && request.user) {
         // Home Assistant sets `user` to its internal conversation_id, unique per chat session.
         conversationId = generateConversationIdFromUser(request.user);
-      } else {
-        // Random UUID per request (creates separate conversations)
-        conversationId = randomUUID();
       }
+      // No else - leave undefined for stateless requests
 
-      // ===== Persist incoming messages (with deduplication) =====
-      if (deps.conversationStore) {
+      // ===== Persist incoming messages (stateful only) =====
+      if (conversationId && deps.conversationStore) {
         const allMessages: Array<{ role: string; content: string }> = [];
         for (const msg of request.messages) {
           // Use normalizeInputItem for tool-related messages (role: 'tool', tool_calls)
@@ -176,7 +175,7 @@ async function handleStreamingRequest(
   deps: EndpointDependencies,
   request: OpenAIChatRequest,
   turns: Turn[],
-  conversationId: ConversationId
+  conversationId: ConversationId | undefined
 ): Promise<void> {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -306,7 +305,7 @@ async function handleNonStreamingRequest(
   deps: EndpointDependencies,
   request: OpenAIChatRequest,
   turns: Turn[],
-  conversationId: ConversationId
+  conversationId: ConversationId | undefined
 ): Promise<void> {
   const ctx = buildRequestContext(deps, conversationId, request.tools);
 

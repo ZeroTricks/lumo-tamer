@@ -10,18 +10,23 @@
     "tamer-auth": "./dist/auth/authenticate.js"
   },
   "scripts": {
+
     "dev:server": "tsx watch src/server.ts",
     "dev:cli": "tsx src/cli.ts",
     "dev:server:debug": "tsx watch --inspect=0.0.0.0:9229 src/server.ts",
     "dev:cli:debug": "tsx --inspect=0.0.0.0:9229 src/cli.ts",
+    "dev:auth": "tsx src/auth/authenticate.ts",
+    "sync-upstream": "./src/proton-upstream/sync-upstream.sh",
+
     "build": "tsc && tsc-alias",
+    "build:login": "cd src/auth/login/go && go build -o ../../../../dist/proton-auth || echo 'Warning: Go binary not built (Go not installed?)'",
+    "build:all": "npm run build && npm run build:login",
+    "clean": "rm -rf dist",
+
     "server": "node dist/server.js",
     "cli": "node dist/cli.js",
-    "clean": "rm -rf dist",
-    "dev:auth": "tsx src/auth/authenticate.ts",
     "auth": "node dist/auth/authenticate.js",
-    "auth-status": "tsx src/auth/authenticate.ts status",
-    "sync-upstream": "./src/proton-upstream/sync-upstream.sh",
+    
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit/",
@@ -41,6 +46,7 @@
     "@types/toposort": "^2.0.7",
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
+    "handlebars": "^4.7.8",
     "js-yaml": "^4.1.1",
     "json-stable-stringify": "^1.3.0",
     "keytar": "^7.9.0",
