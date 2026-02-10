@@ -18,7 +18,7 @@ After successful authentication, `config.yaml` is updated with your selected met
 
 ## Login (Recommended)
 
-A secure and lightweight option where you provide your credentials in a prompt. Requires Go. No support for CAPTCHA or conversation sync.
+A secure and lightweight option where you provide your credentials. Requires Go. No support for CAPTCHA or conversation sync.
 
 Uses Proton's SRP (Secure Remote Password) protocol via a Go binary built from [go-proton-api](https://github.com/henrybear327/go-proton-api).
 
@@ -26,14 +26,13 @@ Uses Proton's SRP (Secure Remote Password) protocol via a Go binary built from [
 
 - **No browser dependency**: Pure API-based authentication
 - **Direct keyPassword access**: Derives the mailbox password needed for encryption
-- **Token refresh**: Supports automatic token refresh
 
 ### Setup
 
 1. Build the Go binary:
    ```bash
    # Requires Go 1.24+
-   npm run build:login
+   npm run build:login # or npm run build:all
    ```
 2. Run `tamer auth login`
 3. Enter username, password, and TOTP code (if 2FA is enabled).
