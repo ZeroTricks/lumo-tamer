@@ -116,6 +116,8 @@ export class LumoClient {
             requestKey?: AesGcmCryptoKey;
             requestId?: RequestId;
         },
+        /** When true, ignore misrouted tool calls (they're stale leftovers in bounce responses). */
+        isBounce = false,
     ): Promise<ChatResult> {
         const reader = stream.getReader();
         const decoder = new TextDecoder('utf-8');
@@ -130,6 +132,8 @@ export class LumoClient {
         let nativeToolCallFailed = false;
         // Suppress onChunk when a misrouted tool call is detected mid-stream
         let suppressChunks = false;
+        // Signal to break read loop early on misrouted detection
+        let abortEarly = false;
 
         const processMessage = async (msg: GenerationToFrontendMessage) => {
             if (msg.type === 'token_data') {
@@ -168,9 +172,14 @@ export class LumoClient {
                         logger.debug({ raw: json }, 'Native SSE tool_call');
                         if (!firstNativeToolCall) {
                             firstNativeToolCall = parseNativeToolCallJson(json);
-                            if (firstNativeToolCall && isMisroutedToolCall(firstNativeToolCall)) {
+                            if (firstNativeToolCall && isMisroutedToolCall(firstNativeToolCall) && !isBounce) {
+                                // Only abort on initial call; bounce responses may contain stale misrouted calls
                                 suppressChunks = true;
-                                logger.debug({ name: firstNativeToolCall.name }, 'Misrouted tool call detected, suppressing chunks');
+                                abortEarly = true;
+                                logger.debug({
+                                    name: firstNativeToolCall.name,
+                                    partialResponse: fullResponse
+                                }, 'Misrouted tool call detected, aborting stream');
                             }
                         }
                     }
@@ -204,6 +213,7 @@ export class LumoClient {
                 for (const msg of messages) {
                     await processMessage(msg);
                 }
+                if (abortEarly) break;
             }
 
             // Process any remaining data
@@ -319,7 +329,7 @@ export class LumoClient {
             enableEncryption,
             requestKey,
             requestId,
-        });
+        }, isBounce);
 
         // Log response
         const responsePreview = result.response.length > 200
