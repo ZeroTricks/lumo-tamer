@@ -109,6 +109,7 @@ export class ConversationStore {
                 reason: validation.reason,
                 incomingCount: incoming.length,
                 storedCount: state.messages.length,
+                ...validation.debugInfo,
             }, 'Invalid conversation continuation');
             // For now, we continue anyway but log the warning
         }

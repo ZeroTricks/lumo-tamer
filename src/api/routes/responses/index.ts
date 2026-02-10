@@ -3,7 +3,7 @@ import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest, FunctionCallOutput } from '../../types.js';
 import { logger } from '../../../app/logger.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './request-handlers.js';
-import { convertResponseInputToTurns } from '../../message-converter.js';
+import { convertResponseInputToTurns, normalizeInputItem } from '../../message-converter.js';
 import { getConversationsConfig } from '../../../app/config.js';
 
 import type { ConversationId } from '../../../conversations/index.js';
@@ -133,22 +133,14 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       if (deps.conversationStore && Array.isArray(request.input)) {
         const allMessages: Array<{ role: string; content: string }> = [];
         for (const item of request.input) {
-          const itemType = 'type' in item ? (item as { type: string }).type : undefined;
-
-          if (itemType === 'function_call') {
-            const fc = item as unknown as { type: string; name: string; arguments: string; call_id: string };
-            allMessages.push({
-              role: 'tool_call',
-              content: JSON.stringify({ call_id: fc.call_id, name: fc.name, arguments: fc.arguments })
-            });
-          } else if (itemType === 'function_call_output') {
-            const fco = item as FunctionCallOutput;
-            allMessages.push({
-              role: 'tool_result',
-              content: JSON.stringify({ call_id: fco.call_id, output: fco.output })
-            });
-          } else if ('role' in item && 'content' in item) {
-            allMessages.push({ role: item.role, content: item.content });
+          // Use normalizeInputItem for tool-related items (function_call, function_call_output)
+          const normalized = normalizeInputItem(item);
+          if (normalized) {
+            const normalizedArray = Array.isArray(normalized) ? normalized : [normalized];
+            allMessages.push(...normalizedArray);
+          } else if (typeof item === 'object' && 'role' in item && 'content' in item) {
+            const msg = item as { role: string; content: string };
+            allMessages.push({ role: msg.role, content: msg.content });
           }
         }
 

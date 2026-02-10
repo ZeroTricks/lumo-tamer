@@ -13,10 +13,32 @@ export interface EndpointDependencies {
 }
 
 // Chat Completions API types
-export interface ChatMessage {
+
+// Tool result message (role: 'tool') - sent by client after executing a tool
+export interface ToolResultMessage {
+  role: 'tool';
+  tool_call_id: string;
+  content: string;
+}
+
+// Assistant message with tool_calls (no content, or null content)
+export interface AssistantMessageWithToolCalls {
+  role: 'assistant';
+  content?: string | null;
+  tool_calls: OpenAIToolCall[];
+}
+
+// Standard message with role and content
+export interface StandardChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
 }
+
+// Union type for all possible chat messages in requests
+export type ChatMessage =
+  | StandardChatMessage
+  | AssistantMessageWithToolCalls
+  | ToolResultMessage;
 
 // OpenAI tool definition
 export interface OpenAITool {
@@ -50,8 +72,10 @@ export interface OpenAIChatRequest {
   conversation_id?: string;
 }
 
-// Extended chat message with optional tool calls
-export interface ChatMessageWithTools extends ChatMessage {
+// Extended chat message with optional tool calls (for responses)
+export interface ChatMessageWithTools {
+  role: 'assistant';
+  content: string | null;
   tool_calls?: OpenAIToolCall[];
 }
 

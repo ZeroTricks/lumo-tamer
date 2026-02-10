@@ -2,11 +2,101 @@
  * Converts OpenAI message format to Lumo Turn format
  */
 
-import type { ChatMessage, ResponseInputItem, OpenAITool } from './types.js';
+import type { ChatMessage, ResponseInputItem, OpenAITool, OpenAIToolCall } from './types.js';
 import type { Turn } from '../lumo-client/index.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
 import { isCommand } from '../app/commands.js';
 import { applyToolPrefix, applyReplacePatterns, interpolateTemplate } from './tools/prefix.js';
+
+// ── Input normalization ───────────────────────────────────────────────
+
+/**
+ * Normalized message format (role + content only).
+ * Used for both Lumo turns and persistence.
+ */
+export interface NormalizedMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/**
+ * Normalize any input item to a standard { role, content } format.
+ * Handles both Chat Completions (role: 'tool', tool_calls) and
+ * Responses API (function_call, function_call_output) formats.
+ *
+ * Tool-related items are converted to user/assistant roles with JSON content,
+ * since Lumo's tool_call/tool_result roles are reserved for SSE tools.
+ *
+ * @returns Normalized message(s), or null if item cannot be normalized
+ */
+export function normalizeInputItem(item: unknown): NormalizedMessage | NormalizedMessage[] | null {
+  if (typeof item !== 'object' || item === null) return null;
+  const obj = item as Record<string, unknown>;
+
+  // Chat Completions: role: 'tool' -> user with JSON
+  if (obj.role === 'tool' && 'tool_call_id' in obj) {
+    return {
+      role: 'user',
+      content: JSON.stringify({
+        type: 'function_call_output',
+        call_id: obj.tool_call_id,
+        output: obj.content,
+      }),
+    };
+  }
+
+  // Chat Completions: assistant with tool_calls -> array of assistant messages with JSON
+  if (obj.role === 'assistant' && 'tool_calls' in obj && Array.isArray(obj.tool_calls)) {
+    const toolCalls = obj.tool_calls as OpenAIToolCall[];
+    return toolCalls.map(tc => {
+      // Normalize arguments: parse then re-stringify for consistent formatting
+      const args = typeof tc.function.arguments === 'string'
+        ? JSON.stringify(JSON.parse(tc.function.arguments))
+        : JSON.stringify(tc.function.arguments ?? {});
+      return {
+        role: 'assistant' as const,
+        content: JSON.stringify({
+          type: 'function_call',
+          call_id: tc.id,
+          name: tc.function.name,
+          arguments: args,
+        }),
+      };
+    });
+  }
+
+  // Responses API: function_call -> assistant with JSON
+  if (obj.type === 'function_call') {
+    // Normalize arguments: parse then re-stringify for consistent formatting
+    // This ensures {"a": 1} and {"a":1} produce the same hash
+    const args = typeof obj.arguments === 'string'
+      ? JSON.stringify(JSON.parse(obj.arguments))
+      : JSON.stringify(obj.arguments ?? {});
+    return {
+      role: 'assistant',
+      content: JSON.stringify({
+        type: 'function_call',
+        call_id: obj.call_id,
+        name: obj.name,
+        arguments: args,
+      }),
+    };
+  }
+
+  // Responses API: function_call_output -> user with JSON
+  if (obj.type === 'function_call_output') {
+    return {
+      role: 'user',
+      content: JSON.stringify({
+        type: 'function_call_output',
+        call_id: obj.call_id,
+        output: obj.output,
+      }),
+    };
+  }
+
+  return null;
+}
 
 // ── Tool instruction building ────────────────────────────────────────
 
@@ -88,7 +178,11 @@ function extractSystemMessage(messages: ChatMessage[]): string | undefined {
   const systemMsg = messages.find(m =>
     m.role === 'system' || (m.role as string) === 'developer'
   );
-  return systemMsg?.content;
+  // System messages always have string content (not null)
+  if (systemMsg && 'content' in systemMsg && typeof systemMsg.content === 'string') {
+    return systemMsg.content;
+  }
+  return undefined;
 }
 
 /**
@@ -96,6 +190,10 @@ function extractSystemMessage(messages: ChatMessage[]): string | undefined {
  *
  * Per Lumo's pattern, instructions are injected as
  * "[Personal context: ...]" appended to the first user message.
+ *
+ * Handles tool-related messages:
+ * - role: 'tool' -> user turn with JSON content
+ * - assistant with tool_calls -> assistant turn(s) with JSON content
  */
 function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: string): Turn[] {
   const turns: Turn[] = [];
@@ -107,12 +205,27 @@ function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: stri
       continue;
     }
 
-    let content = msg.content;
+    // Handle tool-related messages via normalizeInputItem
+    const normalized = normalizeInputItem(msg);
+    if (normalized) {
+      const normalizedArray = Array.isArray(normalized) ? normalized : [normalized];
+      for (const norm of normalizedArray) {
+        turns.push(norm);
+      }
+      continue;
+    }
+
+    // Regular user/assistant message
+    const content = typeof msg.content === 'string' ? msg.content : '';
 
     // Inject instructions into first user message (but not if it's a command)
     if (msg.role === 'user' && instructions && !instructionsInjected && !isCommand(content)) {
-      content = `${content}\n\n[Personal context: ${instructions}]`;
+      turns.push({
+        role: 'user',
+        content: `${content}\n\n[Personal context: ${instructions}]`,
+      });
       instructionsInjected = true;
+      continue;
     }
 
     turns.push({
