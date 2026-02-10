@@ -2,13 +2,9 @@
  * Auth Status - Display helpers for authentication status
  */
 
+import { print } from '../app/terminal.js';
 import { createAuthProvider, type AuthProviderStatus } from './index.js';
 import { authConfig, getConversationsConfig } from '../app/config.js';
-
-/** Write to stdout (bypasses console shim) */
-function print(msg: string): void {
-    process.stdout.write(msg + '\n');
-}
 
 export function printStatus(status: AuthProviderStatus): void {
     const statusIcon = status.valid ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';

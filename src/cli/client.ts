@@ -19,7 +19,7 @@ import { CodeBlockDetector, type CodeBlock } from './code-block-detector.js';
 import { blockHandlers, type BlockResult } from './block-handlers.js';
 import { confirmAndApply } from './confirm.js';
 import { injectInstructions } from './message-converter.js';
-import { printToChat, clearBusyIndicator, BUSY_INDICATOR } from './terminal.js';
+import { print, clearBusyIndicator, BUSY_INDICATOR } from '../app/terminal.js';
 
 interface LumoResponse {
   response: string;
@@ -65,7 +65,7 @@ export class CLIClient {
     const blocks: CodeBlock[] = [];
     let chunkCount = 0;
 
-    printToChat('Lumo: ' + BUSY_INDICATOR);
+    print('Lumo: ' + BUSY_INDICATOR, false);
 
     const turns = injectInstructions(this.store.toTurns(this.conversationId));
     const result = await this.app.getLumoClient().chatWithHistory(
@@ -74,10 +74,10 @@ export class CLIClient {
         if (chunkCount === 0) clearBusyIndicator();
         if (detector) {
           const { text, blocks: newBlocks } = detector.processChunk(chunk);
-          printToChat(text);
+          print(text, false);
           blocks.push(...newBlocks);
         } else {
-          printToChat(chunk);
+          print(chunk, false);
         }
         chunkCount++;
       },
@@ -88,12 +88,12 @@ export class CLIClient {
     if (detector) {
       const final = detector.finalize();
       if (chunkCount === 0) clearBusyIndicator();
-      printToChat(final.text);
+      print(final.text, false);
       blocks.push(...final.blocks);
     } else {
       if (chunkCount === 0) clearBusyIndicator();
     }
-    printToChat('\n\n');
+    print('\n');
 
     // Handle title
     if (result.title) {
@@ -125,7 +125,7 @@ export class CLIClient {
       if (!handler.requiresConfirmation) {
         const result = await handler.apply(block);
         if (!result.success && handler.formatApplyOutput) {
-          printToChat(handler.formatApplyOutput(result) + '\n');
+          print(handler.formatApplyOutput(result));
         }
         results.push({ block, result });
         continue;
@@ -142,7 +142,7 @@ export class CLIClient {
 
       if (outcome === 'skip_all') {
         const remaining = actionableCount - processed;
-        printToChat(`[Skipped this and ${remaining} remaining block${remaining === 1 ? '' : 's'}]\n\n`);
+        print(`[Skipped this and ${remaining} remaining block${remaining === 1 ? '' : 's'}]\n`);
         break;
       }
       if (outcome !== 'skipped') {
@@ -165,18 +165,18 @@ export class CLIClient {
 
   private async singleQuery(query: string): Promise<void> {
     logger.info({ query }, 'Sending query');
-    printToChat('\n');
+    print('');
 
     const startTime = Date.now();
     let chunkCount = 0;
-    printToChat(BUSY_INDICATOR);
+    print(BUSY_INDICATOR, false);
 
     try {
       const result = await this.app.getLumoClient().chat(
         query,
         (chunk) => {
           if (chunkCount === 0) clearBusyIndicator();
-          printToChat(chunk);
+          print(chunk, false);
           chunkCount++;
         },
       { enableEncryption: true }
@@ -184,11 +184,11 @@ export class CLIClient {
 
       if (chunkCount === 0) clearBusyIndicator();
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-      printToChat('\n\n');
+      print('\n');
       logger.info({ responseLength: result.response.length, chunkCount, elapsedSeconds: elapsed }, 'Done');
     } catch (error) {
       clearBusyIndicator();
-      printToChat('\n');
+      print('');
       logger.error({ error }, 'Request failed');
       this.handleError(error);
       process.exit(1);
@@ -213,11 +213,11 @@ export class CLIClient {
     };
 
     // Welcome message
-    printToChat('\n');
-    printToChat('Welcome to lumo-tamer cli\n');
+    print('');
+    print('Welcome to lumo-tamer cli');
     if (commandsConfig.enabled)
-      printToChat('Type /help for commands, /quit to exit.\n');
-    printToChat('\n');
+      print('Type /help for commands, /quit to exit.');
+    print('');
 
     while (true) {
       const input = await prompt();
@@ -235,7 +235,7 @@ export class CLIClient {
             authManager: this.app.getAuthManager(),
           };
           const result = await executeCommand(input, commandContext);
-          printToChat(result + '\n\n');
+          print(result + '\n');
           continue;
         } else {
           logger.debug({ input }, 'Command ignored (commands.enabled=false)');
@@ -264,7 +264,7 @@ export class CLIClient {
           if (results.length === 0) break; // user skipped all
 
           // Send batch results back to Lumo
-          printToChat('─── Sending results to Lumo ───\n\n');
+          print('─── Sending results to Lumo ───\n');
           const batchMessage = this.formatResultsMessage(results);
           this.store.appendUserMessage(this.conversationId, batchMessage);
 
@@ -273,7 +273,7 @@ export class CLIClient {
         }
       } catch (error) {
         clearBusyIndicator();
-        printToChat('\n');
+        print('');
         logger.error({ error }, 'Request failed');
         this.handleError(error);
       }
@@ -283,17 +283,17 @@ export class CLIClient {
 
     // Sync on exit if available and commands enabled
     if (this.app.isSyncInitialized() && getCommandsConfig().enabled) {
-      printToChat('Syncing conversations before exit...\n');
+      print('Syncing conversations...');
       const commandContext: CommandContext = { syncInitialized: true };
       try {
         const result = await executeCommand('/save', commandContext);
-        printToChat(result + '\n');
+        print(result);
       } catch {
         // Ignore errors on exit sync
       }
     }
 
-    printToChat('Goodbye!\n');
+    print('Goodbye!');
   }
 
   private handleError(error: unknown): void {
