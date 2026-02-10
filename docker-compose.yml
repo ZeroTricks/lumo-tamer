@@ -1,8 +1,8 @@
 services:
 
-  app:
+  tamer:
     build: .
-    container_name: lumo-tamer-app
+    container_name: lumo-tamer
     ports:
       - "3003:3003"
     volumes:
@@ -49,7 +49,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - OPENAI_API_BASE_URLS=http://app:3003/v1
+      - OPENAI_API_BASE_URLS=http://tamer:3003/v1
       - ENABLE_OPENAI_API=true
     volumes:
       # access app config for API key

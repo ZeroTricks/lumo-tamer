@@ -2,31 +2,23 @@
   "name": "lumo-tamer",
   "version": "0.2.0",
   "description": "Use Proton's Lumo AI through OpenAI-compatible API and CLI",
-  "main": "dist/server.js",
+  "main": "dist/tamer.js",
   "type": "module",
   "bin": {
-    "tamer": "./dist/cli.js",
-    "tamer-server": "./dist/server.js",
-    "tamer-auth": "./dist/auth/authenticate.js"
+    "tamer": "./dist/tamer.js"
   },
   "scripts": {
-
-    "dev:server": "tsx watch src/server.ts",
-    "dev:cli": "tsx src/cli.ts",
-    "dev:server:debug": "tsx watch --inspect=0.0.0.0:9229 src/server.ts",
-    "dev:cli:debug": "tsx --inspect=0.0.0.0:9229 src/cli.ts",
-    "dev:auth": "tsx src/auth/authenticate.ts",
+    "dev:server": "tsx watch src/tamer.ts server",
+    "dev:cli": "tsx src/tamer.ts",
+    "dev:server:debug": "tsx watch --inspect=0.0.0.0:9229 src/tamer.ts server",
+    "dev:cli:debug": "tsx --inspect=0.0.0.0:9229 src/tamer.ts",
     "sync-upstream": "./src/proton-upstream/sync-upstream.sh",
-
     "build": "tsc && tsc-alias",
-    "build:login": "cd src/auth/login/go && go build -o ../../../../dist/proton-auth || echo 'Warning: Go binary not built (Go not installed?)'",
+    "build:login": "cd src/auth/login/go && go build -o ../../../../dist/proton-auth  && echo 'All done!' || echo 'Warning: Go binary not built (Is Go installed?)'",
     "build:all": "npm run build && npm run build:login",
     "clean": "rm -rf dist",
-
-    "server": "node dist/server.js",
-    "cli": "node dist/cli.js",
-    "auth": "node dist/auth/authenticate.js",
-    
+    "server": "node dist/tamer.js server",
+    "cli": "node dist/tamer.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit/",
@@ -44,6 +36,7 @@
   "dependencies": {
     "@types/lodash": "^4.17.23",
     "@types/toposort": "^2.0.7",
+    "arg": "^5.0.2",
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
     "handlebars": "^4.7.8",

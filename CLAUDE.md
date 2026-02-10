@@ -32,7 +32,7 @@ lumo-tamer consists of following parts: API, bridge, Lumo WebClient
     - different authentication methods
     - /responses and /chat/completions endpoints
     - API and CLI calls
-  - Use src/logger.ts for logging
+  - Use src/logger.ts for logging. Use print() to force printing to stdout. Don't use console.log().
   - Use config.ts, config.yaml and config.defaults.yaml to add configuration parameters. Don't put defaults in config.ts or other code; config.defaults.yaml is the single source of truth.
   - Ignore todos within code unless you need to rewrite code anyway, or unless specifically mentioned.
 

@@ -35,7 +35,7 @@ export class LoginAuthProvider extends BaseAuthProvider {
         if (!isLoginTokens) {
             throw new Error(
                 `Token file is not from login auth (method: ${this.tokens?.method}).\n` +
-                'Run: npm run auth and select login'
+                'Run: tamer auth login'
             );
         }
         // Normalize: ensure method is set for consistency
@@ -48,7 +48,7 @@ export class LoginAuthProvider extends BaseAuthProvider {
         if (this.isExpired(this.tokens!)) {
             throw new Error(
                 'Login tokens have expired.\n' +
-                'Run: npm run auth and select login'
+                'Run: tamer auth login'
             );
         }
 
@@ -108,7 +108,7 @@ export class LoginAuthProvider extends BaseAuthProvider {
 
         if (!this.tokens) {
             status.warnings.push('No tokens loaded');
-            status.warnings.push('Run: npm run auth and select login');
+            status.warnings.push('Run: tamer auth login');
             return status;
         }
 
@@ -125,7 +125,7 @@ export class LoginAuthProvider extends BaseAuthProvider {
 
             if (hoursRemaining <= 0) {
                 status.warnings.push('Tokens have expired');
-                status.warnings.push('Run: npm run auth and select login');
+                status.warnings.push('Run: tamer auth login');
             } else if (hoursRemaining < 1) {
                 status.warnings.push(`Tokens expire in ${Math.round(hoursRemaining * 60)} minutes`);
                 status.valid = true;
