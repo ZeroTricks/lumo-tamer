@@ -1,9 +1,11 @@
 /**
- * Unit tests for template interpolation helper
+ * Unit tests for instructions module
+ *
+ * Tests template interpolation and replace patterns.
  */
 
 import { describe, it, expect } from 'vitest';
-import { interpolateTemplate } from '../../src/api/tools/template.js';
+import { interpolateTemplate, applyReplacePatterns } from '../../src/api/instructions.js';
 
 describe('interpolateTemplate', () => {
   describe('variable substitution', () => {
@@ -197,5 +199,75 @@ Below are the tools prefixed with {{prefix}}.
       expect(noTools).toContain('Default instructions');
       expect(noTools).not.toContain('user:test');
     });
+  });
+});
+
+describe('applyReplacePatterns', () => {
+  it('removes matching patterns when no replacement specified (case-insensitive)', () => {
+    const text = 'Use only native tool calling. This is important.';
+    const patterns = [{ pattern: 'use only native tool calling' }];
+
+    expect(applyReplacePatterns(text, patterns)).toBe('. This is important.');
+  });
+
+  it('replaces matching patterns with specified replacement', () => {
+    const text = 'Use only native tool calling. This is important.';
+    const patterns = [{ pattern: 'use only native tool calling', replacement: 'Follow protocol' }];
+
+    expect(applyReplacePatterns(text, patterns)).toBe('Follow protocol. This is important.');
+  });
+
+  it('removes multiple patterns', () => {
+    const text = 'Use native calling (no text-based formats allowed). Be careful.';
+    const patterns = [
+      { pattern: 'use native calling' },
+      { pattern: '\\(no text-based formats[^)]*\\)' },
+    ];
+
+    expect(applyReplacePatterns(text, patterns)).toBe('. Be careful.');
+  });
+
+  it('removes all occurrences of a pattern', () => {
+    const text = 'Use native. Then use native again.';
+    const patterns = [{ pattern: 'use native' }];
+
+    expect(applyReplacePatterns(text, patterns)).toBe('. Then again.');
+  });
+
+  it('returns original text when no patterns match', () => {
+    const text = 'This is normal text.';
+    const patterns = [{ pattern: 'nonexistent pattern' }];
+
+    expect(applyReplacePatterns(text, patterns)).toBe('This is normal text.');
+  });
+
+  it('returns original text when patterns array is empty', () => {
+    const text = 'Original text here.';
+
+    expect(applyReplacePatterns(text, [])).toBe('Original text here.');
+  });
+
+  it('cleans up extra whitespace left by removals', () => {
+    const text = 'Line one.\n\nBad pattern here.\n\n\nLine two.';
+    const patterns = [{ pattern: 'Bad pattern here\\.' }];
+
+    const result = applyReplacePatterns(text, patterns);
+    // Should collapse multiple newlines
+    expect(result).not.toContain('\n\n\n');
+  });
+
+  it('skips invalid regex patterns gracefully', () => {
+    const text = 'Some text here.';
+    const patterns = [{ pattern: '[invalid regex' }, { pattern: 'valid pattern' }];
+
+    // Should not throw, should process valid patterns
+    expect(() => applyReplacePatterns(text, patterns)).not.toThrow();
+  });
+
+  it('supports regex capture groups in replacement', () => {
+    const text = 'Call function foo() now.';
+    const patterns = [{ pattern: 'function (\\w+)\\(\\)', replacement: 'method $1' }];
+
+    expect(applyReplacePatterns(text, patterns)).toBe('Call method foo now.');
   });
 });

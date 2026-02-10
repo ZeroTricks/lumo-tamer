@@ -91,4 +91,28 @@ Encryption and conversation sync are disabled automatically. Scenarios are adapt
 
 ## Testing
 
-There is no proper test suite yet. The `tests/` directory contains some ad-hoc scripts used during development. Proper testing is planned for a future release.
+Framework: Vitest.
+
+```bash
+npm test              # Run all tests
+npm run test:unit     # Unit tests only
+npm run test:integration  # Integration tests only
+```
+
+### Test Structure
+
+```
+tests/
+├── unit/             # Pure function/class tests
+├── integration/      # HTTP endpoint tests
+├── e2e/              # OpenAI SDK compatibility, CLI smoke tests
+├── helpers/
+│   └── test-server.ts  # Express app with mock dependencies
+└── setup.ts          # Initializes config, silences logger
+```
+
+### Key Points
+
+- Tests inject `createMockProtonApi()` directly, bypassing Application and config.yaml
+- `tests/helpers/test-server.ts` creates an Express app with mock dependencies for integration tests
+- `tests/setup.ts` initializes config and silences the logger for all tests

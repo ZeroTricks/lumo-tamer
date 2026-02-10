@@ -6,8 +6,8 @@ import type { ChatMessage, ResponseInputItem, OpenAITool, OpenAIToolCall } from 
 import type { Turn } from '../lumo-client/index.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
 import { isCommand } from '../app/commands.js';
-import { applyToolPrefix, applyToolNamePrefix, applyReplacePatterns, interpolateTemplate } from './tools/prefix.js';
-import { validateTemplateOnce } from './tools/template.js';
+import { applyToolPrefix, applyToolNamePrefix } from './tools/prefix.js';
+import { applyReplacePatterns, interpolateTemplate, validateTemplateOnce } from './instructions.js';
 
 // ── Input normalization ───────────────────────────────────────────────
 
@@ -124,7 +124,8 @@ function extractToolNames(tools?: OpenAITool[]): string[] {
 function buildInstructions(tools?: OpenAITool[], clientInstructions?: string): string {
   const instructionsConfig = getServerInstructionsConfig();
   const toolsConfig = getCustomToolsConfig();
-  const { prefix, replacePatterns } = toolsConfig;
+  const { prefix } = toolsConfig;
+  const { replacePatterns } = instructionsConfig;
 
   // Validate template on first use
   validateTemplateOnce(instructionsConfig.template);

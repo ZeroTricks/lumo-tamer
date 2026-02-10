@@ -9,7 +9,7 @@
 import type { Turn } from '../lumo-client/index.js';
 import { getCliInstructionsConfig, getLocalActionsConfig } from '../app/config.js';
 import { isCommand } from '../app/commands.js';
-import { interpolateTemplate } from '../api/tools/template.js';
+import { interpolateTemplate } from '../api/instructions.js';
 
 /**
  * Build effective instructions for CLI using template system.

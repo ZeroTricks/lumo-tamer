@@ -117,13 +117,6 @@ server:
     # Set to "" to disable prefixing.
     prefix: "user:"
 
-    # Search/replace patterns applied to client instructions (case-insensitive regex).
-    # Useful for removing or rewriting phrases that may confuse Lumo about tool calling.
-    # Each entry: { pattern: "regex", replacement: "text" } - omit replacement to strip.
-    replacePatterns:
-      - pattern: "(?<=(?:(?:native|custom|internal|external)\\s)?)(?=tool)"
-        replacement: "custom "
-
 
   instructions:
 
@@ -151,6 +144,14 @@ server:
 
       {{tools}}
       {{/if}}
+
+    # Search/replace patterns applied to client instructions (case-insensitive regex).
+    # Useful for removing or rewriting phrases that may confuse Lumo about tool calling.
+    # Each entry: { pattern: "regex", replacement: "text" } - omit replacement to strip.
+    replacePatterns:
+      - pattern: "(?<=(?:(?:native|custom|internal|external)\\s)?)(?=tool)"
+        replacement: "custom "
+
 
     # Fallback instructions when no system/developer message is provided in the request
     fallback: |

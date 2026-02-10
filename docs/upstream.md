@@ -1,6 +1,10 @@
 # Proton WebClients Upstream Files
 
-This directory contains **unchanged** files from Proton's WebClients repository.
+This document is for contributors maintaining the integration with Proton's WebClients. End users don't need this.
+
+---
+
+The `src/proton-upstream/` directory contains **unchanged** files from Proton's WebClients repository.
 The `@proton/*` imports are resolved via TypeScript path aliases to our shims.
 
 ## Source Information
