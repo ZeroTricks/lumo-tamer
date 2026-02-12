@@ -11,19 +11,14 @@ export {
   applyToolNamePrefix,
 } from './prefix.js';
 
-// Tool parsing
-export {
-  extractToolCallsFromResponse,
-  stripToolCallsFromResponse,
-  isToolCallJson,
-  type ParsedToolCall,
-} from './tool-parser.js';
-
 // Native SSE tool parsing
 export {
   parseNativeToolCallJson,
   isErrorResult,
 } from './native-tool-parser.js';
+
+// Tool call types
+export { isToolCallJson, type ParsedToolCall } from './types.js';
 
 // Streaming detection
 export { StreamingToolDetector, type ProcessResult } from './streaming-tool-detector.js';

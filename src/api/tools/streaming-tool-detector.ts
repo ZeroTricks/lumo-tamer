@@ -10,11 +10,12 @@
  * Raw JSON brace tracking is delegated to JsonBraceTracker.
  */
 
-import { isToolCallJson, type ParsedToolCall } from './tool-parser.js';
 import { JsonBraceTracker } from './json-brace-tracker.js';
+import { isToolCallJson, type ParsedToolCall } from './types.js';
 import { logger } from '../../app/logger.js';
 import { getCustomToolsConfig } from '../../app/config.js';
 import { stripToolPrefix } from './prefix.js';
+import { getMetrics } from '../metrics/index.js';
 
 type DetectorState = 'normal' | 'in_code_fence' | 'in_raw_json';
 
@@ -216,21 +217,44 @@ export class StreamingToolDetector {
   }
 
   /**
+   * Try to extract a tool name from content, even if JSON is malformed.
+   * Uses regex to find "name": "..." pattern.
+   */
+  private extractToolName(content: string): string {
+    const match = content.match(/"name"\s*:\s*"([^"]+)"/);
+    if (match) {
+      const prefix = getCustomToolsConfig().prefix;
+      return stripToolPrefix(match[1], prefix);
+    }
+    return 'unknown';
+  }
+
+  /**
    * Try to parse content as a tool call JSON.
    * Strips the configured prefix from the tool name.
+   * Logs and tracks metrics for both valid and invalid tool calls.
    */
   private tryParseToolCall(content: string): ParsedToolCall | null {
     try {
       const parsed = JSON.parse(content);
       if (isToolCallJson(parsed)) {
         const prefix = getCustomToolsConfig().prefix;
+        const toolName = stripToolPrefix(parsed.name, prefix);
+        logger.info(`Tool call detected: ${content.replace(/\n/g, ' ').substring(0, 100)}...`);
         return {
-          name: stripToolPrefix(parsed.name, prefix),
+          name: toolName,
           arguments: parsed.arguments as Record<string, unknown>,
         };
       }
+      // JSON parsed but schema invalid (missing name or arguments)
+      const toolName = this.extractToolName(content);
+      logger.info(`Invalid tool call (bad schema): ${content.replace(/\n/g, ' ')}`);
+      getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: toolName });
     } catch {
-      // Not valid JSON
+      // JSON parse failed
+      const toolName = this.extractToolName(content);
+      logger.info(`Invalid tool call (malformed JSON): ${content.replace(/\n/g, ' ')}`);
+      getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: toolName });
     }
     return null;
   }

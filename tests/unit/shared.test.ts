@@ -1,7 +1,7 @@
 /**
  * Unit tests for shared route utilities
  *
- * Tests ID generators and tool extraction from non-streaming responses.
+ * Tests ID generators and accumulating tool processor.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -11,7 +11,7 @@ import {
   generateFunctionCallId,
   generateCallId,
   generateChatCompletionId,
-  extractToolsFromResponse,
+  createAccumulatingToolProcessor,
 } from '../../src/api/routes/shared.js';
 
 describe('ID generators', () => {
@@ -46,26 +46,39 @@ describe('ID generators', () => {
   });
 });
 
-describe('extractToolsFromResponse', () => {
-  it('returns original content when hasCustomTools is false', () => {
-    const result = extractToolsFromResponse('Some response text', false);
-    expect(result.content).toBe('Some response text');
-    expect(result.toolCalls).toEqual([]);
+describe('createAccumulatingToolProcessor', () => {
+  it('accumulates text when hasCustomTools is false', () => {
+    const { processor, getAccumulatedText } = createAccumulatingToolProcessor(false);
+
+    processor.onChunk('Hello ');
+    processor.onChunk('world');
+    processor.finalize();
+
+    expect(getAccumulatedText()).toBe('Hello world');
+    expect(processor.toolCallsEmitted).toEqual([]);
   });
 
   it('extracts and strips tool calls when hasCustomTools is true', () => {
-    const response = 'Result:\n```json\n{"name":"search","arguments":{"q":"test"}}\n```\nDone.';
-    const result = extractToolsFromResponse(response, true);
+    const { processor, getAccumulatedText } = createAccumulatingToolProcessor(true);
 
-    expect(result.toolCalls.length).toBeGreaterThanOrEqual(1);
-    expect(result.toolCalls[0].name).toBe('search');
-    expect(result.toolCalls[0].arguments).toBe('{"q":"test"}');
-    expect(result.content).toContain('Done.');
+    processor.onChunk('Result:\n```json\n{"name":"search","arguments":{"q":"test"}}\n```\nDone.');
+    processor.finalize();
+
+    expect(processor.toolCallsEmitted.length).toBe(1);
+    expect(processor.toolCallsEmitted[0].function.name).toBe('search');
+    expect(processor.toolCallsEmitted[0].function.arguments).toBe('{"q":"test"}');
+    expect(getAccumulatedText()).toContain('Result:');
+    expect(getAccumulatedText()).toContain('Done.');
+    expect(getAccumulatedText()).not.toContain('```json');
   });
 
-  it('returns empty toolCalls array when no tools found', () => {
-    const result = extractToolsFromResponse('Just plain text', true);
-    expect(result.toolCalls).toEqual([]);
-    expect(result.content).toBe('Just plain text');
+  it('returns empty toolCallsEmitted when no tools found', () => {
+    const { processor, getAccumulatedText } = createAccumulatingToolProcessor(true);
+
+    processor.onChunk('Just plain text');
+    processor.finalize();
+
+    expect(processor.toolCallsEmitted).toEqual([]);
+    expect(getAccumulatedText()).toBe('Just plain text');
   });
 });

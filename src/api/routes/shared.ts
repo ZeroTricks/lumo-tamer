@@ -2,14 +2,37 @@ import { randomUUID } from 'crypto';
 import { getCustomToolsConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
 import { StreamingToolDetector } from '../tools/streaming-tool-detector.js';
-import { extractToolCallsFromResponse, stripToolCallsFromResponse } from '../tools/tool-parser.js';
 import { postProcessTitle } from '../../proton-shims/lumo-api-client-utils.js';
 import { getMetrics } from '../metrics/index.js';
-import type { ParsedToolCall } from '../tools/tool-parser.js';
+import type { ParsedToolCall } from '../tools/types.js';
 import type { EndpointDependencies, OpenAITool, OpenAIToolCall } from '../types.js';
 import type { CommandContext } from '../../app/commands.js';
 import type { ConversationId } from '../../conversations/index.js';
 import type { ChatResult } from '../../lumo-client/index.js';
+
+// ── Tool call type for persistence ─────────────────────────────────
+
+/** Tool call with call_id for persistence and response building. */
+export interface ToolCallForPersistence {
+  name: string;
+  arguments: string;
+  call_id: string;
+}
+
+/**
+ * Map emitted tool calls to format needed for persistence.
+ * Returns undefined if no tool calls were emitted.
+ */
+export function mapToolCallsForPersistence(
+  toolCallsEmitted: OpenAIToolCall[]
+): ToolCallForPersistence[] | undefined {
+  if (toolCallsEmitted.length === 0) return undefined;
+  return toolCallsEmitted.map(tc => ({
+    name: tc.function.name,
+    arguments: tc.function.arguments,
+    call_id: tc.id,
+  }));
+}
 
 // ── Tool completion tracking ───────────────────────────────────────
 
@@ -140,40 +163,31 @@ export function persistResponseWithToolCalls(
   }
 }
 
-// ── Non-streaming tool extraction ──────────────────────────────────
+// ── Accumulating tool processor (for non-streaming requests) ───────
 
-export interface ProcessedToolCall {
-  name: string;
-  arguments: string; // JSON string
+export interface AccumulatingToolProcessor {
+  /** The underlying streaming processor */
+  processor: StreamingToolProcessor;
+  /** Get all accumulated text after processing */
+  getAccumulatedText: () => string;
 }
 
-export interface ProcessedResult {
-  /** Response text with tool JSON stripped (if tools were detected). */
-  content: string;
-  /** Parsed tool calls (empty array if none). */
-  toolCalls: ProcessedToolCall[];
-}
+/**
+ * Create a tool processor that accumulates text instead of emitting.
+ * Used for non-streaming requests that still process the Lumo stream.
+ */
+export function createAccumulatingToolProcessor(hasCustomTools: boolean): AccumulatingToolProcessor {
+  let accumulatedText = '';
 
-/** Extract tool calls from a non-streaming response and return cleaned content. */
-export function extractToolsFromResponse(response: string, hasCustomTools: boolean): ProcessedResult {
-  let content = response;
-  const toolCalls: ProcessedToolCall[] = [];
+  const processor = createStreamingToolProcessor(hasCustomTools, {
+    emitTextDelta(text) { accumulatedText += text; },
+    emitToolCall(_callId, _tc) { /* tool calls tracked in processor.toolCallsEmitted */ },
+  });
 
-  if (hasCustomTools) {
-    const parsed = extractToolCallsFromResponse(response);
-    if (parsed) {
-      for (const tc of parsed) {
-        toolCalls.push({ name: tc.name, arguments: JSON.stringify(tc.arguments) });
-      }
-      content = stripToolCallsFromResponse(response, parsed);
-      logger.debug(
-        { toolCount: toolCalls.length, names: toolCalls.map(tc => tc.name) },
-        '[Server] Tool calls detected in response'
-      );
-    }
-  }
-
-  return { content, toolCalls };
+  return {
+    processor,
+    getAccumulatedText: () => accumulatedText,
+  };
 }
 
 // ── ID generation ─────────────────────────────────────────────────

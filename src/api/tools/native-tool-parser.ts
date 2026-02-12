@@ -10,7 +10,7 @@
  * (custom tools Lumo mistakenly routed through the native pipeline).
  */
 
-import type { ParsedToolCall } from './tool-parser.js';
+import type { ParsedToolCall } from './types.js';
 import { logger } from '../../app/logger.js';
 
 /**

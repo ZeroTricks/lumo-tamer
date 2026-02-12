@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID, createHash } from 'crypto';
-import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse, OpenAIToolCall } from '../types.js';
+import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatResponse } from '../types.js';
 import { getServerConfig, getConversationsConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
 import { convertMessagesToTurns, normalizeInputItem } from '../message-converter.js';
@@ -11,11 +11,11 @@ import {
   buildRequestContext,
   persistTitle,
   persistAssistantTurn,
-  extractToolsFromResponse,
-  generateCallId,
   generateChatCompletionId,
   createStreamingToolProcessor,
+  createAccumulatingToolProcessor,
   trackCustomToolCompletion,
+  mapToolCallsForPersistence,
 } from './shared.js';
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session
@@ -267,16 +267,7 @@ async function handleStreamingRequest(
 
       processor.finalize();
       persistTitle(result, deps, conversationId);
-
-      // Persist response (with tool calls if any)
-      const toolCallsForPersist = processor.toolCallsEmitted.length > 0
-        ? processor.toolCallsEmitted.map(tc => ({
-            name: tc.function.name,
-            arguments: tc.function.arguments,
-            call_id: tc.id,
-          }))
-        : undefined;
-      persistAssistantTurn(deps, conversationId, result.response, toolCallsForPersist);
+      persistAssistantTurn(deps, conversationId, result.response, mapToolCallsForPersistence(processor.toolCallsEmitted));
 
       // Send final chunk with finish_reason
       const finalChunk: OpenAIStreamChunk = {
@@ -318,34 +309,22 @@ async function handleNonStreamingRequest(
 ): Promise<void> {
   const ctx = buildRequestContext(deps, conversationId, request.tools);
 
+  // Use accumulating processor to handle tool detection during stream
+  const { processor, getAccumulatedText } = createAccumulatingToolProcessor(ctx.hasCustomTools);
+
   const chatResult = await deps.queue.add(async () =>
-    deps.lumoClient.chatWithHistory(turns, undefined, {
+    deps.lumoClient.chatWithHistory(turns, processor.onChunk, {
       commandContext: ctx.commandContext,
       requestTitle: ctx.requestTitle,
     })
   );
 
+  processor.finalize();
   persistTitle(chatResult, deps, conversationId);
-  const { content, toolCalls: processedTools } = extractToolsFromResponse(chatResult.response, ctx.hasCustomTools);
 
-  // Convert to OpenAI format with call IDs
-  const toolCalls: OpenAIToolCall[] | undefined = processedTools.length > 0
-    ? processedTools.map(tc => ({
-        id: generateCallId(),
-        type: 'function' as const,
-        function: { name: tc.name, arguments: tc.arguments },
-      }))
-    : undefined;
-
-  // Persist response (also registers call_ids for deduplication if tool calls present)
-  const toolCallsForPersist = toolCalls
-    ? toolCalls.map(tc => ({
-        name: tc.function.name,
-        arguments: tc.function.arguments,
-        call_id: tc.id,
-      }))
-    : undefined;
-  persistAssistantTurn(deps, conversationId, content, toolCallsForPersist);
+  const content = getAccumulatedText();
+  const toolCalls = processor.toolCallsEmitted.length > 0 ? processor.toolCallsEmitted : undefined;
+  persistAssistantTurn(deps, conversationId, content, mapToolCallsForPersistence(processor.toolCallsEmitted));
 
   const response: OpenAIChatResponse = {
     id: generateChatCompletionId(),

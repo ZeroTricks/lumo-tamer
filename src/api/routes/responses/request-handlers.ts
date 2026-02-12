@@ -16,12 +16,14 @@ import {
   buildRequestContext,
   persistTitle,
   persistAssistantTurn,
-  extractToolsFromResponse,
   createStreamingToolProcessor,
+  createAccumulatingToolProcessor,
   generateResponseId,
   generateItemId,
   generateFunctionCallId,
   generateCallId,
+  mapToolCallsForPersistence,
+  type ToolCallForPersistence,
 } from '../shared.js';
 
 // ── Output building ────────────────────────────────────────────────
@@ -35,22 +37,6 @@ interface BuildOutputOptions {
   text: string;
   toolCalls?: ToolCall[] | null;
   itemId?: string;
-}
-
-/** Tool call with generated call_id for persistence and response building. */
-export interface ToolCallWithId {
-  name: string;
-  arguments: string;
-  call_id: string;
-}
-
-/** Generate call_ids for tool calls. */
-export function assignCallIds(toolCalls: Array<{ name: string; arguments: string }>): ToolCallWithId[] {
-  return toolCalls.map(tc => ({
-    name: tc.name,
-    arguments: typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments),
-    call_id: generateCallId(),
-  }));
 }
 
 function buildOutputItems(options: BuildOutputOptions): OutputItem[] {
@@ -79,7 +65,7 @@ function buildOutputItems(options: BuildOutputOptions): OutputItem[] {
         : JSON.stringify(toolCall.arguments);
 
       // Use pre-generated call_id if available, otherwise generate new one
-      const callId = 'call_id' in toolCall ? (toolCall as ToolCallWithId).call_id : generateCallId();
+      const callId = 'call_id' in toolCall ? (toolCall as ToolCallForPersistence).call_id : generateCallId();
 
       output.push({
         type: 'function_call',
@@ -198,13 +184,7 @@ export async function handleStreamingRequest(
       processor.finalize();
       persistTitle(result, deps, conversationId);
 
-      // Use stripped text for final events (tool JSON removed)
-      if (processor.toolCallsEmitted.length > 0) {
-        const { content } = extractToolsFromResponse(result.response, true);
-        accumulatedText = content;
-      } else {
-        accumulatedText = result.response;
-      }
+      // accumulatedText already has tool JSON stripped by the processor
 
       // Completion events
       emitter.emitOutputTextDone(itemId, 0, 0, accumulatedText);
@@ -220,24 +200,13 @@ export async function handleStreamingRequest(
         0
       );
 
-      // Convert emitted tool calls to format with call_id for persistence and output
-      const toolCallsWithIds: ToolCallWithId[] = processor.toolCallsEmitted.map(tc => ({
-        name: tc.function.name,
-        arguments: tc.function.arguments,
-        call_id: tc.id,
-      }));
-
+      const toolCallsForPersist = mapToolCallsForPersistence(processor.toolCallsEmitted);
       const output = buildOutputItems({
         text: accumulatedText,
         itemId,
-        toolCalls: toolCallsWithIds.length > 0 ? toolCallsWithIds : undefined,
+        toolCalls: toolCallsForPersist,
       });
-
-      // Persist response (with tool calls if any)
-      persistAssistantTurn(
-        deps, conversationId, accumulatedText,
-        toolCallsWithIds.length > 0 ? toolCallsWithIds : undefined
-      );
+      persistAssistantTurn(deps, conversationId, accumulatedText, toolCallsForPersist);
       emitter.emitResponseCompleted(createCompletedResponse(id, createdAt, request, output));
       res.end();
     } catch (error) {
@@ -258,19 +227,22 @@ export async function handleNonStreamingRequest(
 ): Promise<void> {
   const ctx = buildRequestContext(deps, conversationId, request.tools);
 
+  // Use accumulating processor to handle tool detection during stream
+  const { processor, getAccumulatedText } = createAccumulatingToolProcessor(ctx.hasCustomTools);
+
   const result = await deps.queue.add(async () =>
-    deps.lumoClient.chatWithHistory(turns, undefined, {
+    deps.lumoClient.chatWithHistory(turns, processor.onChunk, {
       commandContext: ctx.commandContext,
       requestTitle: ctx.requestTitle,
     })
   );
 
+  processor.finalize();
   persistTitle(result, deps, conversationId);
-  const { content, toolCalls } = extractToolsFromResponse(result.response, ctx.hasCustomTools);
 
-  // Generate call_ids and persist (also registers call_ids for deduplication)
-  const toolCallsWithIds = toolCalls.length > 0 ? assignCallIds(toolCalls) : undefined;
-  persistAssistantTurn(deps, conversationId, content, toolCallsWithIds);
+  const content = getAccumulatedText();
+  const toolCallsForPersist = mapToolCallsForPersistence(processor.toolCallsEmitted);
+  persistAssistantTurn(deps, conversationId, content, toolCallsForPersist);
 
   const id = generateResponseId();
   const itemId = generateItemId();
@@ -278,7 +250,7 @@ export async function handleNonStreamingRequest(
   const output = buildOutputItems({
     text: content,
     itemId,
-    toolCalls: toolCallsWithIds,
+    toolCalls: toolCallsForPersist,
   });
 
   res.json(createCompletedResponse(id, createdAt, request, output));
