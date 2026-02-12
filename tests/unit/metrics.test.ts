@@ -172,6 +172,39 @@ describe('MetricsService', () => {
     });
   });
 
+  describe('protonApiRequestsTotal', () => {
+    it('tracks Proton API requests by endpoint, method, status', async () => {
+      metrics.protonApiRequestsTotal.inc({ endpoint: 'lumo/v1/chat', method: 'POST', status: '200' });
+      metrics.protonApiRequestsTotal.inc({ endpoint: 'core/v4/users', method: 'GET', status: '200' });
+      metrics.protonApiRequestsTotal.inc({ endpoint: 'lumo/v1/spaces', method: 'GET', status: '401' });
+
+      const output = await metrics.getMetrics();
+      expect(output).toContain('test_proton_api_requests_total');
+      expect(output).toContain('endpoint="lumo/v1/chat"');
+      expect(output).toContain('endpoint="core/v4/users"');
+      expect(output).toContain('method="POST"');
+      expect(output).toContain('method="GET"');
+      expect(output).toContain('status="200"');
+      expect(output).toContain('status="401"');
+    });
+  });
+
+  describe('protonApiRequestDuration', () => {
+    it('observes Proton API request duration', async () => {
+      metrics.protonApiRequestDuration.observe(
+        { endpoint: 'lumo/v1/chat', method: 'POST' },
+        1.5
+      );
+
+      const output = await metrics.getMetrics();
+      expect(output).toContain('test_proton_api_request_duration_seconds');
+      expect(output).toContain('endpoint="lumo/v1/chat"');
+      expect(output).toContain('_bucket');
+      expect(output).toContain('_sum');
+      expect(output).toContain('_count');
+    });
+  });
+
   describe('getContentType', () => {
     it('returns prometheus content type', () => {
       const contentType = metrics.getContentType();

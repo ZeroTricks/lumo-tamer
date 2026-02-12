@@ -41,6 +41,10 @@ export class MetricsService {
   // Auth metrics
   readonly authFailuresTotal: Counter;
 
+  // Proton API metrics
+  readonly protonApiRequestsTotal: Counter;
+  readonly protonApiRequestDuration: Histogram;
+
   constructor(config: MetricsConfig) {
     this.registry = new Registry();
     const prefix = config.prefix;
@@ -136,6 +140,22 @@ export class MetricsService {
     this.authFailuresTotal = new Counter({
       name: `${prefix}auth_failures_total`,
       help: 'Authentication failures',
+      registers: [this.registry],
+    });
+
+    // Proton API metrics
+    this.protonApiRequestsTotal = new Counter({
+      name: `${prefix}proton_api_requests_total`,
+      help: 'Total Proton API requests',
+      labelNames: ['endpoint', 'method', 'status'],
+      registers: [this.registry],
+    });
+
+    this.protonApiRequestDuration = new Histogram({
+      name: `${prefix}proton_api_request_duration_seconds`,
+      help: 'Proton API request duration in seconds',
+      labelNames: ['endpoint', 'method'],
+      buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60],
       registers: [this.registry],
     });
   }

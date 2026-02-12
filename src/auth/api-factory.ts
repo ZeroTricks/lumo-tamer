@@ -8,6 +8,7 @@ import type { ProtonApi, ProtonApiOptions } from '../lumo-client/types.js';
 import { APP_VERSION_HEADER } from '../proton-upstream/config.js';
 import { PROTON_URLS } from '../app/urls.js';
 import { logger } from '../app/logger.js';
+import { getMetrics } from '../api/metrics/index.js';
 
 export interface ApiFactoryOptions {
     uid: string;
@@ -45,8 +46,24 @@ export function createProtonApi(options: ApiFactoryOptions): ProtonApi {
     // Attach updateCredentials to the api function for external access
     const api = async function api(apiOptions: ProtonApiOptions): Promise<ReadableStream<Uint8Array> | unknown> {
         const { url, method, data, signal, output = 'json' } = apiOptions;
+        const startTime = Date.now();
 
         const fullUrl = url.startsWith('http') ? url : `${baseUrl}/${url}`;
+
+        const recordMetrics = (status: number) => {
+            const durationSeconds = (Date.now() - startTime) / 1000;
+            const endpoint = url.split('?')[0]; // Strip query params
+            const metrics = getMetrics();
+            metrics?.protonApiRequestsTotal.inc({
+                endpoint,
+                method: method.toUpperCase(),
+                status: String(status),
+            });
+            metrics?.protonApiRequestDuration.observe(
+                { endpoint, method: method.toUpperCase() },
+                durationSeconds
+            );
+        };
 
         const makeRequest = async (currentUid: string, currentAccessToken: string): Promise<Response> => {
             const headers: Record<string, string> = {
@@ -104,6 +121,9 @@ export function createProtonApi(options: ApiFactoryOptions): ProtonApi {
                 // Fall through to throw the original 401 error
             }
         }
+
+        // Record metrics for the final response
+        recordMetrics(response.status);
 
         if (!response.ok) {
             const errorBody = await response.text().catch(() => '');

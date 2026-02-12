@@ -182,5 +182,7 @@ describe('GET /metrics', () => {
     expect(body).toContain('lumo_sync_operations_total');
     expect(body).toContain('lumo_sync_duration_seconds');
     expect(body).toContain('lumo_auth_failures_total');
+    expect(body).toContain('lumo_proton_api_requests_total');
+    expect(body).toContain('lumo_proton_api_request_duration_seconds');
   });
 });
