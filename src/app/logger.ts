@@ -37,6 +37,7 @@ function getTransport(config: LogConfig): pino.TransportSingleOptions | pino.Tra
       colorize: true,
       translateTime: 'HH:MM:ss',
       ignore: 'pid,hostname',
+      singleLine: true,
     },
   };
 }

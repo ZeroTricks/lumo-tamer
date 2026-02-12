@@ -80,7 +80,6 @@ export function persistTitle(result: ChatResult, deps: EndpointDependencies, con
 export function persistResponse(deps: EndpointDependencies, conversationId: ConversationId | undefined, content: string): void {
   if (!conversationId || !deps.conversationStore) return;
   deps.conversationStore.appendAssistantResponse(conversationId, content);
-  logger.debug({ conversationId }, 'Persisted assistant response');
 }
 
 /**
@@ -139,8 +138,6 @@ export function persistResponseWithToolCalls(
     deps.conversationStore.appendAssistantResponse(conversationId, normalizedContent);
     deps.conversationStore.addGeneratedCallId(conversationId, tc.call_id, tc.name);
   }
-
-  logger.debug({ conversationId, toolCount: toolCalls.length }, 'Persisted assistant response with tool calls');
 }
 
 // ── Non-streaming tool extraction ──────────────────────────────────
