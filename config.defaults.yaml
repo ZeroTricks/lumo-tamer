@@ -106,7 +106,7 @@ server:
   # Prometheus metrics endpoint
   metrics:
     # Enable /metrics endpoint
-    enabled: true
+    enabled: false
     # Include Node.js runtime metrics (memory, CPU, event loop, etc.)
     collectDefaultMetrics: true
     # Prefix for all metric names
