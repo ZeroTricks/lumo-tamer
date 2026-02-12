@@ -45,13 +45,6 @@ export class LoginAuthProvider extends BaseAuthProvider {
     }
 
     protected override async onAfterLoad(): Promise<void> {
-        if (this.isExpired(this.tokens!)) {
-            throw new Error(
-                'Login tokens have expired.\n' +
-                'Run: tamer auth login'
-            );
-        }
-
         logger.info(
             { expiresAt: this.tokens!.expiresAt },
             'Loaded cached login auth tokens'

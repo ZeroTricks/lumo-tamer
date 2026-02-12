@@ -65,7 +65,21 @@ export abstract class BaseAuthProvider implements AuthProvider {
         this.tokens = await this.loadTokensFromVault();
         this.validateMethod();
         this.validateTokens();
+        await this.refreshIfNeeded();
         await this.onAfterLoad();
+    }
+
+    /**
+     * Refresh tokens if expired.
+     * Called during initialization to ensure tokens are valid before use.
+     */
+    private async refreshIfNeeded(): Promise<void> {
+        if (!this.tokens?.expiresAt) return;
+
+        if (new Date(this.tokens.expiresAt) <= new Date()) {
+            logger.info({ method: this.method }, 'Access token expired, refreshing...');
+            await this.refresh();
+        }
     }
 
     /**
