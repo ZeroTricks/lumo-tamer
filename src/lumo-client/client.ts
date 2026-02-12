@@ -177,16 +177,15 @@ export class LumoClient {
                                     // Only abort on initial call; bounce responses may contain stale misrouted calls
                                     suppressChunks = true;
                                     abortEarly = true;
-                                    getMetrics()?.toolCallsTotal.inc({ type: 'misrouted', status: 'detected', tool_name: firstNativeToolCall.name });
+                                    // Track as custom tool with misrouted status
+                                    getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'misrouted', tool_name: firstNativeToolCall.name });
                                     logger.debug({
                                         name: firstNativeToolCall.name,
                                         partialResponse: fullResponse
                                     }, 'Misrouted tool call detected, aborting stream');
                                 } else {
                                     logger.debug({ raw: json }, 'Native SSE tool_call');
-
-                                    // Track native tool call (only if not misrouted)
-                                    getMetrics()?.toolCallsTotal.inc({ type: 'native', status: 'detected', tool_name: firstNativeToolCall.name });
+                                    // Native tool calls are tracked on completion (success/failed)
                                 }
                             }
                         }
@@ -230,14 +229,15 @@ export class LumoClient {
                 await processMessage(msg);
             }
 
-            if (firstNativeToolCall) {
+            // Track native tool call completion (but not if misrouted - already tracked as custom/misrouted)
+            if (firstNativeToolCall && !abortEarly) {
                 const toolCall = firstNativeToolCall as ParsedToolCall;
                 logger.debug({ toolCall, failed: nativeToolCallFailed }, 'Lumo native tool call');
                 // Track tool call success/failure
                 if (nativeToolCallFailed) {
                     getMetrics()?.toolCallsTotal.inc({ type: 'native', status: 'failed', tool_name: toolCall.name });
                 } else {
-                    getMetrics()?.toolCallsTotal.inc({ type: 'native', status: 'successful', tool_name: toolCall.name });
+                    getMetrics()?.toolCallsTotal.inc({ type: 'native', status: 'success', tool_name: toolCall.name });
                 }
             }
 

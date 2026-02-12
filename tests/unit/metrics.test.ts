@@ -94,22 +94,25 @@ describe('MetricsService', () => {
 
   describe('toolCallsTotal', () => {
     it('tracks tool calls by type, status, and tool_name', async () => {
-      metrics.toolCallsTotal.inc({ type: 'native', status: 'detected', tool_name: 'web_search' });
-      metrics.toolCallsTotal.inc({ type: 'native', status: 'successful', tool_name: 'web_search' });
+      // Native tools: success/failed (tracked on completion)
+      metrics.toolCallsTotal.inc({ type: 'native', status: 'success', tool_name: 'web_search' });
       metrics.toolCallsTotal.inc({ type: 'native', status: 'failed', tool_name: 'proton_info' });
-      metrics.toolCallsTotal.inc({ type: 'custom', status: 'detected', tool_name: 'my_tool' });
+      // Custom tools: completed (tracked on function_call_output)
+      metrics.toolCallsTotal.inc({ type: 'custom', status: 'completed', tool_name: 'my_tool' });
+      // Custom tools: invalid (malformed JSON)
       metrics.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: 'unknown' });
-      metrics.toolCallsTotal.inc({ type: 'misrouted', status: 'detected', tool_name: 'computer' });
+      // Custom tools: misrouted (incorrectly routed through native pipeline)
+      metrics.toolCallsTotal.inc({ type: 'custom', status: 'misrouted', tool_name: 'computer' });
 
       const output = await metrics.getMetrics();
       expect(output).toContain('test_tool_calls_total');
       expect(output).toContain('type="native"');
       expect(output).toContain('type="custom"');
-      expect(output).toContain('type="misrouted"');
-      expect(output).toContain('status="detected"');
-      expect(output).toContain('status="successful"');
+      expect(output).toContain('status="success"');
       expect(output).toContain('status="failed"');
+      expect(output).toContain('status="completed"');
       expect(output).toContain('status="invalid"');
+      expect(output).toContain('status="misrouted"');
       expect(output).toContain('tool_name="web_search"');
       expect(output).toContain('tool_name="proton_info"');
       expect(output).toContain('tool_name="my_tool"');

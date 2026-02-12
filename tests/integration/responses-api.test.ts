@@ -184,10 +184,10 @@ describe('/v1/responses', () => {
       // Make a request to trigger the misrouted tool call
       await postResponses(ts, { input: 'Hello', stream: false, tools: dummyTools });
 
-      // Check metrics
       const metricsOutput = await ts.metrics!.getMetrics();
       expect(metricsOutput).toContain('test_tool_calls_total');
-      expect(metricsOutput).toContain('type="misrouted"');
+      expect(metricsOutput).toContain('type="custom"');
+      expect(metricsOutput).toContain('status="misrouted"');
       expect(metricsOutput).toContain('tool_name="GetLiveContext"');
     });
   });

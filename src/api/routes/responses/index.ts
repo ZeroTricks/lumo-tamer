@@ -6,6 +6,7 @@ import { handleStreamingRequest, handleNonStreamingRequest } from './request-han
 import { convertResponseInputToTurns, normalizeInputItem } from '../../message-converter.js';
 import { getConversationsConfig } from '../../../app/config.js';
 import { getMetrics } from '../../metrics/index.js';
+import { trackCustomToolCompletion } from '../shared.js';
 
 import type { ConversationId } from '../../../conversations/index.js';
 
@@ -135,6 +136,8 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
           if (!isDuplicate) {
             deps.conversationStore?.setLastFunctionCallId(conversationId, lastFunctionOutput.call_id);
             turns.push({ role: 'user', content: JSON.stringify(lastFunctionOutput) });
+
+            trackCustomToolCompletion(deps, conversationId, lastFunctionOutput.call_id);
             logger.debug(`[Server] Processing function_call_output for call_id: ${lastFunctionOutput.call_id}`);
           } else {
             logger.debug('[Server] Skipping duplicate function_call_output');

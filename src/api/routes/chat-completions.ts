@@ -10,12 +10,12 @@ import type { ConversationId } from '../../conversations/index.js';
 import {
   buildRequestContext,
   persistTitle,
-  persistResponse,
-  persistResponseWithToolCalls,
+  persistAssistantTurn,
   extractToolsFromResponse,
   generateCallId,
   generateChatCompletionId,
   createStreamingToolProcessor,
+  trackCustomToolCompletion,
 } from './shared.js';
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session
@@ -67,10 +67,16 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       }
       // No else - leave undefined for stateless requests
 
-      // ===== Persist incoming messages (stateful only) =====
+      // ===== Persist incoming messages and track tool completions (stateful only) =====
       if (conversationId && deps.conversationStore) {
         const allMessages: Array<{ role: string; content: string }> = [];
         for (const msg of request.messages) {
+          // Track custom tool completion for role: 'tool' messages
+          if (msg.role === 'tool' && 'tool_call_id' in msg) {
+            const toolCallId = (msg as { tool_call_id: string }).tool_call_id;
+            trackCustomToolCompletion(deps, conversationId, toolCallId);
+          }
+
           // Use normalizeInputItem for tool-related messages (role: 'tool', tool_calls)
           const normalized = normalizeInputItem(msg);
           if (normalized) {
@@ -267,16 +273,15 @@ async function handleStreamingRequest(
       processor.finalize();
       persistTitle(result, deps, conversationId);
 
-      // Persist with tool calls if any
-      if (processor.toolCallsEmitted.length > 0) {
-        persistResponseWithToolCalls(deps, conversationId, result.response, processor.toolCallsEmitted.map(tc => ({
-          name: tc.function.name,
-          arguments: tc.function.arguments,
-          call_id: tc.id,
-        })));
-      } else {
-        persistResponse(deps, conversationId, result.response);
-      }
+      // Persist response (with tool calls if any)
+      const toolCallsForPersist = processor.toolCallsEmitted.length > 0
+        ? processor.toolCallsEmitted.map(tc => ({
+            name: tc.function.name,
+            arguments: tc.function.arguments,
+            call_id: tc.id,
+          }))
+        : undefined;
+      persistAssistantTurn(deps, conversationId, result.response, toolCallsForPersist);
 
       // Send final chunk with finish_reason
       const finalChunk: OpenAIStreamChunk = {
@@ -337,16 +342,15 @@ async function handleNonStreamingRequest(
       }))
     : undefined;
 
-  // Persist with tool calls if any
-  if (toolCalls && toolCalls.length > 0) {
-    persistResponseWithToolCalls(deps, conversationId, content, toolCalls.map(tc => ({
-      name: tc.function.name,
-      arguments: tc.function.arguments,
-      call_id: tc.id,
-    })));
-  } else {
-    persistResponse(deps, conversationId, content);
-  }
+  // Persist response (also registers call_ids for deduplication if tool calls present)
+  const toolCallsForPersist = toolCalls
+    ? toolCalls.map(tc => ({
+        name: tc.function.name,
+        arguments: tc.function.arguments,
+        call_id: tc.id,
+      }))
+    : undefined;
+  persistAssistantTurn(deps, conversationId, content, toolCallsForPersist);
 
   const response: OpenAIChatResponse = {
     id: generateChatCompletionId(),

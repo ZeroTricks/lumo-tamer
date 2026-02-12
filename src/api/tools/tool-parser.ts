@@ -72,6 +72,19 @@ export function extractToolCallsFromResponse(text: string): ParsedToolCall[] | n
 }
 
 /**
+ * Try to extract a tool name from content, even if JSON is malformed.
+ * Uses regex to find "name": "..." pattern.
+ */
+function extractToolNameFromContent(content: string): string {
+  const match = content.match(/"name"\s*:\s*"([^"]+)"/);
+  if (match) {
+    const prefix = getCustomToolsConfig().prefix;
+    return stripToolPrefix(match[1], prefix);
+  }
+  return 'unknown';
+}
+
+/**
  * Try to parse content as a tool call.
  * Strips the configured prefix from the tool name.
  */
@@ -82,16 +95,21 @@ function tryParseAsToolCall(content: string): ParsedToolCall | null {
       const prefix = getCustomToolsConfig().prefix;
       const toolName = stripToolPrefix(parsed.name, prefix);
       logger.info(`Tool call detected: ${content.replace(/\n/g," ").substring(0, 100)}...`)
-      getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'detected', tool_name: toolName });
+      // Custom tool completion is tracked when function_call_output is received
       return {
         name: toolName,
         arguments: parsed.arguments as Record<string, unknown>,
       };
     }
+    // JSON parsed but schema invalid (missing name or arguments)
+    const toolName = extractToolNameFromContent(content);
+    logger.info(`Invalid tool call (bad schema): ${content.replace(/\n/g," ")}`)
+    getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: toolName });
   } catch {
-    logger.info(`Invalid tool call: ${content.replace(/\n/g," ").substring(0, 100)}...`)
-    getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: 'unknown' });
-    // Not valid JSON
+    // JSON parse failed - try to extract name anyway
+    const toolName = extractToolNameFromContent(content);
+    logger.info(`Invalid tool call (malformed JSON): ${content.replace(/\n/g," ")}`)
+    getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: toolName });
   }
   return null;
 }
