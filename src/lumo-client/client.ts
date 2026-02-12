@@ -182,7 +182,7 @@ export class LumoClient {
                                     const strippedName = stripToolPrefix(firstNativeToolCall.name, getCustomToolsConfig().prefix);
                                     getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'misrouted', tool_name: strippedName });
                                     logger.debug({
-                                        name: firstNativeToolCall.name,
+                                        tool: firstNativeToolCall.name,
                                         partialResponse: fullResponse
                                     }, 'Misrouted tool call detected, aborting stream');
                                 } else {
@@ -363,7 +363,7 @@ export class LumoClient {
         // Bounce misrouted tool calls: ask Lumo to re-output as JSON text
         if (!isBounce && isMisroutedToolCall(result.nativeToolCall)) {
             const bounceInstruction = buildBounceInstruction(result.nativeToolCall!);
-            logger.info({ name: result.nativeToolCall!.name }, 'Bouncing misrouted tool call');
+            logger.info({ tool: result.nativeToolCall!.name }, 'Bouncing misrouted tool call');
 
             const bounceTurns: Turn[] = [
                 ...turns,

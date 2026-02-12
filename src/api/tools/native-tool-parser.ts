@@ -28,7 +28,7 @@ export function parseNativeToolCallJson(json: string): ParsedToolCall | null {
         // Lumo uses 'parameters', our ParsedToolCall uses 'arguments'
         const args = parsed.arguments ?? parsed.parameters ?? {};
 
-        logger.debug({ name: parsed.name }, 'Parsed native tool call');
+        logger.debug({ tool: parsed.name }, 'Parsed native tool call');
 
         return {
             name: parsed.name,

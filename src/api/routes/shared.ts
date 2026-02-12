@@ -257,7 +257,7 @@ export function createStreamingToolProcessor(
         function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
       });
       emitter.emitToolCall(callId, tc);
-      logger.debug({ name: tc.name }, '[Server] Tool call emitted in stream');
+      logger.debug({ tool: tc.name }, '[Server] Tool call emitted in stream');
     }
   }
 
