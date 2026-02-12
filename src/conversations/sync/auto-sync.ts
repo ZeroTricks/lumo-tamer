@@ -12,6 +12,7 @@
 
 import { logger } from '../../app/logger.js';
 import { getSyncService, type SyncService } from './sync-service.js';
+import { getMetrics } from '../../api/metrics/index.js';
 
 // Timing constants (not configurable - sensible defaults)
 const DEBOUNCE_MS = 5000;      // Wait after last change before syncing
@@ -143,11 +144,16 @@ export class AutoSyncService {
             const startTime = Date.now();
             const syncedCount = await this.syncService.sync();
             const duration = Date.now() - startTime;
+            const durationSeconds = duration / 1000;
 
             this.lastSyncTime = Date.now();
             this.firstDirtyTime = 0;
             this.syncCount++;
             this.lastError = null;
+
+            // Track metrics
+            getMetrics()?.syncOperationsTotal.inc({ status: 'success' });
+            getMetrics()?.syncDuration.observe(durationSeconds);
 
             if (syncedCount > 0) {
                 logger.info({
@@ -160,6 +166,7 @@ export class AutoSyncService {
             }
         } catch (error) {
             this.lastError = error instanceof Error ? error : new Error(String(error));
+            getMetrics()?.syncOperationsTotal.inc({ status: 'failure' });
             logger.error({
                 error: this.lastError.message,
             }, 'Auto-sync failed');

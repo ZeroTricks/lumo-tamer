@@ -10,6 +10,7 @@
 import { logger } from '../../app/logger.js';
 import { getCustomToolsConfig } from '../../app/config.js';
 import { stripToolPrefix } from './prefix.js';
+import { getMetrics } from '../metrics/index.js';
 
 export interface ParsedToolCall {
   name: string;
@@ -78,15 +79,18 @@ function tryParseAsToolCall(content: string): ParsedToolCall | null {
   try {
     const parsed = JSON.parse(content);
     if (isToolCallJson(parsed)) {
-      logger.info(`Tool call detected: ${content.replace(/\n/g," ").substring(0, 100)}...`)
       const prefix = getCustomToolsConfig().prefix;
+      const toolName = stripToolPrefix(parsed.name, prefix);
+      logger.info(`Tool call detected: ${content.replace(/\n/g," ").substring(0, 100)}...`)
+      getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'detected', tool_name: toolName });
       return {
-        name: stripToolPrefix(parsed.name, prefix),
+        name: toolName,
         arguments: parsed.arguments as Record<string, unknown>,
       };
     }
   } catch {
-        logger.info(`Invalid tool call: ${content.replace(/\n/g," ").substring(0, 100)}...`)
+    logger.info(`Invalid tool call: ${content.replace(/\n/g," ").substring(0, 100)}...`)
+    getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: 'unknown' });
     // Not valid JSON
   }
   return null;

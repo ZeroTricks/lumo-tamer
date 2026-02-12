@@ -1,5 +1,5 @@
 import express from 'express';
-import { getServerConfig, authConfig } from '../app/config.js';
+import { getServerConfig, getMetricsConfig, authConfig } from '../app/config.js';
 import { resolveProjectPath } from '../app/paths.js';
 import { logger } from '../app/logger.js';
 import { setupAuthMiddleware, setupLoggingMiddleware } from './middleware.js';
@@ -10,15 +10,21 @@ import { createResponsesRouter } from './routes/responses/index.js';
 import { createAuthRouter } from './routes/auth.js';
 import { EndpointDependencies } from './types.js';
 import { RequestQueue } from './queue.js';
+import { initMetrics, createMetricsMiddleware, createMetricsRouter, type MetricsService } from './metrics/index.js';
 import type { AppContext } from '../app/index.js';
 
 export class APIServer {
   private expressApp: express.Application;
   private serverConfig = getServerConfig();
   private queue = new RequestQueue(1); // Process one request at a time
+  private metrics: MetricsService | null = null;
 
   constructor(private app: AppContext) {
     this.expressApp = express();
+    const metricsConfig = getMetricsConfig();
+    if (metricsConfig.enabled) {
+      this.metrics = initMetrics(metricsConfig);
+    }
     this.setupMiddleware();
     this.setupRoutes();
   }
@@ -27,10 +33,18 @@ export class APIServer {
     this.expressApp.use(express.json());
     this.expressApp.use(setupAuthMiddleware(this.serverConfig.apiKey));
     this.expressApp.use(setupLoggingMiddleware());
+    if (this.metrics) {
+      this.expressApp.use(createMetricsMiddleware(this.metrics));
+    }
   }
 
   private setupRoutes(): void {
     const deps = this.getDependencies();
+
+    // Metrics endpoint (no auth required, like /health)
+    if (this.metrics) {
+      this.expressApp.use(createMetricsRouter(this.metrics));
+    }
 
     this.expressApp.use(createHealthRouter(deps));
     this.expressApp.use(createModelsRouter());

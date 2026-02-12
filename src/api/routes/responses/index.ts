@@ -5,6 +5,7 @@ import { logger } from '../../../app/logger.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './request-handlers.js';
 import { convertResponseInputToTurns, normalizeInputItem } from '../../message-converter.js';
 import { getConversationsConfig } from '../../../app/config.js';
+import { getMetrics } from '../../metrics/index.js';
 
 import type { ConversationId } from '../../../conversations/index.js';
 
@@ -95,6 +96,20 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
         );
         if (!hasUserMessage) {
           return res.status(400).json({ error: 'No user message found in input array' });
+        }
+      }
+
+      // ===== Track message metrics =====
+      const metrics = getMetrics();
+      if (metrics) {
+        if (typeof request.input === 'string') {
+          metrics.messagesTotal.inc({ endpoint: '/v1/responses', role: 'user' });
+        } else if (Array.isArray(request.input)) {
+          for (const item of request.input) {
+            if (typeof item === 'object' && 'role' in item) {
+              metrics.messagesTotal.inc({ endpoint: '/v1/responses', role: (item as { role: string }).role });
+            }
+          }
         }
       }
 

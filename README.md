@@ -88,6 +88,7 @@ Then, point your favorite OpenAI-compatible app to `https://yourhost:3003/v1` an
 | `POST /v1/responses` | [OpenAI responses API](https://platform.openai.com/docs/api-reference/responses/create) |
 | `GET /v1/models` | List available models ('lumo') |
 | `GET /health` | Health check |
+| `GET /metrics` | [Prometheus metrics](docs/development.md#metrics) |
 
 
 ### CLI

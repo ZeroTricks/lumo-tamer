@@ -16,16 +16,24 @@ import { RequestQueue } from '../../src/api/queue.js';
 import { LumoClient } from '../../src/lumo-client/index.js';
 import { createMockProtonApi } from '../../src/mock/mock-api.js';
 import { ConversationStore } from '../../src/conversations/store.js';
+import { MetricsService, createMetricsRouter, createMetricsMiddleware, setMetrics } from '../../src/api/metrics/index.js';
 import type { EndpointDependencies } from '../../src/api/types.js';
 import type { MockConfig } from '../../src/app/config.js';
 
 type Scenario = MockConfig['scenario'];
+
+export interface TestServerOptions {
+  /** Enable metrics collection and /metrics endpoint */
+  metrics?: boolean;
+}
 
 export interface TestServer {
   server: Server;
   baseUrl: string;
   deps: EndpointDependencies;
   store: ConversationStore;
+  /** MetricsService instance (only if metrics option was true) */
+  metrics?: MetricsService;
   close: () => Promise<void>;
 }
 
@@ -33,9 +41,13 @@ export interface TestServer {
  * Create and start a test server on a random port.
  *
  * @param scenario - Mock API scenario (default: 'success')
+ * @param options - Optional configuration (metrics, etc.)
  * @returns TestServer with baseUrl, deps, and cleanup function
  */
-export async function createTestServer(scenario: Scenario = 'success'): Promise<TestServer> {
+export async function createTestServer(
+  scenario: Scenario = 'success',
+  options: TestServerOptions = {}
+): Promise<TestServer> {
   const mockApi = createMockProtonApi(scenario);
   const lumoClient = new LumoClient(mockApi, { enableEncryption: false });
   const store = new ConversationStore({ maxConversationsInMemory: 50 });
@@ -48,9 +60,20 @@ export async function createTestServer(scenario: Scenario = 'success'): Promise<
     syncInitialized: false,
   };
 
+  // Set up metrics if requested
+  let metrics: MetricsService | undefined;
+  if (options.metrics) {
+    metrics = new MetricsService({ enabled: true, collectDefaultMetrics: false, prefix: 'test_' });
+    setMetrics(metrics);
+  }
+
   const app = express();
   app.use(express.json());
   // No auth middleware - tests focus on route logic
+  if (metrics) {
+    app.use(createMetricsMiddleware(metrics));
+    app.use(createMetricsRouter(metrics));
+  }
   app.use(createHealthRouter(deps));
   app.use(createModelsRouter());
   app.use(createChatCompletionsRouter(deps));
@@ -68,7 +91,11 @@ export async function createTestServer(scenario: Scenario = 'success'): Promise<
     baseUrl,
     deps,
     store,
-    close: () => new Promise((resolve) => server.close(() => resolve())),
+    metrics,
+    close: () => new Promise((resolve) => {
+      if (metrics) setMetrics(null);
+      server.close(() => resolve());
+    }),
   };
 }
 

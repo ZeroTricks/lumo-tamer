@@ -26,6 +26,7 @@ import type {
     SpaceId,
 } from './types.js';
 import { getLogConfig } from 'app/config.js';
+import { getMetrics } from '../api/metrics/index.js';
 
 /**
  * In-memory conversation store
@@ -60,6 +61,7 @@ export class ConversationStore {
         if (!state) {
             state = this.createEmptyState(id);
             this.conversations.set(id, state);
+            getMetrics()?.conversationsCreatedTotal.inc();
             logger.debug({ conversationId: id }, 'Created new conversation');
         }
 
@@ -104,6 +106,7 @@ export class ConversationStore {
         // Validate continuation
         const validation = isValidContinuation(incoming, state.messages);
         if (!validation.valid) {
+            getMetrics()?.invalidContinuationsTotal.inc();
             logger.warn({
                 conversationId: id,
                 reason: validation.reason,

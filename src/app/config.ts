@@ -49,6 +49,13 @@ const customToolsConfigSchema = z.object({
   prefix: z.string(),
 });
 
+// Metrics config
+const metricsConfigSchema = z.object({
+  enabled: z.boolean(),
+  collectDefaultMetrics: z.boolean(),
+  prefix: z.string(),
+});
+
 // Instructions schemas
 const cliInstructionsConfigSchema = z.object({
   template: z.string(),
@@ -109,6 +116,7 @@ const serverMergedConfigSchema = z.object({
   enableWebSearch: z.boolean(),
   customTools: customToolsConfigSchema,
   instructions: serverInstructionsConfigSchema,
+  metrics: metricsConfigSchema,
   port: z.number().int().positive(),
   apiKey: z.string().min(1, 'server.apiKey is required'),
   apiModelName: z.string().min(1),
@@ -225,6 +233,11 @@ export function getCustomToolsConfig() {
 export function getServerInstructionsConfig() {
   const cfg = getServerConfig();
   return cfg.instructions;
+}
+
+export function getMetricsConfig() {
+  const cfg = getServerConfig();
+  return cfg.metrics;
 }
 
 // CLI-specific getters

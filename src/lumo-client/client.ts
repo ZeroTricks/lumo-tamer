@@ -26,6 +26,7 @@ import { executeCommand, isCommand, type CommandContext } from '../app/commands.
 import { getCommandsConfig, getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
 import { JsonBraceTracker } from '../api/tools/json-brace-tracker.js';
 import { parseNativeToolCallJson, isErrorResult } from '../api/tools/native-tool-parser.js';
+import { getMetrics } from '../api/metrics/index.js';
 import type { ParsedToolCall } from '../api/tools/tool-parser.js';
 
 export interface LumoClientOptions {
@@ -169,17 +170,24 @@ export class LumoClient {
                     fullTitle += content;
                 } else if (msg.target === 'tool_call') {
                     for (const json of toolCallTracker.feed(content)) {
-                        logger.debug({ raw: json }, 'Native SSE tool_call');
                         if (!firstNativeToolCall) {
                             firstNativeToolCall = parseNativeToolCallJson(json);
-                            if (firstNativeToolCall && isMisroutedToolCall(firstNativeToolCall) && !isBounce) {
-                                // Only abort on initial call; bounce responses may contain stale misrouted calls
-                                suppressChunks = true;
-                                abortEarly = true;
-                                logger.debug({
-                                    name: firstNativeToolCall.name,
-                                    partialResponse: fullResponse
-                                }, 'Misrouted tool call detected, aborting stream');
+                            if (firstNativeToolCall) {
+                                if (isMisroutedToolCall(firstNativeToolCall) && !isBounce) {
+                                    // Only abort on initial call; bounce responses may contain stale misrouted calls
+                                    suppressChunks = true;
+                                    abortEarly = true;
+                                    getMetrics()?.toolCallsTotal.inc({ type: 'misrouted', status: 'detected', tool_name: firstNativeToolCall.name });
+                                    logger.debug({
+                                        name: firstNativeToolCall.name,
+                                        partialResponse: fullResponse
+                                    }, 'Misrouted tool call detected, aborting stream');
+                                } else {
+                                    logger.debug({ raw: json }, 'Native SSE tool_call');
+
+                                    // Track native tool call (only if not misrouted)
+                                    getMetrics()?.toolCallsTotal.inc({ type: 'native', status: 'detected', tool_name: firstNativeToolCall.name });
+                                }
                             }
                         }
                     }
@@ -223,7 +231,14 @@ export class LumoClient {
             }
 
             if (firstNativeToolCall) {
-                logger.debug({ toolCall: firstNativeToolCall, failed: nativeToolCallFailed }, 'Lumo native tool call');
+                const toolCall = firstNativeToolCall as ParsedToolCall;
+                logger.debug({ toolCall, failed: nativeToolCallFailed }, 'Lumo native tool call');
+                // Track tool call success/failure
+                if (nativeToolCallFailed) {
+                    getMetrics()?.toolCallsTotal.inc({ type: 'native', status: 'failed', tool_name: toolCall.name });
+                } else {
+                    getMetrics()?.toolCallsTotal.inc({ type: 'native', status: 'successful', tool_name: toolCall.name });
+                }
             }
 
             return {

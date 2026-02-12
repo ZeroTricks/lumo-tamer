@@ -4,6 +4,7 @@ import { EndpointDependencies, OpenAIChatRequest, OpenAIStreamChunk, OpenAIChatR
 import { getServerConfig, getConversationsConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
 import { convertMessagesToTurns, normalizeInputItem } from '../message-converter.js';
+import { getMetrics } from '../metrics/index.js';
 import type { Turn } from '../../lumo-client/index.js';
 import type { ConversationId } from '../../conversations/index.js';
 import {
@@ -45,6 +46,14 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       const lastUserMessage = [...request.messages].reverse().find(m => m.role === 'user');
       if (!lastUserMessage) {
         return res.status(400).json({ error: 'No user message found' });
+      }
+
+      // Track message metrics
+      const metrics = getMetrics();
+      if (metrics) {
+        for (const msg of request.messages) {
+          metrics.messagesTotal.inc({ endpoint: '/v1/chat/completions', role: msg.role });
+        }
       }
 
       // ===== Generate conversation ID for persistence =====
