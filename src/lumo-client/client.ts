@@ -26,6 +26,7 @@ import { executeCommand, isCommand, type CommandContext } from '../app/commands.
 import { getCommandsConfig, getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
 import { JsonBraceTracker } from '../api/tools/json-brace-tracker.js';
 import { parseNativeToolCallJson, isErrorResult } from '../api/tools/native-tool-parser.js';
+import { stripToolPrefix } from '../api/tools/prefix.js';
 import { getMetrics } from '../api/metrics/index.js';
 import type { ParsedToolCall } from '../api/tools/tool-parser.js';
 
@@ -177,8 +178,9 @@ export class LumoClient {
                                     // Only abort on initial call; bounce responses may contain stale misrouted calls
                                     suppressChunks = true;
                                     abortEarly = true;
-                                    // Track as custom tool with misrouted status
-                                    getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'misrouted', tool_name: firstNativeToolCall.name });
+                                    // Track as custom tool with misrouted status (strip prefix for consistency)
+                                    const strippedName = stripToolPrefix(firstNativeToolCall.name, getCustomToolsConfig().prefix);
+                                    getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'misrouted', tool_name: strippedName });
                                     logger.debug({
                                         name: firstNativeToolCall.name,
                                         partialResponse: fullResponse
