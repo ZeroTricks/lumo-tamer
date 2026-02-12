@@ -9,10 +9,17 @@ import { getSyncService, getConversationStore, getAutoSyncService } from '../con
 import type { AuthManager } from '../auth/index.js';
 
 /**
- * Check if a message is a command (starts with /)
+ * Check if a message is a command (starts with / or wakeword)
  */
 export function isCommand(message: string): boolean {
-  return message.trim().startsWith('/');
+  const trimmed = message.trim();
+  if (trimmed.startsWith('/')) return true;
+
+  const { wakeword } = getCommandsConfig();
+  if (wakeword && trimmed.toLowerCase().startsWith(wakeword.toLowerCase() + ' ')) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -42,9 +49,15 @@ export async function executeCommand(
         return 'Commands are disabled.';
     }
 
-    const commandText = command.startsWith('/')
-      ? command.slice(1).trim()
-      : command.trim();
+    // Strip prefix (/ or wakeword)
+    let commandText: string;
+    if (command.startsWith('/')) {
+      commandText = command.slice(1).trim();
+    } else {
+      const { wakeword } = commandsConfig;
+      // Strip "wakeword " prefix (case-insensitive match already done in isCommand)
+      commandText = command.slice(wakeword.length).trim();
+    }
 
     // Extract command name and parameters: /command param1 param2 ...
     const match = commandText.match(/^(\S+)(?:\s+(.*))?$/);
@@ -92,13 +105,15 @@ export async function executeCommand(
  * Get help text for available commands
  */
 function getHelpText(): string {
+  const { wakeword } = getCommandsConfig();
+  const wakewordHint = wakeword ? `\n\nAlternatively, use "${wakeword} <command>" instead of "/<command>"` : '';
   return `Available commands:
   /help              - Show this help message
   /title <text>      - Set conversation title
   /save, /sync       - Sync conversations to Proton server
   /refreshtokens     - Manually refresh auth tokens
   /logout            - Revoke session and delete tokens
-  /quit              - Exit CLI (CLI mode only)`;
+  /quit              - Exit CLI (CLI mode only)${wakewordHint}`;
 }
 
 /**
