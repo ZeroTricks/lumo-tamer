@@ -5,6 +5,8 @@ import { logger } from '../../../app/logger.js';
 import { handleStreamingRequest, handleNonStreamingRequest } from './request-handlers.js';
 import { convertResponseInputToTurns, normalizeInputItem } from '../../message-converter.js';
 import { getConversationsConfig } from '../../../app/config.js';
+import { getMetrics } from '../../metrics/index.js';
+import { trackCustomToolCompletion } from '../shared.js';
 
 import type { ConversationId } from '../../../conversations/index.js';
 
@@ -120,6 +122,8 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
           if (!isDuplicate) {
             deps.conversationStore?.setLastFunctionCallId(conversationId, lastFunctionOutput.call_id);
             turns.push({ role: 'user', content: JSON.stringify(lastFunctionOutput) });
+
+            trackCustomToolCompletion(deps, conversationId, lastFunctionOutput.call_id);
             logger.debug(`[Server] Processing function_call_output for call_id: ${lastFunctionOutput.call_id}`);
           } else {
             logger.debug('[Server] Skipping duplicate function_call_output');
@@ -151,6 +155,9 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
           { role: 'user', content: request.input }
         ]);
         logger.debug({ conversationId }, 'Persisted user message');
+      } else if (!conversationId) {
+        // Stateless request - track +1 user message (not deduplicated)
+        getMetrics()?.messagesTotal.inc({ role: 'user' });
       }
 
       // Add to queue and process

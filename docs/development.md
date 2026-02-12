@@ -115,3 +115,17 @@ tests/
 - Tests inject `createMockProtonApi()` directly, bypassing Application and config.yaml
 - `tests/helpers/test-server.ts` creates an Express app with mock dependencies for integration tests
 - `tests/setup.ts` initializes config and silences the logger for all tests
+
+## Metrics
+
+The server exposes Prometheus-compatible metrics at `/metrics`. Configure in `config.yaml`:
+
+```yaml
+server:
+  metrics:
+    enabled: true
+    collectDefaultMetrics: true
+    prefix: "lumo_"
+```
+
+A Grafana dashboard is included at [`grafana-lumo-tamer-dashboard.json`](../grafana-lumo-tamer-dashboard.json).

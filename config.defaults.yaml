@@ -103,6 +103,15 @@ server:
   apiKey: "your-secret-api-key-here"
   apiModelName: "lumo"
 
+  # Prometheus metrics endpoint
+  metrics:
+    # Enable /metrics endpoint
+    enabled: false
+    # Include Node.js runtime metrics (memory, CPU, event loop, etc.)
+    collectDefaultMetrics: true
+    # Prefix for all metric names
+    prefix: "lumo_"
+
   # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
   enableWebSearch: false
 

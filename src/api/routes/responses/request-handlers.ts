@@ -15,8 +15,7 @@ import type { ConversationId } from '../../../conversations/index.js';
 import {
   buildRequestContext,
   persistTitle,
-  persistResponse,
-  persistResponseWithToolCalls,
+  persistAssistantTurn,
   extractToolsFromResponse,
   createStreamingToolProcessor,
   generateResponseId,
@@ -182,10 +181,6 @@ export async function handleStreamingRequest(
           emitter.emitOutputTextDelta(itemId, 0, 0, text);
         },
         emitToolCall(callId, tc) {
-          // Track call ID per-conversation for function output deduplication (stateful only)
-          if (conversationId) {
-            deps.conversationStore?.addGeneratedCallId(conversationId, callId);
-          }
           emitter.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
         },
       });
@@ -238,12 +233,11 @@ export async function handleStreamingRequest(
         toolCalls: toolCallsWithIds.length > 0 ? toolCallsWithIds : undefined,
       });
 
-      // Persist with tool calls if any
-      if (toolCallsWithIds.length > 0) {
-        persistResponseWithToolCalls(deps, conversationId, accumulatedText, toolCallsWithIds);
-      } else {
-        persistResponse(deps, conversationId, accumulatedText);
-      }
+      // Persist response (with tool calls if any)
+      persistAssistantTurn(
+        deps, conversationId, accumulatedText,
+        toolCallsWithIds.length > 0 ? toolCallsWithIds : undefined
+      );
       emitter.emitResponseCompleted(createCompletedResponse(id, createdAt, request, output));
       res.end();
     } catch (error) {
@@ -274,13 +268,9 @@ export async function handleNonStreamingRequest(
   persistTitle(result, deps, conversationId);
   const { content, toolCalls } = extractToolsFromResponse(result.response, ctx.hasCustomTools);
 
-  // Generate call_ids and persist (including tool calls if any)
-  const toolCallsWithIds = toolCalls.length > 0 ? assignCallIds(toolCalls) : [];
-  if (toolCallsWithIds.length > 0) {
-    persistResponseWithToolCalls(deps, conversationId, content, toolCallsWithIds);
-  } else {
-    persistResponse(deps, conversationId, content);
-  }
+  // Generate call_ids and persist (also registers call_ids for deduplication)
+  const toolCallsWithIds = toolCalls.length > 0 ? assignCallIds(toolCalls) : undefined;
+  persistAssistantTurn(deps, conversationId, content, toolCallsWithIds);
 
   const id = generateResponseId();
   const itemId = generateItemId();
@@ -288,7 +278,7 @@ export async function handleNonStreamingRequest(
   const output = buildOutputItems({
     text: content,
     itemId,
-    toolCalls: toolCallsWithIds.length > 0 ? toolCallsWithIds : undefined,
+    toolCalls: toolCallsWithIds,
   });
 
   res.json(createCompletedResponse(id, createdAt, request, output));

@@ -10,6 +10,7 @@
 import { logger } from '../../app/logger.js';
 import { getCustomToolsConfig } from '../../app/config.js';
 import { stripToolPrefix } from './prefix.js';
+import { getMetrics } from '../metrics/index.js';
 
 export interface ParsedToolCall {
   name: string;
@@ -71,6 +72,19 @@ export function extractToolCallsFromResponse(text: string): ParsedToolCall[] | n
 }
 
 /**
+ * Try to extract a tool name from content, even if JSON is malformed.
+ * Uses regex to find "name": "..." pattern.
+ */
+function extractToolNameFromContent(content: string): string {
+  const match = content.match(/"name"\s*:\s*"([^"]+)"/);
+  if (match) {
+    const prefix = getCustomToolsConfig().prefix;
+    return stripToolPrefix(match[1], prefix);
+  }
+  return 'unknown';
+}
+
+/**
  * Try to parse content as a tool call.
  * Strips the configured prefix from the tool name.
  */
@@ -78,16 +92,24 @@ function tryParseAsToolCall(content: string): ParsedToolCall | null {
   try {
     const parsed = JSON.parse(content);
     if (isToolCallJson(parsed)) {
-      logger.info(`Tool call detected: ${content.replace(/\n/g," ").substring(0, 100)}...`)
       const prefix = getCustomToolsConfig().prefix;
+      const toolName = stripToolPrefix(parsed.name, prefix);
+      logger.info(`Tool call detected: ${content.replace(/\n/g," ").substring(0, 100)}...`)
+      // Custom tool completion is tracked when function_call_output is received
       return {
-        name: stripToolPrefix(parsed.name, prefix),
+        name: toolName,
         arguments: parsed.arguments as Record<string, unknown>,
       };
     }
+    // JSON parsed but schema invalid (missing name or arguments)
+    const toolName = extractToolNameFromContent(content);
+    logger.info(`Invalid tool call (bad schema): ${content.replace(/\n/g," ")}`)
+    getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: toolName });
   } catch {
-        logger.info(`Invalid tool call: ${content.replace(/\n/g," ").substring(0, 100)}...`)
-    // Not valid JSON
+    // JSON parse failed - try to extract name anyway
+    const toolName = extractToolNameFromContent(content);
+    logger.info(`Invalid tool call (malformed JSON): ${content.replace(/\n/g," ")}`)
+    getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: toolName });
   }
   return null;
 }
