@@ -154,6 +154,14 @@ export class ConversationStore {
         this.markDirty(state);
         state.metadata.updatedAt = now;
 
+        // Track metrics for new messages only
+        const metrics = getMetrics();
+        if (metrics) {
+            for (const msg of addedMessages) {
+                metrics.messagesTotal.inc({ role: msg.role });
+            }
+        }
+
         logger.debug({
             conversationId: id,
             addedCount: addedMessages.length,
@@ -199,6 +207,9 @@ export class ConversationStore {
         this.markDirty(state);
         state.metadata.updatedAt = now;
         state.status = 'completed';
+
+        // Track metric for new assistant message
+        getMetrics()?.messagesTotal.inc({ role: 'assistant' });
 
         logger.debug({
             conversationId: id,

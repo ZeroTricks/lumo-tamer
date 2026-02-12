@@ -100,20 +100,6 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
         }
       }
 
-      // ===== Track message metrics =====
-      const metrics = getMetrics();
-      if (metrics) {
-        if (typeof request.input === 'string') {
-          metrics.messagesTotal.inc({ endpoint: '/v1/responses', role: 'user' });
-        } else if (Array.isArray(request.input)) {
-          for (const item of request.input) {
-            if (typeof item === 'object' && 'role' in item) {
-              metrics.messagesTotal.inc({ endpoint: '/v1/responses', role: (item as { role: string }).role });
-            }
-          }
-        }
-      }
-
       // ===== STEP 3: Convert input to turns =====
       // Single call handles both normal messages and function_call_output requests.
       // convertResponseInputToTurns filters out function_call/function_call_output items
@@ -169,6 +155,9 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
           { role: 'user', content: request.input }
         ]);
         logger.debug({ conversationId }, 'Persisted user message');
+      } else if (!conversationId) {
+        // Stateless request - track +1 user message (not deduplicated)
+        getMetrics()?.messagesTotal.inc({ role: 'user' });
       }
 
       // Add to queue and process

@@ -71,9 +71,9 @@ describe('MetricsService', () => {
 
   describe('messagesTotal', () => {
     it('counts messages by role', async () => {
-      metrics.messagesTotal.inc({ endpoint: '/v1/responses', role: 'user' });
-      metrics.messagesTotal.inc({ endpoint: '/v1/responses', role: 'user' });
-      metrics.messagesTotal.inc({ endpoint: '/v1/responses', role: 'assistant' });
+      metrics.messagesTotal.inc({ role: 'user' });
+      metrics.messagesTotal.inc({ role: 'user' });
+      metrics.messagesTotal.inc({ role: 'assistant' });
 
       const output = await metrics.getMetrics();
       expect(output).toContain('test_messages_total');

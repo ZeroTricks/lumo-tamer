@@ -85,7 +85,7 @@ export function persistResponse(deps: EndpointDependencies, conversationId: Conv
 
 /**
  * Persist an assistant turn (response text and optional tool calls).
- * No-op for stateless requests.
+ * For stateless requests, only tracks the message metric.
  */
 export function persistAssistantTurn(
   deps: EndpointDependencies,
@@ -93,10 +93,16 @@ export function persistAssistantTurn(
   content: string,
   toolCalls?: Array<{ name: string; arguments: string; call_id: string }>
 ): void {
-  if (toolCalls && toolCalls.length > 0) {
-    persistResponseWithToolCalls(deps, conversationId, content, toolCalls);
+  if (conversationId && deps.conversationStore) {
+    // Stateful: persist to store (which also tracks metrics)
+    if (toolCalls && toolCalls.length > 0) {
+      persistResponseWithToolCalls(deps, conversationId, content, toolCalls);
+    } else {
+      persistResponse(deps, conversationId, content);
+    }
   } else {
-    persistResponse(deps, conversationId, content);
+    // Stateless: just track the metric
+    getMetrics()?.messagesTotal.inc({ role: 'assistant' });
   }
 }
 

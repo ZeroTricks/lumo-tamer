@@ -48,14 +48,6 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
         return res.status(400).json({ error: 'No user message found' });
       }
 
-      // Track message metrics
-      const metrics = getMetrics();
-      if (metrics) {
-        for (const msg of request.messages) {
-          metrics.messagesTotal.inc({ endpoint: '/v1/chat/completions', role: msg.role });
-        }
-      }
-
       // ===== Generate conversation ID for persistence =====
       // Chat Completions has no conversation parameter per OpenAI spec.
       // We use deriveIdFromUser to track conversations for Proton sync.
@@ -92,6 +84,9 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
         }
         deps.conversationStore.appendMessages(conversationId, allMessages);
         logger.debug({ conversationId, messageCount: allMessages.length }, 'Persisted conversation messages');
+      } else {
+        // Stateless request - track +1 user message (not deduplicated)
+        getMetrics()?.messagesTotal.inc({ role: 'user' });
       }
 
       // Convert messages to Lumo turns (includes system message injection)

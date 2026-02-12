@@ -72,8 +72,8 @@ export class MetricsService {
     // Message metrics
     this.messagesTotal = new Counter({
       name: `${prefix}messages_total`,
-      help: 'Total messages processed',
-      labelNames: ['endpoint', 'role'],
+      help: 'Total new messages (deduplicated)',
+      labelNames: ['role'],
       registers: [this.registry],
     });
 
