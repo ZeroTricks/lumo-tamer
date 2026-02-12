@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest, FunctionCallOutput } from '../../types.js';
 import { logger } from '../../../app/logger.js';
-import { handleStreamingRequest, handleNonStreamingRequest } from './request-handlers.js';
+import { handleRequest } from './request-handlers.js';
 import { convertResponseInputToTurns, normalizeInputItem } from '../../message-converter.js';
 import { getConversationsConfig } from '../../../app/config.js';
 import { getMetrics } from '../../metrics/index.js';
@@ -161,11 +161,7 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       }
 
       // Add to queue and process
-      if (request.stream) {
-        await handleStreamingRequest(req, res, deps, request, turns, conversationId);
-      } else {
-        await handleNonStreamingRequest(req, res, deps, request, turns, conversationId);
-      }
+      await handleRequest(res, deps, request, turns, conversationId, request.stream ?? false);
     } catch (error) {
       logger.error('Error processing response:');
       logger.error(error);
