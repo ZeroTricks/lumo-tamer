@@ -7,7 +7,7 @@ import { getMetrics } from '../metrics/index.js';
 import type { ParsedToolCall } from '../tools/types.js';
 import type { EndpointDependencies, OpenAITool, OpenAIToolCall } from '../types.js';
 import type { CommandContext } from '../../app/commands.js';
-import type { ConversationId } from '../../conversations/index.js';
+import type { ConversationId } from '../../conversations/types.js';
 import type { ChatResult } from '../../lumo-client/index.js';
 
 // ── Tool call type for persistence ─────────────────────────────────
@@ -37,40 +37,30 @@ export function mapToolCallsForPersistence(
 // ── Tool completion tracking ───────────────────────────────────────
 
 /**
- * Global call_id -> tool_name map for stateless requests.
- * Stateful requests use conversationStore.generatedCallIds instead.
- * Entries are cleaned up when tool completion is tracked.
+ * Set of call_ids that have been tracked as completed.
+ * Prevents double-counting on duplicate requests (both stateful and stateless).
  */
-const statelessCallIds = new Map<string, string>();
+const completedCallIds = new Set<string>();
 
-/** Register a call_id for stateless tracking. */
-export function registerStatelessCallId(callId: string, toolName: string): void {
-  statelessCallIds.set(callId, toolName);
+/**
+ * Extract tool name from call_id format: `toolname__uuid`.
+ * Returns undefined if call_id doesn't match the expected format.
+ */
+export function extractToolNameFromCallId(callId: string): string | undefined {
+  const match = callId.match(/^(.+)__[a-f0-9]+$/);
+  return match?.[1];
 }
 
 /**
  * Track completion of a custom tool call.
- * Used by both /v1/responses (function_call_output) and /v1/chat/completions (role: 'tool').
- * Works for both stateful and stateless requests.
+ * Extracts tool name from call_id format (toolname__uuid).
+ * Deduplicates via completedCallIds Set.
  */
-export function trackCustomToolCompletion(
-  deps: EndpointDependencies,
-  conversationId: ConversationId | undefined,
-  callId: string
-): void {
-  // Try conversation store first (stateful)
-  let toolName: string | undefined;
-  if (conversationId && deps.conversationStore) {
-    toolName = deps.conversationStore.getToolNameForCallId(conversationId, callId);
-  }
-  // Fall back to stateless map
-  if (!toolName) {
-    toolName = statelessCallIds.get(callId);
-    if (toolName) {
-      statelessCallIds.delete(callId); // Clean up after use
-    }
-  }
+export function trackCustomToolCompletion(callId: string): void {
+  if (completedCallIds.has(callId)) return;
+  completedCallIds.add(callId);
 
+  const toolName = extractToolNameFromCallId(callId);
   if (!toolName) return;
 
   logger.info({ toolName, call_id: callId }, 'Custom tool call completed');
@@ -129,7 +119,6 @@ export function persistResponse(deps: EndpointDependencies, conversationId: Conv
 
 /**
  * Persist an assistant turn (response text and optional tool calls).
- * For stateless requests, registers tool call_ids for completion tracking.
  */
 export function persistAssistantTurn(
   deps: EndpointDependencies,
@@ -138,27 +127,21 @@ export function persistAssistantTurn(
   toolCalls?: Array<{ name: string; arguments: string; call_id: string }>
 ): void {
   if (conversationId && deps.conversationStore) {
-    // Stateful: persist to store (which also registers call_ids)
+    // Stateful: persist to store
     if (toolCalls && toolCalls.length > 0) {
       persistResponseWithToolCalls(deps, conversationId, content, toolCalls);
     } else {
       persistResponse(deps, conversationId, content);
     }
   } else {
-    // Stateless: track metric and register call_ids for completion tracking
+    // Stateless: track metric only (no persistence)
     getMetrics()?.messagesTotal.inc({ role: 'assistant' });
-    if (toolCalls) {
-      for (const tc of toolCalls) {
-        registerStatelessCallId(tc.call_id, tc.name);
-      }
-    }
   }
 }
 
 /**
  * Persist assistant response with tool calls.
  * Each tool call is stored as a separate assistant message with normalized JSON content.
- * Also registers call_ids for deduplication tracking.
  * No-op for stateless requests.
  *
  * NOTE: We intentionally don't store the stripped text content separately.
@@ -174,7 +157,7 @@ export function persistResponseWithToolCalls(
 ): void {
   if (!conversationId || !deps.conversationStore) return;
 
-  // Store each tool call as a normalized assistant message and register call_id
+  // Store each tool call as a normalized assistant message
   for (const tc of toolCalls) {
     // Normalize arguments: parse then re-stringify for consistent formatting
     // This ensures stored format matches what normalizeInputItem produces
@@ -186,7 +169,6 @@ export function persistResponseWithToolCalls(
       arguments: normalizedArgs,
     });
     deps.conversationStore.appendAssistantResponse(conversationId, normalizedContent);
-    deps.conversationStore.addGeneratedCallId(conversationId, tc.call_id, tc.name);
   }
 }
 
@@ -234,9 +216,12 @@ export function generateFunctionCallId(): string {
   return `fc-${randomUUID()}`;
 }
 
-/** Generate a call_id for tool calls (`call_xxx`). */
-export function generateCallId(): string {
-  return `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
+/**
+ * Generate a call_id for tool calls.
+ * Format: `toolname__uuid` - embeds tool name for later extraction.
+ */
+export function generateCallId(toolName: string): string {
+  return `${toolName}__${randomUUID().replace(/-/g, '').slice(0, 24)}`;
 }
 
 /** Generate a chat completion ID (`chatcmpl-xxx`). */
@@ -277,7 +262,7 @@ export function createStreamingToolProcessor(
 
   function processToolCalls(completedToolCalls: ParsedToolCall[]): void {
     for (const tc of completedToolCalls) {
-      const callId = generateCallId();
+      const callId = generateCallId(tc.name);
       toolCallsEmitted.push({
         id: callId,
         type: 'function',

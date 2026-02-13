@@ -6,8 +6,50 @@ import type { ChatMessage, ResponseInputItem, OpenAITool, OpenAIToolCall } from 
 import type { Turn } from '../lumo-client/index.js';
 import { isCommand } from '../app/commands.js';
 import { buildInstructions } from './instructions.js';
+import { extractToolNameFromCallId } from './routes/shared.js';
+import { getCustomToolsConfig } from '../app/config.js';
+
+/**
+ * Add tool_name with prefix to function_call_output JSON for Lumo context.
+ * Extracts tool name from call_id and re-prefixes it.
+ */
+function addToolNameToFunctionOutput(content: string): string {
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed.type === 'function_call_output' && parsed.call_id) {
+      const toolName = extractToolNameFromCallId(String(parsed.call_id));
+      if (toolName) {
+        const prefix = getCustomToolsConfig().prefix;
+        const prefixedToolName = prefix ? `${prefix}${toolName}` : toolName;
+        return JSON.stringify({
+          ...parsed,
+          tool_name: prefixedToolName,
+        });
+      }
+    }
+  } catch {
+    // Not valid JSON, return as-is
+  }
+  return content;
+}
 
 // ── Input normalization ───────────────────────────────────────────────
+//
+// Design: Keep stored format as close to Lumo turns as possible.
+//
+// - normalizeInputItem(): Does the heavy lifting - converts OpenAI tool formats
+//   (role:'tool', tool_calls, function_call, function_call_output) to normalized
+//   {role, content} with JSON. Used for persistence (clean, no prefix).
+//
+// - convertChatMessagesToTurns(): Minimal transform on top - skips system messages,
+//   injects instructions, and applies Lumo-specific prefixing via addToolNameToFunctionOutput().
+//
+// Current differences between stored format and Lumo turns:
+// - Instructions: Injected into first user message for Lumo, not stored
+// - Tool name prefix: Added to function_call_output for Lumo context, not stored
+//
+// If we later need WebClient compatibility for synced conversations, we may
+// need to store the prefixed/instructed format instead.
 
 /**
  * Normalized message format (role + content only).
@@ -136,7 +178,11 @@ function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: stri
     if (normalized) {
       const normalizedArray = Array.isArray(normalized) ? normalized : [normalized];
       for (const norm of normalizedArray) {
-        turns.push(norm);
+        // For function_call_output, add prefixed tool_name for Lumo context
+        const content = norm.role === 'user'
+          ? addToolNameToFunctionOutput(norm.content)
+          : norm.content;
+        turns.push({ role: norm.role, content });
       }
       continue;
     }
@@ -202,19 +248,24 @@ export function convertResponseInputToTurns(
 
   // Array of messages -> ChatMessage[]
   // - function_call -> assistant turn with tool call JSON
-  // - function_call_output -> filtered out (appended separately by handler)
+  // - function_call_output -> user turn with JSON (via normalizeInputItem in convertChatMessagesToTurns)
   // - regular messages -> passed through
   const chatMessages: ChatMessage[] = [];
   for (const item of input) {
     if (typeof item !== 'object') continue;
     const itemType = 'type' in item ? (item as { type: string }).type : undefined;
-    if (itemType === 'function_call_output') continue;
     if (itemType === 'function_call') {
       const fc = item as unknown as { name: string; arguments: string };
       chatMessages.push({
         role: 'assistant',
         content: JSON.stringify({ name: fc.name, arguments: JSON.parse(fc.arguments || '{}') }),
       });
+      continue;
+    }
+    // function_call_output will be handled by normalizeInputItem in convertChatMessagesToTurns
+    if (itemType === 'function_call_output') {
+      // Pass through as-is - convertChatMessagesToTurns will normalize it
+      chatMessages.push(item as unknown as ChatMessage);
       continue;
     }
     if ('role' in item && 'content' in item) {

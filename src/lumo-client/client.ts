@@ -28,7 +28,7 @@ import { JsonBraceTracker } from '../api/tools/json-brace-tracker.js';
 import { parseNativeToolCallJson, isErrorResult } from '../api/tools/native-tool-parser.js';
 import { stripToolPrefix } from '../api/tools/prefix.js';
 import { getMetrics } from '../api/metrics/index.js';
-import type { ParsedToolCall } from '../api/tools/tool-parser.js';
+import type { ParsedToolCall } from '../api/tools/types.js';
 
 export interface LumoClientOptions {
     enableEncryption?: boolean;

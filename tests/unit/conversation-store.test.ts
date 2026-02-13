@@ -208,19 +208,6 @@ describe('ConversationStore', () => {
     });
   });
 
-  describe('deduplication helpers', () => {
-    it('isDuplicateFunctionCallId detects duplicates', () => {
-      store.setLastFunctionCallId('conv-1', 'call-abc');
-      expect(store.isDuplicateFunctionCallId('conv-1', 'call-abc')).toBe(true);
-      expect(store.isDuplicateFunctionCallId('conv-1', 'call-xyz')).toBe(false);
-    });
-
-    it('hasGeneratedCallId tracks generated IDs', () => {
-      expect(store.hasGeneratedCallId('conv-1', 'call-1')).toBe(false);
-      store.addGeneratedCallId('conv-1', 'call-1');
-      expect(store.hasGeneratedCallId('conv-1', 'call-1')).toBe(true);
-    });
-  });
 
   describe('setTitle', () => {
     it('updates title and marks dirty', () => {

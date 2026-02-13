@@ -8,7 +8,7 @@ import { getConversationsConfig } from '../../../app/config.js';
 import { getMetrics } from '../../metrics/index.js';
 import { trackCustomToolCompletion } from '../shared.js';
 
-import type { ConversationId } from '../../../conversations/index.js';
+import type { ConversationId } from '../../../conversations/types.js';
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session
 // This prevents 409 conflicts with deleted conversations from previous sessions
@@ -101,46 +101,21 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       }
 
       // ===== STEP 3: Convert input to turns =====
-      // Single call handles both normal messages and function_call_output requests.
-      // convertResponseInputToTurns filters out function_call/function_call_output items
-      // and injects instructions into the first user turn.
+      // Handles normal messages, function_call, and function_call_output items.
+      // Injects instructions into the first user turn.
       const turns = convertResponseInputToTurns(request.input, request.instructions, request.tools);
 
-      // If there's a function_call_output, append it as a user turn and track completion
+      // ===== STEP 4: Track tool completions =====
+      // Track completion for all function_call_outputs (Set-based dedup prevents double-counting)
       if (Array.isArray(request.input)) {
-        const functionOutputs = request.input.filter((item): item is FunctionCallOutput =>
-          typeof item === 'object' && 'type' in item && item.type === 'function_call_output'
-        );
-
-        if (conversationId && deps.conversationStore) {
-          // Stateful: filter to known call_ids and deduplicate
-          const knownOutputs = functionOutputs.filter(
-            (item) => deps.conversationStore?.hasGeneratedCallId(conversationId, item.call_id) ?? false
-          );
-          const lastFunctionOutput = knownOutputs[knownOutputs.length - 1];
-
-          if (lastFunctionOutput) {
-            const isDuplicate = deps.conversationStore.isDuplicateFunctionCallId(conversationId, lastFunctionOutput.call_id);
-            if (!isDuplicate) {
-              deps.conversationStore.setLastFunctionCallId(conversationId, lastFunctionOutput.call_id);
-              turns.push({ role: 'user', content: JSON.stringify(lastFunctionOutput) });
-              trackCustomToolCompletion(deps, conversationId, lastFunctionOutput.call_id);
-              logger.debug(`[Server] Processing function_call_output for call_id: ${lastFunctionOutput.call_id}`);
-            } else {
-              logger.debug('[Server] Skipping duplicate function_call_output');
-            }
-          }
-        } else {
-          // Stateless: process all function_call_outputs, track completion
-          for (const output of functionOutputs) {
-            turns.push({ role: 'user', content: JSON.stringify(output) });
-            trackCustomToolCompletion(deps, undefined, output.call_id);
-            logger.debug(`[Server] Processing stateless function_call_output for call_id: ${output.call_id}`);
+        for (const item of request.input) {
+          if (typeof item === 'object' && 'type' in item && (item as FunctionCallOutput).type === 'function_call_output') {
+            trackCustomToolCompletion((item as FunctionCallOutput).call_id);
           }
         }
       }
 
-      // ===== STEP 4: Persist incoming messages (stateful only) =====
+      // ===== STEP 5: Persist incoming messages (stateful only) =====
       if (conversationId && deps.conversationStore && Array.isArray(request.input)) {
         const allMessages: Array<{ role: string; content: string }> = [];
         for (const item of request.input) {
