@@ -21,6 +21,14 @@ import {
 // Session ID generated once at module load - makes deterministic IDs unique per server session
 const SESSION_ID = randomUUID();
 
+/** Extract tool_call_id from a role: 'tool' message. */
+function extractToolCallId(msg: unknown): string | undefined {
+  if (typeof msg !== 'object' || msg === null) return undefined;
+  const obj = msg as Record<string, unknown>;
+  if (obj.role === 'tool' && typeof obj.tool_call_id === 'string') return obj.tool_call_id;
+  return undefined;
+}
+
 /**
  * Generate a deterministic conversation ID from the `user` field in the request.
  * Used for clients like Home Assistant that set `user` to their internal conversation_id.
@@ -59,16 +67,18 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       }
       // No else - leave undefined for stateless requests
 
-      // ===== Persist incoming messages and track tool completions (stateful only) =====
+      // ===== Track tool completions (all requests) =====
+      for (const msg of request.messages) {
+        const callId = extractToolCallId(msg);
+        if (callId) {
+          trackCustomToolCompletion(deps, conversationId, callId);
+        }
+      }
+
+      // ===== Persist incoming messages (stateful only) =====
       if (conversationId && deps.conversationStore) {
         const allMessages: Array<{ role: string; content: string }> = [];
         for (const msg of request.messages) {
-          // Track custom tool completion for role: 'tool' messages
-          if (msg.role === 'tool' && 'tool_call_id' in msg) {
-            const toolCallId = (msg as { tool_call_id: string }).tool_call_id;
-            trackCustomToolCompletion(deps, conversationId, toolCallId);
-          }
-
           // Use normalizeInputItem for tool-related messages (role: 'tool', tool_calls)
           const normalized = normalizeInputItem(msg);
           if (normalized) {

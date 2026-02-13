@@ -106,27 +106,36 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       // and injects instructions into the first user turn.
       const turns = convertResponseInputToTurns(request.input, request.instructions, request.tools);
 
-      // If there's a non-duplicate function_call_output, append it as a user turn
-      // Skip deduplication for stateless requests (no conversationId)
-      if (conversationId && Array.isArray(request.input)) {
-        const functionOutputs = request.input
-          .filter((item): item is FunctionCallOutput =>
-            typeof item === 'object' && 'type' in item && item.type === 'function_call_output'
-          )
-          .filter((item) => deps.conversationStore?.hasGeneratedCallId(conversationId, item.call_id) ?? false);
+      // If there's a function_call_output, append it as a user turn and track completion
+      if (Array.isArray(request.input)) {
+        const functionOutputs = request.input.filter((item): item is FunctionCallOutput =>
+          typeof item === 'object' && 'type' in item && item.type === 'function_call_output'
+        );
 
-        const lastFunctionOutput = functionOutputs[functionOutputs.length - 1];
+        if (conversationId && deps.conversationStore) {
+          // Stateful: filter to known call_ids and deduplicate
+          const knownOutputs = functionOutputs.filter(
+            (item) => deps.conversationStore?.hasGeneratedCallId(conversationId, item.call_id) ?? false
+          );
+          const lastFunctionOutput = knownOutputs[knownOutputs.length - 1];
 
-        if (lastFunctionOutput) {
-          const isDuplicate = deps.conversationStore?.isDuplicateFunctionCallId(conversationId, lastFunctionOutput.call_id) ?? false;
-          if (!isDuplicate) {
-            deps.conversationStore?.setLastFunctionCallId(conversationId, lastFunctionOutput.call_id);
-            turns.push({ role: 'user', content: JSON.stringify(lastFunctionOutput) });
-
-            trackCustomToolCompletion(deps, conversationId, lastFunctionOutput.call_id);
-            logger.debug(`[Server] Processing function_call_output for call_id: ${lastFunctionOutput.call_id}`);
-          } else {
-            logger.debug('[Server] Skipping duplicate function_call_output');
+          if (lastFunctionOutput) {
+            const isDuplicate = deps.conversationStore.isDuplicateFunctionCallId(conversationId, lastFunctionOutput.call_id);
+            if (!isDuplicate) {
+              deps.conversationStore.setLastFunctionCallId(conversationId, lastFunctionOutput.call_id);
+              turns.push({ role: 'user', content: JSON.stringify(lastFunctionOutput) });
+              trackCustomToolCompletion(deps, conversationId, lastFunctionOutput.call_id);
+              logger.debug(`[Server] Processing function_call_output for call_id: ${lastFunctionOutput.call_id}`);
+            } else {
+              logger.debug('[Server] Skipping duplicate function_call_output');
+            }
+          }
+        } else {
+          // Stateless: process all function_call_outputs, track completion
+          for (const output of functionOutputs) {
+            turns.push({ role: 'user', content: JSON.stringify(output) });
+            trackCustomToolCompletion(deps, undefined, output.call_id);
+            logger.debug(`[Server] Processing stateless function_call_output for call_id: ${output.call_id}`);
           }
         }
       }
