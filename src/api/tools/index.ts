@@ -42,3 +42,9 @@ export {
   type StreamingToolProcessor,
   type AccumulatingToolProcessor,
 } from './streaming-processor.js';
+
+// Native tool tracking (Lumo SSE tool_call/tool_result)
+export {
+  NativeToolTracker,
+  type NativeToolResult,
+} from './native-tool-tracker.js';
