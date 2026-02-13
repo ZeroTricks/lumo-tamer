@@ -221,6 +221,26 @@ export class ConversationStore {
     }
 
     /**
+     * Append tool calls as assistant messages.
+     * Each tool call stored as separate message with JSON content.
+     * Arguments are expected to already be normalized (via streaming-processor).
+     */
+    appendAssistantToolCalls(
+        id: ConversationId,
+        toolCalls: Array<{ name: string; arguments: string; call_id: string }>
+    ): void {
+        for (const tc of toolCalls) {
+            const content = JSON.stringify({
+                type: 'function_call',
+                call_id: tc.call_id,
+                name: tc.name,
+                arguments: tc.arguments,
+            });
+            this.appendAssistantResponse(id, content);
+        }
+    }
+
+    /**
      * Append a single user message (CLI mode - no deduplication needed)
      */
     appendUserMessage(id: ConversationId, content: string): Message {

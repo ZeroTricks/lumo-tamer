@@ -28,6 +28,7 @@ import { JsonBraceTracker } from '../api/tools/json-brace-tracker.js';
 import { parseNativeToolCallJson, isErrorResult } from '../api/tools/native-tool-parser.js';
 import { stripToolPrefix } from '../api/tools/prefix.js';
 import { getMetrics } from '../api/metrics/index.js';
+import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
 import type { ParsedToolCall } from '../api/tools/types.js';
 
 export interface LumoClientOptions {
@@ -374,6 +375,10 @@ export class LumoClient {
             return this.chatWithHistory(bounceTurns, onChunk, options, true);
         }
 
-        return result;
+        // Post-process title (remove quotes, trim, limit length)
+        return {
+            ...result,
+            title: result.title ? postProcessTitle(result.title) : undefined,
+        };
     }
 }
