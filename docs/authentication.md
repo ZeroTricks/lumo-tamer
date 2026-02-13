@@ -119,7 +119,13 @@ auth:
 **"Browser session is not authenticated"**
 - The browser session exists but the AUTH cookie is missing or expired. Log in again in the browser.
 
-**`tamer auth` succeeds but `tamer` or `tamer-server` fails**
+**`tamer auth` succeeds but `tamer` or `tamer server` fails**
+
+Similar issues:
+```
+WARN: Persisted session blob found but ClientKey fetch failed
+WARN: Conversation persistence may not work without ClientKey
+```
 - Your browser may be maintaining multiple active sessions, confusing the extraction logic. Log out of Proton, clear all browser data for all proton.me domains (account, root, lumo), then log in again and re-run `tamer auth browser`.
 
 ---
@@ -220,7 +226,9 @@ All methods store a `refreshToken` and use Proton's `/auth/refresh` endpoint:
 
 ### Troubleshooting
 
-Don't reuse the same tokens (browser or rclone) across different machines. Refreshing tokens will invalidate tokens on other machines.
+When token refresh fails, make sure that:
+- Your browser/lumo tabs used for the `browser` auth method are closed after extraction.
+- You don't reuse the same tokens (from `browser` or `rclone`) across different machines.
 
 ---
 
