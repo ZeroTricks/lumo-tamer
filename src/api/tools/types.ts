@@ -9,14 +9,14 @@ export interface ParsedToolCall {
 
 /**
  * Type guard to check if parsed JSON is a valid tool call.
- * Valid tool calls must have `name` (string) and `arguments` (object).
+ * Accepts both formats:
+ * - { name, arguments }
+ * - { type: 'function_call', name, arguments }
  */
-export function isToolCallJson(json: unknown): json is { name: string; arguments: unknown } {
-  return (
-    typeof json === 'object' &&
-    json !== null &&
-    'name' in json &&
-    typeof (json as Record<string, unknown>).name === 'string' &&
-    'arguments' in json
-  );
+export function isToolCallJson(json: unknown): json is { name: string; arguments: unknown; type?: string } {
+  if (typeof json !== 'object' || json === null) return false;
+  const obj = json as Record<string, unknown>;
+  if (typeof obj.name !== 'string' || !('arguments' in obj)) return false;
+  if ('type' in obj && obj.type !== 'function_call') return false;
+  return true;
 }

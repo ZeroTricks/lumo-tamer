@@ -56,6 +56,16 @@ describe('StreamingToolDetector', () => {
       expect(allToolCalls[0].name).toBe('notag');
     });
 
+    it('detects OpenAI-style function_call in code fence and parses string arguments', () => {
+      const detector = new StreamingToolDetector();
+      const { allToolCalls } = processAll(detector, [
+        '```json\n{"type":"function_call","name":"exec","arguments":"{\\"command\\":\\"echo hi\\"}"}\n```',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0]).toEqual({ name: 'exec', arguments: { command: 'echo hi' } });
+    });
+
     it('detects multiple tool calls', () => {
       const detector = new StreamingToolDetector();
       const { allToolCalls } = processAll(detector, [

@@ -20,19 +20,36 @@ import { logger } from '../../app/logger.js';
  */
 export function parseNativeToolCallJson(json: string): ParsedToolCall | null {
     try {
-        const parsed = JSON.parse(json);
-        if (typeof parsed !== 'object' || parsed === null || typeof parsed.name !== 'string') {
-            return null;
+        const parsed = JSON.parse(json) as Record<string, unknown>;
+        if (typeof parsed !== 'object' || parsed === null) return null;
+
+        // Support both:
+        // - {"name":"...","parameters":{...}} (Lumo native)
+        // - {"type":"function_call","name":"...","arguments":"{...}"} (OpenAI-style)
+        const name = typeof parsed.name === 'string' ? parsed.name : null;
+        if (!name) return null;
+
+        const rawArgs = parsed.arguments ?? parsed.parameters ?? {};
+        let args: Record<string, unknown> = {};
+
+        if (typeof rawArgs === 'string') {
+            try {
+                const parsedArgs = JSON.parse(rawArgs);
+                if (typeof parsedArgs === 'object' && parsedArgs !== null) {
+                    args = parsedArgs as Record<string, unknown>;
+                }
+            } catch {
+                // Keep default empty object if string arguments are malformed
+            }
+        } else if (typeof rawArgs === 'object' && rawArgs !== null) {
+            args = rawArgs as Record<string, unknown>;
         }
 
-        // Lumo uses 'parameters', our ParsedToolCall uses 'arguments'
-        const args = parsed.arguments ?? parsed.parameters ?? {};
-
-        logger.debug({ tool: parsed.name }, 'Parsed native tool call');
+        logger.debug({ tool: name }, 'Parsed native tool call');
 
         return {
-            name: parsed.name,
-            arguments: typeof args === 'object' && args !== null ? args : {},
+            name,
+            arguments: args,
         };
     } catch {
         return null;

@@ -30,7 +30,7 @@ export class APIServer {
   }
 
   private setupMiddleware(): void {
-    this.expressApp.use(express.json());
+    this.expressApp.use(express.json({ limit: '10mb' }));
     this.expressApp.use(setupAuthMiddleware(this.serverConfig.apiKey));
     this.expressApp.use(setupLoggingMiddleware());
     if (this.metrics) {

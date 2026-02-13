@@ -23,7 +23,7 @@ import type {
     Turn,
 } from './types.js';
 import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
-import { getCommandsConfig, getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
+import { getCommandsConfig, getLogConfig, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
 import { JsonBraceTracker } from '../api/tools/json-brace-tracker.js';
 import { parseNativeToolCallJson, isErrorResult } from '../api/tools/native-tool-parser.js';
 import { stripToolPrefix } from '../api/tools/prefix.js';
@@ -62,23 +62,11 @@ function isMisroutedToolCall(toolCall: ParsedToolCall | undefined): boolean {
     return !!toolCall && !KNOWN_NATIVE_TOOLS.has(toolCall.name);
 }
 
-/** Build the bounce instruction: config text + the misrouted tool call as JSON example.
- *  Includes the prefix in the example JSON so Lumo outputs it correctly. */
-function buildBounceInstruction(toolCall: ParsedToolCall): string {
-    const instruction = getInstructionsConfig().forToolBounce;
-
-    // In server mode, add the prefix to the tool name in the example
-    // (the tool name in toolCall has already been stripped, so we re-add it)
-    let toolName = toolCall.name;
-    if (getConfigMode() === 'server') {
-        const prefix = getCustomToolsConfig().prefix;
-        if (prefix && !toolName.startsWith(prefix)) {
-            toolName = `${prefix}${toolName}`;
-        }
-    }
-
-    const toolCallJson = JSON.stringify({ name: toolName, arguments: toolCall.arguments }, null, 2);
-    return `${instruction}\n${toolCallJson}`;
+/** Build a custom-tool JSON payload that the server-side detector can parse. */
+function buildCustomToolJson(toolCall: ParsedToolCall): string {
+    const prefix = getCustomToolsConfig().prefix;
+    const strippedName = stripToolPrefix(toolCall.name, prefix);
+    return JSON.stringify({ name: strippedName, arguments: toolCall.arguments }, null, 2);
 }
 
 export class LumoClient {
@@ -132,9 +120,9 @@ export class LumoClient {
         const toolResultTracker = new JsonBraceTracker();
         let firstNativeToolCall: ParsedToolCall | null = null;
         let nativeToolCallFailed = false;
-        // Suppress onChunk when a misrouted tool call is detected mid-stream
+        // Suppress onChunk when a custom tool call is detected in native SSE stream
         let suppressChunks = false;
-        // Signal to break read loop early on misrouted detection
+        // Signal to break read loop early once we have a native custom tool call
         let abortEarly = false;
 
         const processMessage = async (msg: GenerationToFrontendMessage) => {
@@ -175,16 +163,16 @@ export class LumoClient {
                             firstNativeToolCall = parseNativeToolCallJson(json);
                             if (firstNativeToolCall) {
                                 if (isMisroutedToolCall(firstNativeToolCall) && !isBounce) {
-                                    // Only abort on initial call; bounce responses may contain stale misrouted calls
+                                    // Treat native custom-tool calls as first-class, then convert to
+                                    // our JSON tool-call text format for downstream compatibility.
                                     suppressChunks = true;
                                     abortEarly = true;
-                                    // Track as custom tool with misrouted status (strip prefix for consistency)
                                     const strippedName = stripToolPrefix(firstNativeToolCall.name, getCustomToolsConfig().prefix);
                                     getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'misrouted', tool_name: strippedName });
                                     logger.debug({
                                         tool: firstNativeToolCall.name,
                                         partialResponse: fullResponse
-                                    }, 'Misrouted tool call detected, aborting stream');
+                                    }, 'Native custom tool call detected; converting to JSON tool call');
                                 } else {
                                     logger.debug({ raw: json }, 'Native SSE tool_call');
                                     // Native tool calls are tracked on completion (success/failed)
@@ -229,6 +217,15 @@ export class LumoClient {
             const finalMessages = processor.finalize();
             for (const msg of finalMessages) {
                 await processMessage(msg);
+            }
+
+            // If native SSE carried a custom tool call, synthesize JSON text for the
+            // existing server-side detector path (backward-compatible with current pipeline).
+            if (firstNativeToolCall && abortEarly && isMisroutedToolCall(firstNativeToolCall) && !isBounce) {
+                const toolJson = buildCustomToolJson(firstNativeToolCall);
+                const synthesized = `\`\`\`json\n${toolJson}\n\`\`\``;
+                fullResponse = synthesized;
+                onChunk?.(synthesized);
             }
 
             // Track native tool call completion (but not if misrouted - already tracked as custom/misrouted)
@@ -360,19 +357,7 @@ export class LumoClient {
             }
         }
 
-        // Bounce misrouted tool calls: ask Lumo to re-output as JSON text
-        if (!isBounce && isMisroutedToolCall(result.nativeToolCall)) {
-            const bounceInstruction = buildBounceInstruction(result.nativeToolCall!);
-            logger.info({ tool: result.nativeToolCall!.name }, 'Bouncing misrouted tool call');
-
-            const bounceTurns: Turn[] = [
-                ...turns,
-                { role: 'assistant', content: result.response },
-                { role: 'user', content: bounceInstruction },
-            ];
-
-            return this.chatWithHistory(bounceTurns, onChunk, options, true);
-        }
+        // Native custom-tool calls are converted during stream processing; no bounce loop.
 
         return result;
     }

@@ -34,6 +34,14 @@ describe('isToolCallJson', () => {
     expect(isToolCallJson(42)).toBe(false);
   });
 
+  it('accepts OpenAI-style function_call shape', () => {
+    expect(isToolCallJson({ type: 'function_call', name: 'exec', arguments: '{"command":"pwd"}' })).toBe(true);
+  });
+
+  it('rejects unsupported type field values', () => {
+    expect(isToolCallJson({ type: 'message', name: 'exec', arguments: {} })).toBe(false);
+  });
+
   it('rejects name that is not a string', () => {
     expect(isToolCallJson({ name: 42, arguments: {} })).toBe(false);
   });

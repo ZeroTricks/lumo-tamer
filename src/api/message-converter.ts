@@ -19,6 +19,42 @@ export interface NormalizedMessage {
 }
 
 /**
+ * Extract text from OpenAI-compatible content shapes.
+ * Supports:
+ * - string
+ * - [{ type: 'text', text: '...' }]
+ * - [{ text: '...' }]
+ * - { text: '...' }
+ */
+function extractTextContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+
+  if (Array.isArray(content)) {
+    const parts: string[] = [];
+    for (const item of content) {
+      if (typeof item === 'string') {
+        parts.push(item);
+        continue;
+      }
+      if (typeof item === 'object' && item !== null) {
+        const obj = item as Record<string, unknown>;
+        if (typeof obj.text === 'string') {
+          parts.push(obj.text);
+        }
+      }
+    }
+    return parts.join('\n').trim();
+  }
+
+  if (typeof content === 'object' && content !== null) {
+    const obj = content as Record<string, unknown>;
+    if (typeof obj.text === 'string') return obj.text;
+  }
+
+  return '';
+}
+
+/**
  * Normalize any input item to a standard { role, content } format.
  * Handles both Chat Completions (role: 'tool', tool_calls) and
  * Responses API (function_call, function_call_output) formats.
@@ -104,9 +140,9 @@ function extractSystemMessage(messages: ChatMessage[]): string | undefined {
   const systemMsg = messages.find(m =>
     m.role === 'system' || (m.role as string) === 'developer'
   );
-  // System messages always have string content (not null)
-  if (systemMsg && 'content' in systemMsg && typeof systemMsg.content === 'string') {
-    return systemMsg.content;
+  if (systemMsg && 'content' in systemMsg) {
+    const content = extractTextContent(systemMsg.content);
+    return content || undefined;
   }
   return undefined;
 }
@@ -142,7 +178,7 @@ function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: stri
     }
 
     // Regular user/assistant message
-    const content = typeof msg.content === 'string' ? msg.content : '';
+    const content = extractTextContent(msg.content);
 
     // Inject instructions into first user message (but not if it's a command)
     if (msg.role === 'user' && instructions && !instructionsInjected && !isCommand(content)) {
@@ -218,9 +254,10 @@ export function convertResponseInputToTurns(
       continue;
     }
     if ('role' in item && 'content' in item) {
+      const obj = item as { role: string; content: unknown };
       chatMessages.push({
-        role: (item as { role: string }).role as 'user' | 'assistant' | 'system',
-        content: (item as { content: string }).content,
+        role: obj.role as 'user' | 'assistant' | 'system',
+        content: extractTextContent(obj.content),
       });
     }
   }

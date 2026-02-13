@@ -45,6 +45,29 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
     try {
       const request: OpenAIChatRequest = req.body;
 
+      // Debug: log inbound message roles/content lengths to diagnose empty user content
+      try {
+        const debugMessages = Array.isArray(request.messages)
+          ? request.messages.map((m, i) => {
+              const content = typeof m.content === 'string' ? m.content : '';
+              return {
+                i,
+                role: m.role,
+                contentLength: content.length,
+                preview: content.slice(0, 120).replace(/\n/g, '\\n'),
+              };
+            })
+          : [];
+        logger.info({
+          model: request.model,
+          stream: request.stream ?? false,
+          messageCount: Array.isArray(request.messages) ? request.messages.length : 0,
+          debugMessages,
+        }, '[chat-completions] inbound request summary');
+      } catch (debugError) {
+        logger.warn({ error: String(debugError) }, '[chat-completions] failed to build inbound debug summary');
+      }
+
       // Validate request
       if (!request.messages || request.messages.length === 0) {
         return res.status(400).json({ error: 'Messages array is required' });

@@ -240,10 +240,25 @@ export class StreamingToolDetector {
       if (isToolCallJson(parsed)) {
         const prefix = getCustomToolsConfig().prefix;
         const toolName = stripToolPrefix(parsed.name, prefix);
+
+        let args: Record<string, unknown> = {};
+        if (typeof parsed.arguments === 'string') {
+          try {
+            const parsedArgs = JSON.parse(parsed.arguments);
+            if (typeof parsedArgs === 'object' && parsedArgs !== null) {
+              args = parsedArgs as Record<string, unknown>;
+            }
+          } catch {
+            // Keep args empty for malformed argument JSON
+          }
+        } else if (typeof parsed.arguments === 'object' && parsed.arguments !== null) {
+          args = parsed.arguments as Record<string, unknown>;
+        }
+
         logger.info(`Tool call detected: ${content.replace(/\n/g, ' ').substring(0, 100)}...`);
         return {
           name: toolName,
-          arguments: parsed.arguments as Record<string, unknown>,
+          arguments: args,
         };
       }
       // JSON parsed but schema invalid (missing name or arguments)

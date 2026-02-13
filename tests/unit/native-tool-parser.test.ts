@@ -53,8 +53,18 @@ describe('parseNativeToolCallJson', () => {
     expect(parseNativeToolCallJson('[1,2,3]')).toBeNull();
   });
 
+  it('parses OpenAI-style function_call with JSON string arguments', () => {
+    const result = parseNativeToolCallJson('{"type":"function_call","name":"exec","arguments":"{\\"command\\":\\"echo hi\\"}"}');
+    expect(result).toEqual({ name: 'exec', arguments: { command: 'echo hi' } });
+  });
+
+  it('treats malformed string arguments as empty object', () => {
+    const result = parseNativeToolCallJson('{"name":"test","arguments":"{not-json"}');
+    expect(result).toEqual({ name: 'test', arguments: {} });
+  });
+
   it('treats non-object arguments as empty object', () => {
-    const result = parseNativeToolCallJson('{"name":"test","arguments":"invalid"}');
+    const result = parseNativeToolCallJson('{"name":"test","arguments":123}');
     expect(result).toEqual({ name: 'test', arguments: {} });
   });
 });
