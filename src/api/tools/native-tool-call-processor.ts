@@ -90,23 +90,34 @@ export class NativeToolCallProcessor {
   /** Feed tool_call SSE content. Returns true if should abort early. */
   feedToolCall(content: string): boolean {
     for (const json of this.toolCallTracker.feed(content)) {
+      const toolCall = parseToolCallJson(json);
+      if (!toolCall) continue;
+
+      // Save first for result (used by bounce logic)
       if (!this.firstToolCall) {
-        this.firstToolCall = parseToolCallJson(json);
-        if (this.firstToolCall) {
-          if (this.isMisrouted(this.firstToolCall) && !this.isBounce) {
-            this._misrouted = true;
-            const strippedName = stripToolPrefix(
-              this.firstToolCall.name,
-              getCustomToolsConfig().prefix
-            );
-            getMetrics()?.toolCallsTotal.inc({
-              type: 'custom', status: 'misrouted', tool_name: strippedName
-            });
-            logger.debug({ tool: this.firstToolCall.name }, 'Misrouted tool call detected');
-            return true; // abort
-          }
-          logger.debug({ raw: json }, 'Native SSE tool_call');
+        this.firstToolCall = toolCall;
+      }
+
+      if (this.isMisrouted(toolCall)) {
+        const strippedName = stripToolPrefix(toolCall.name, getCustomToolsConfig().prefix);
+        getMetrics()?.toolCallsTotal.inc({
+          type: 'custom', status: 'misrouted', tool_name: strippedName
+        });
+        logger.debug({ tool: toolCall.name, isBounce: this.isBounce }, 'Misrouted tool call detected');
+
+        // Only abort on first misroute in non-bounce mode.
+        // Note: This means we may undercount if Lumo queues multiple misrouted calls
+        // in one response. The bounce response will count any subsequent retries.
+        if (!this.isBounce && toolCall === this.firstToolCall) {
+          this._misrouted = true;
+          return true;
         }
+      } else {
+        // Native tool - no success/failed distinction (unreliable)
+        getMetrics()?.toolCallsTotal.inc({
+          type: 'native', status: 'detected', tool_name: toolCall.name
+        });
+        logger.debug({ raw: json }, 'Native SSE tool_call');
       }
     }
     return false;
@@ -122,15 +133,9 @@ export class NativeToolCallProcessor {
     }
   }
 
-  /** Finalize and track metrics. Call after stream ends. */
+  /** Finalize processing. Call after stream ends. */
   finalize(): void {
-    if (this.firstToolCall && !this._misrouted) {
-      const status = this.failed ? 'failed' : 'success';
-      getMetrics()?.toolCallsTotal.inc({
-        type: 'native', status, tool_name: this.firstToolCall.name
-      });
-      logger.debug({ toolCall: this.firstToolCall, failed: this.failed }, 'Lumo native tool call');
-    }
+    // Metrics tracked per tool call in feedToolCall()
   }
 
   /** Get the result after stream completes. */
