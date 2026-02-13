@@ -9,7 +9,7 @@ import express from 'express';
 import type { Server } from 'http';
 import type { AddressInfo } from 'net';
 import { createResponsesRouter } from '../../src/api/routes/responses/index.js';
-import { createChatCompletionsRouter } from '../../src/api/routes/chat-completions.js';
+import { createChatCompletionsRouter } from '../../src/api/routes/chat-completions/index.js';
 import { createHealthRouter } from '../../src/api/routes/health.js';
 import { createModelsRouter } from '../../src/api/routes/models.js';
 import { RequestQueue } from '../../src/api/queue.js';

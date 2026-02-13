@@ -1,0 +1,184 @@
+import { Router, Request, Response } from 'express';
+import { randomUUID, createHash } from 'crypto';
+import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse } from '../../types.js';
+import { getServerConfig, getConversationsConfig } from '../../../app/config.js';
+import { logger } from '../../../app/logger.js';
+import { convertMessagesToTurns, normalizeInputItem } from '../../message-converter.js';
+import { getMetrics } from '../../metrics/index.js';
+import { ChatCompletionEventEmitter } from './events.js';
+import type { Turn } from '../../../lumo-client/index.js';
+import type { ConversationId } from '../../../conversations/index.js';
+import {
+  buildRequestContext,
+  persistTitle,
+  persistAssistantTurn,
+  generateChatCompletionId,
+  createStreamingToolProcessor,
+  trackCustomToolCompletion,
+  mapToolCallsForPersistence,
+} from '../shared.js';
+
+// Session ID generated once at module load - makes deterministic IDs unique per server session
+const SESSION_ID = randomUUID();
+
+/**
+ * Generate a deterministic conversation ID from the `user` field in the request.
+ * Used for clients like Home Assistant that set `user` to their internal conversation_id.
+ */
+function generateConversationIdFromUser(user: string): ConversationId {
+  const hash = createHash('sha256').update(`lumo-tamer:${SESSION_ID}:user:${user}`).digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
+
+export function createChatCompletionsRouter(deps: EndpointDependencies): Router {
+  const router = Router();
+
+  router.post('/v1/chat/completions', async (req: Request, res: Response) => {
+    try {
+      const request: OpenAIChatRequest = req.body;
+
+      // Validate request
+      if (!request.messages || request.messages.length === 0) {
+        return res.status(400).json({ error: 'Messages array is required' });
+      }
+
+      // Get the last user message
+      const lastUserMessage = [...request.messages].reverse().find(m => m.role === 'user');
+      if (!lastUserMessage) {
+        return res.status(400).json({ error: 'No user message found' });
+      }
+
+      // ===== Generate conversation ID for persistence =====
+      // Chat Completions has no conversation parameter per OpenAI spec.
+      // We use deriveIdFromUser to track conversations for Proton sync.
+      // Without a deterministic ID, treat the request as stateless (no persistence).
+      let conversationId: ConversationId | undefined;
+      if (getConversationsConfig()?.deriveIdFromUser && request.user) {
+        // Home Assistant sets `user` to its internal conversation_id, unique per chat session.
+        conversationId = generateConversationIdFromUser(request.user);
+      }
+      // No else - leave undefined for stateless requests
+
+      // ===== Persist incoming messages and track tool completions (stateful only) =====
+      if (conversationId && deps.conversationStore) {
+        const allMessages: Array<{ role: string; content: string }> = [];
+        for (const msg of request.messages) {
+          // Track custom tool completion for role: 'tool' messages
+          if (msg.role === 'tool' && 'tool_call_id' in msg) {
+            const toolCallId = (msg as { tool_call_id: string }).tool_call_id;
+            trackCustomToolCompletion(deps, conversationId, toolCallId);
+          }
+
+          // Use normalizeInputItem for tool-related messages (role: 'tool', tool_calls)
+          const normalized = normalizeInputItem(msg);
+          if (normalized) {
+            const normalizedArray = Array.isArray(normalized) ? normalized : [normalized];
+            allMessages.push(...normalizedArray);
+          } else {
+            // Regular message - ensure content is a string
+            allMessages.push({
+              role: msg.role,
+              content: typeof msg.content === 'string' ? msg.content : '',
+            });
+          }
+        }
+        deps.conversationStore.appendMessages(conversationId, allMessages);
+        logger.debug({ conversationId, messageCount: allMessages.length }, 'Persisted conversation messages');
+      } else {
+        // Stateless request - track +1 user message (not deduplicated)
+        getMetrics()?.messagesTotal.inc({ role: 'user' });
+      }
+
+      // Convert messages to Lumo turns (includes system message injection)
+      // Pass tools to enable legacy tool instruction injection
+      const turns = convertMessagesToTurns(request.messages, request.tools);
+
+      // Add to queue and process
+      await handleChatRequest(res, deps, request, turns, conversationId, request.stream ?? false);
+    } catch (error) {
+      logger.error('Error processing chat completion:');
+      logger.error(error);
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  return router;
+}
+
+async function handleChatRequest(
+  res: Response,
+  deps: EndpointDependencies,
+  request: OpenAIChatRequest,
+  turns: Turn[],
+  conversationId: ConversationId | undefined,
+  streaming: boolean
+): Promise<void> {
+  const id = generateChatCompletionId();
+  const created = Math.floor(Date.now() / 1000);
+  const model = request.model || getServerConfig().apiModelName;
+  const ctx = buildRequestContext(deps, conversationId, request.tools);
+
+  // Streaming setup
+  const emitter = streaming ? new ChatCompletionEventEmitter(res, id, created, model) : null;
+  if (emitter) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+  }
+
+  let accumulatedText = '';
+
+  const processor = createStreamingToolProcessor(ctx.hasCustomTools, {
+    emitTextDelta(text) {
+      accumulatedText += text;
+      emitter?.emitContentDelta(text);
+    },
+    emitToolCall(callId, tc) {
+      emitter?.emitToolCallDelta(callId, tc.name, tc.arguments);
+    },
+  });
+
+  try {
+    const result = await deps.queue.add(async () =>
+      deps.lumoClient.chatWithHistory(turns, processor.onChunk, {
+        commandContext: ctx.commandContext,
+        requestTitle: ctx.requestTitle,
+      })
+    );
+
+    logger.debug('[Server] Stream completed');
+    processor.finalize();
+    persistTitle(result, deps, conversationId);
+
+    const toolCalls = processor.toolCallsEmitted.length > 0 ? processor.toolCallsEmitted : undefined;
+    persistAssistantTurn(deps, conversationId, accumulatedText, mapToolCallsForPersistence(processor.toolCallsEmitted));
+
+    if (emitter) {
+      emitter.emitDone(toolCalls);
+    } else {
+      const response: OpenAIChatResponse = {
+        id,
+        object: 'chat.completion',
+        created,
+        model,
+        choices: [{
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: accumulatedText,
+            ...(toolCalls ? { tool_calls: toolCalls } : {}),
+          },
+          finish_reason: toolCalls ? 'tool_calls' : 'stop',
+        }],
+      };
+      res.json(response);
+    }
+  } catch (error) {
+    logger.error({ error: String(error) }, 'Chat completion error');
+    if (emitter) {
+      emitter.emitError(error as Error);
+    } else {
+      res.status(500).json({ error: String(error) });
+    }
+  }
+}
