@@ -76,10 +76,61 @@ describe('/v1/responses', () => {
       expect(body.status).toBe('completed');
     });
 
-    it('returns 400 for missing input', async () => {
+    it('returns OpenAI-style 400 for missing input', async () => {
       const res = await postResponses(ts, { stream: false });
 
       expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.type).toBe('invalid_request_error');
+      expect(body.error.param).toBe('input');
+      expect(body.error.code).toBe('missing_input');
+    });
+
+    it('returns OpenAI-style 400 when input array has no user message', async () => {
+      const res = await postResponses(ts, {
+        input: [{ role: 'assistant', content: 'hello' }],
+        stream: false,
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.type).toBe('invalid_request_error');
+      expect(body.error.param).toBe('input');
+      expect(body.error.code).toBe('missing_user_message');
+    });
+
+    it('returns OpenAI-style 400 for mutually exclusive previous_response_id + conversation', async () => {
+      const res = await postResponses(ts, {
+        input: 'Hello',
+        previous_response_id: 'resp_123',
+        conversation: { id: 'conv_123' },
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.type).toBe('invalid_request_error');
+      expect(body.error.param).toBe('previous_response_id');
+      expect(body.error.code).toBe('mutually_exclusive_fields');
+    });
+
+    it('supports max_tokens alias and echoes compatibility fields', async () => {
+      const res = await postResponses(ts, {
+        input: 'Hello',
+        stream: false,
+        max_tokens: 77,
+        user: 'chris-test-user',
+        previous_response_id: 'resp_prev_001',
+        tools: [{ type: 'function', function: { name: 'GetLiveContext', parameters: {} } }],
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.max_output_tokens).toBe(77);
+      expect(body.user).toBe('chris-test-user');
+      expect(body.previous_response_id).toBe('resp_prev_001');
+      expect(body.tool_choice).toBe('auto');
+      expect(Array.isArray(body.tools)).toBe(true);
+      expect(body.tools).toHaveLength(1);
     });
   });
 

@@ -3,6 +3,7 @@ import { getServerConfig, getMetricsConfig, authConfig } from '../app/config.js'
 import { resolveProjectPath } from '../app/paths.js';
 import { logger } from '../app/logger.js';
 import { setupAuthMiddleware, setupLoggingMiddleware } from './middleware.js';
+import { setupApiErrorHandler } from './error-handler.js';
 import { createHealthRouter } from './routes/health.js';
 import { createModelsRouter } from './routes/models.js';
 import { createChatCompletionsRouter } from './routes/chat-completions/index.js';
@@ -30,7 +31,8 @@ export class APIServer {
   }
 
   private setupMiddleware(): void {
-    this.expressApp.use(express.json({ limit: '10mb' }));
+    this.expressApp.use(express.json({ limit: this.serverConfig.requestBodyLimits.json }));
+    this.expressApp.use(express.urlencoded({ limit: this.serverConfig.requestBodyLimits.urlencoded, extended: true }));
     this.expressApp.use(setupAuthMiddleware(this.serverConfig.apiKey));
     this.expressApp.use(setupLoggingMiddleware());
     if (this.metrics) {
@@ -51,6 +53,9 @@ export class APIServer {
     this.expressApp.use(createChatCompletionsRouter(deps));
     this.expressApp.use(createResponsesRouter(deps));
     this.expressApp.use(createAuthRouter(deps));
+
+    // Normalize parser errors to OpenAI-style JSON responses.
+    this.expressApp.use(setupApiErrorHandler());
   }
 
   private getDependencies(): EndpointDependencies {

@@ -17,6 +17,7 @@ import {
   trackCustomToolCompletion,
   mapToolCallsForPersistence,
 } from '../shared.js';
+import { sendInvalidRequest, sendServerError } from '../../openai-error.js';
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session
 const SESSION_ID = randomUUID();
@@ -69,14 +70,14 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       }
 
       // Validate request
-      if (!request.messages || request.messages.length === 0) {
-        return res.status(400).json({ error: 'Messages array is required' });
+      if (!Array.isArray(request.messages) || request.messages.length === 0) {
+        return sendInvalidRequest(res, 'messages must be a non-empty array', 'messages', 'missing_messages');
       }
 
       // Get the last user message
       const lastUserMessage = [...request.messages].reverse().find(m => m.role === 'user');
       if (!lastUserMessage) {
-        return res.status(400).json({ error: 'No user message found' });
+        return sendInvalidRequest(res, 'At least one user message is required', 'messages', 'missing_user_message');
       }
 
       // ===== Generate conversation ID for persistence =====
@@ -131,7 +132,7 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
     } catch (error) {
       logger.error('Error processing chat completion:');
       logger.error(error);
-      res.status(500).json({ error: String(error) });
+      return sendServerError(res);
     }
   });
 
@@ -211,7 +212,7 @@ async function handleChatRequest(
     if (emitter) {
       emitter.emitError(error as Error);
     } else {
-      res.status(500).json({ error: String(error) });
+      sendServerError(res);
     }
   }
 }

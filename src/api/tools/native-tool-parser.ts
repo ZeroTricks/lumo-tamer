@@ -10,7 +10,7 @@
  * (custom tools Lumo mistakenly routed through the native pipeline).
  */
 
-import type { ParsedToolCall } from './types.js';
+import { parseToolCallJson, type ParsedToolCall } from './types.js';
 import { logger } from '../../app/logger.js';
 
 /**
@@ -20,37 +20,12 @@ import { logger } from '../../app/logger.js';
  */
 export function parseNativeToolCallJson(json: string): ParsedToolCall | null {
     try {
-        const parsed = JSON.parse(json) as Record<string, unknown>;
-        if (typeof parsed !== 'object' || parsed === null) return null;
+        const parsed = JSON.parse(json);
+        const normalized = parseToolCallJson(parsed);
+        if (!normalized) return null;
 
-        // Support both:
-        // - {"name":"...","parameters":{...}} (Lumo native)
-        // - {"type":"function_call","name":"...","arguments":"{...}"} (OpenAI-style)
-        const name = typeof parsed.name === 'string' ? parsed.name : null;
-        if (!name) return null;
-
-        const rawArgs = parsed.arguments ?? parsed.parameters ?? {};
-        let args: Record<string, unknown> = {};
-
-        if (typeof rawArgs === 'string') {
-            try {
-                const parsedArgs = JSON.parse(rawArgs);
-                if (typeof parsedArgs === 'object' && parsedArgs !== null) {
-                    args = parsedArgs as Record<string, unknown>;
-                }
-            } catch {
-                // Keep default empty object if string arguments are malformed
-            }
-        } else if (typeof rawArgs === 'object' && rawArgs !== null) {
-            args = rawArgs as Record<string, unknown>;
-        }
-
-        logger.debug({ tool: name }, 'Parsed native tool call');
-
-        return {
-            name,
-            arguments: args,
-        };
+        logger.debug({ tool: normalized.name }, 'Parsed native tool call');
+        return normalized;
     } catch {
         return null;
     }

@@ -11,7 +11,7 @@
  */
 
 import { JsonBraceTracker } from './json-brace-tracker.js';
-import { isToolCallJson, type ParsedToolCall } from './types.js';
+import { isToolCallJson, parseToolCallJson, type ParsedToolCall } from './types.js';
 import { logger } from '../../app/logger.js';
 import { getCustomToolsConfig } from '../../app/config.js';
 import { stripToolPrefix } from './prefix.js';
@@ -238,27 +238,14 @@ export class StreamingToolDetector {
     try {
       const parsed = JSON.parse(content);
       if (isToolCallJson(parsed)) {
+        const normalized = parseToolCallJson(parsed);
+        if (!normalized) return null;
         const prefix = getCustomToolsConfig().prefix;
-        const toolName = stripToolPrefix(parsed.name, prefix);
-
-        let args: Record<string, unknown> = {};
-        if (typeof parsed.arguments === 'string') {
-          try {
-            const parsedArgs = JSON.parse(parsed.arguments);
-            if (typeof parsedArgs === 'object' && parsedArgs !== null) {
-              args = parsedArgs as Record<string, unknown>;
-            }
-          } catch {
-            // Keep args empty for malformed argument JSON
-          }
-        } else if (typeof parsed.arguments === 'object' && parsed.arguments !== null) {
-          args = parsed.arguments as Record<string, unknown>;
-        }
-
+        const toolName = stripToolPrefix(normalized.name, prefix);
         logger.info(`Tool call detected: ${content.replace(/\n/g, ' ').substring(0, 100)}...`);
         return {
           name: toolName,
-          arguments: args,
+          arguments: normalized.arguments,
         };
       }
       // JSON parsed but schema invalid (missing name or arguments)
