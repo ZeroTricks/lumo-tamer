@@ -25,3 +25,20 @@ export { StreamingToolDetector, type ProcessResult } from './streaming-tool-dete
 
 // JSON brace tracking
 export { JsonBraceTracker } from './json-brace-tracker.js';
+
+// Call ID utilities
+export {
+  generateCallId,
+  extractToolNameFromCallId,
+  trackCustomToolCompletion,
+  addToolNameToFunctionOutput,
+} from './call-id.js';
+
+// Streaming processor
+export {
+  createStreamingToolProcessor,
+  createAccumulatingToolProcessor,
+  type StreamingToolEmitter,
+  type StreamingToolProcessor,
+  type AccumulatingToolProcessor,
+} from './streaming-processor.js';

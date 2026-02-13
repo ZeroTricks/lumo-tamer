@@ -9,11 +9,10 @@ import {
   generateResponseId,
   generateItemId,
   generateFunctionCallId,
-  generateCallId,
   generateChatCompletionId,
-  createAccumulatingToolProcessor,
-  extractToolNameFromCallId,
 } from '../../src/api/routes/shared.js';
+import { generateCallId, extractToolNameFromCallId } from '../../src/api/tools/call-id.js';
+import { createAccumulatingToolProcessor } from '../../src/api/tools/streaming-processor.js';
 
 describe('ID generators', () => {
   it('generateResponseId returns resp-{uuid} format', () => {

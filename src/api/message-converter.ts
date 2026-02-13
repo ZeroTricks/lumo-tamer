@@ -6,32 +6,7 @@ import type { ChatMessage, ResponseInputItem, OpenAITool, OpenAIToolCall } from 
 import type { Turn } from '../lumo-client/index.js';
 import { isCommand } from '../app/commands.js';
 import { buildInstructions } from './instructions.js';
-import { extractToolNameFromCallId } from './routes/shared.js';
-import { getCustomToolsConfig } from '../app/config.js';
-
-/**
- * Add tool_name with prefix to function_call_output JSON for Lumo context.
- * Extracts tool name from call_id and re-prefixes it.
- */
-function addToolNameToFunctionOutput(content: string): string {
-  try {
-    const parsed = JSON.parse(content);
-    if (parsed.type === 'function_call_output' && parsed.call_id) {
-      const toolName = extractToolNameFromCallId(String(parsed.call_id));
-      if (toolName) {
-        const prefix = getCustomToolsConfig().prefix;
-        const prefixedToolName = prefix ? `${prefix}${toolName}` : toolName;
-        return JSON.stringify({
-          ...parsed,
-          tool_name: prefixedToolName,
-        });
-      }
-    }
-  } catch {
-    // Not valid JSON, return as-is
-  }
-  return content;
-}
+import { addToolNameToFunctionOutput } from './tools/call-id.js';
 
 // ── Input normalization ───────────────────────────────────────────────
 //

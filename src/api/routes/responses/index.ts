@@ -6,7 +6,7 @@ import { handleRequest } from './request-handlers.js';
 import { convertResponseInputToTurns, normalizeInputItem } from '../../message-converter.js';
 import { getConversationsConfig } from '../../../app/config.js';
 import { getMetrics } from '../../metrics/index.js';
-import { trackCustomToolCompletion } from '../shared.js';
+import { trackCustomToolCompletion } from '../../tools/call-id.js';
 
 import type { ConversationId } from '../../../conversations/types.js';
 

@@ -12,15 +12,15 @@ import { logger } from '../../../app/logger.js';
 import { ResponseEventEmitter } from './events.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/index.js';
+import { generateCallId } from '../../tools/call-id.js';
+import { createStreamingToolProcessor } from '../../tools/streaming-processor.js';
 import {
   buildRequestContext,
   persistTitle,
   persistAssistantTurn,
-  createStreamingToolProcessor,
   generateResponseId,
   generateItemId,
   generateFunctionCallId,
-  generateCallId,
   mapToolCallsForPersistence,
   type ToolCallForPersistence,
 } from '../shared.js';

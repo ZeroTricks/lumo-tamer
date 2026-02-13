@@ -1,10 +1,7 @@
 import { randomUUID } from 'crypto';
 import { getCustomToolsConfig } from '../../app/config.js';
-import { logger } from '../../app/logger.js';
-import { StreamingToolDetector } from '../tools/streaming-tool-detector.js';
 import { postProcessTitle } from '../../proton-shims/lumo-api-client-utils.js';
 import { getMetrics } from '../metrics/index.js';
-import type { ParsedToolCall } from '../tools/types.js';
 import type { EndpointDependencies, OpenAITool, OpenAIToolCall } from '../types.js';
 import type { CommandContext } from '../../app/commands.js';
 import type { ConversationId } from '../../conversations/types.js';
@@ -32,43 +29,6 @@ export function mapToolCallsForPersistence(
     arguments: tc.function.arguments,
     call_id: tc.id,
   }));
-}
-
-// ── Tool completion tracking ───────────────────────────────────────
-
-/**
- * Set of call_ids that have been tracked as completed.
- * Prevents double-counting on duplicate requests (both stateful and stateless).
- */
-const completedCallIds = new Set<string>();
-
-/**
- * Extract tool name from call_id format: `toolname__uuid`.
- * Returns undefined if call_id doesn't match the expected format.
- */
-export function extractToolNameFromCallId(callId: string): string | undefined {
-  const match = callId.match(/^(.+)__[a-f0-9]+$/);
-  return match?.[1];
-}
-
-/**
- * Track completion of a custom tool call.
- * Extracts tool name from call_id format (toolname__uuid).
- * Deduplicates via completedCallIds Set.
- */
-export function trackCustomToolCompletion(callId: string): void {
-  if (completedCallIds.has(callId)) return;
-  completedCallIds.add(callId);
-
-  const toolName = extractToolNameFromCallId(callId);
-  if (!toolName) return;
-
-  logger.info({ toolName, call_id: callId }, 'Custom tool call completed');
-  getMetrics()?.toolCallsTotal.inc({
-    type: 'custom',
-    status: 'completed',
-    tool_name: toolName,
-  });
 }
 
 // ── Request context ────────────────────────────────────────────────
@@ -172,33 +132,6 @@ export function persistResponseWithToolCalls(
   }
 }
 
-// ── Accumulating tool processor (for non-streaming requests) ───────
-
-export interface AccumulatingToolProcessor {
-  /** The underlying streaming processor */
-  processor: StreamingToolProcessor;
-  /** Get all accumulated text after processing */
-  getAccumulatedText: () => string;
-}
-
-/**
- * Create a tool processor that accumulates text instead of emitting.
- * Used for non-streaming requests that still process the Lumo stream.
- */
-export function createAccumulatingToolProcessor(hasCustomTools: boolean): AccumulatingToolProcessor {
-  let accumulatedText = '';
-
-  const processor = createStreamingToolProcessor(hasCustomTools, {
-    emitTextDelta(text) { accumulatedText += text; },
-    emitToolCall(_callId, _tc) { /* tool calls tracked in processor.toolCallsEmitted */ },
-  });
-
-  return {
-    processor,
-    getAccumulatedText: () => accumulatedText,
-  };
-}
-
 // ── ID generation ─────────────────────────────────────────────────
 
 /** Generate a response ID (`resp-xxx`). */
@@ -216,80 +149,7 @@ export function generateFunctionCallId(): string {
   return `fc-${randomUUID()}`;
 }
 
-/**
- * Generate a call_id for tool calls.
- * Format: `toolname__uuid` - embeds tool name for later extraction.
- */
-export function generateCallId(toolName: string): string {
-  return `${toolName}__${randomUUID().replace(/-/g, '').slice(0, 24)}`;
-}
-
 /** Generate a chat completion ID (`chatcmpl-xxx`). */
 export function generateChatCompletionId(): string {
   return `chatcmpl-${randomUUID()}`;
-}
-
-// ── Streaming tool processor ───────────────────────────────────────
-
-export interface StreamingToolEmitter {
-  /** Emit a text delta chunk. */
-  emitTextDelta(text: string): void;
-  /** Emit a completed tool call. */
-  emitToolCall(callId: string, toolCall: ParsedToolCall): void;
-}
-
-export interface StreamingToolProcessor {
-  /** Process an incoming chunk from Lumo. */
-  onChunk(chunk: string): void;
-  /** Finalize after stream ends; emits remaining buffered content. */
-  finalize(): void;
-  /** All tool calls emitted during streaming. */
-  toolCallsEmitted: OpenAIToolCall[];
-}
-
-/**
- * Create a streaming tool processor that separates tool call JSON
- * from normal text during streaming.
- *
- * Handlers provide format-specific emitter callbacks.
- */
-export function createStreamingToolProcessor(
-  hasCustomTools: boolean,
-  emitter: StreamingToolEmitter
-): StreamingToolProcessor {
-  const detector = hasCustomTools ? new StreamingToolDetector() : null;
-  const toolCallsEmitted: OpenAIToolCall[] = [];
-
-  function processToolCalls(completedToolCalls: ParsedToolCall[]): void {
-    for (const tc of completedToolCalls) {
-      const callId = generateCallId(tc.name);
-      toolCallsEmitted.push({
-        id: callId,
-        type: 'function',
-        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-      });
-      emitter.emitToolCall(callId, tc);
-      logger.debug({ tool: tc.name }, '[Server] Tool call emitted in stream');
-    }
-  }
-
-  return {
-    toolCallsEmitted,
-    onChunk(chunk: string): void {
-      if (detector) {
-        const { textToEmit, completedToolCalls } = detector.processChunk(chunk);
-        if (textToEmit) emitter.emitTextDelta(textToEmit);
-        processToolCalls(completedToolCalls);
-      } else {
-        emitter.emitTextDelta(chunk);
-      }
-    },
-    finalize(): void {
-      if (detector) {
-        const { textToEmit, completedToolCalls } = detector.finalize();
-        if (textToEmit) emitter.emitTextDelta(textToEmit);
-        processToolCalls(completedToolCalls);
-      }
-    },
-  };
 }

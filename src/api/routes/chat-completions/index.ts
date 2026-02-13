@@ -8,13 +8,13 @@ import { getMetrics } from '../../metrics/index.js';
 import { ChatCompletionEventEmitter } from './events.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/types.js';
+import { trackCustomToolCompletion } from '../../tools/call-id.js';
+import { createStreamingToolProcessor } from '../../tools/streaming-processor.js';
 import {
   buildRequestContext,
   persistTitle,
   persistAssistantTurn,
   generateChatCompletionId,
-  createStreamingToolProcessor,
-  trackCustomToolCompletion,
   mapToolCallsForPersistence,
 } from '../shared.js';
 
