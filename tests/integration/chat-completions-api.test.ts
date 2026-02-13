@@ -58,13 +58,17 @@ describe('/v1/chat/completions', () => {
       expect(body.choices[0].message.content).toContain('Mocked');
     });
 
-    it('returns 400 for missing messages', async () => {
+    it('returns OpenAI-style 400 for missing messages', async () => {
       const res = await postChat(ts, { model: 'lumo', stream: false });
 
       expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.type).toBe('invalid_request_error');
+      expect(body.error.param).toBe('messages');
+      expect(body.error.code).toBe('missing_messages');
     });
 
-    it('returns 400 for messages without user role', async () => {
+    it('returns OpenAI-style 400 for messages without user role', async () => {
       const res = await postChat(ts, {
         model: 'lumo',
         messages: [{ role: 'system', content: 'You are helpful' }],
@@ -72,6 +76,10 @@ describe('/v1/chat/completions', () => {
       });
 
       expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.type).toBe('invalid_request_error');
+      expect(body.error.param).toBe('messages');
+      expect(body.error.code).toBe('missing_user_message');
     });
   });
 
