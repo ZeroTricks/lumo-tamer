@@ -11,12 +11,6 @@ export {
   applyToolNamePrefix,
 } from './prefix.js';
 
-// Native SSE tool parsing
-export {
-  parseNativeToolCallJson,
-  isErrorResult,
-} from './native-tool-parser.js';
-
 // Tool call types
 export { isToolCallJson, type ParsedToolCall } from './types.js';
 
@@ -25,3 +19,26 @@ export { StreamingToolDetector, type ProcessResult } from './streaming-tool-dete
 
 // JSON brace tracking
 export { JsonBraceTracker } from './json-brace-tracker.js';
+
+// Call ID utilities
+export {
+  generateCallId,
+  extractToolNameFromCallId,
+  trackCustomToolCompletion,
+  addToolNameToFunctionOutput,
+} from './call-id.js';
+
+// Streaming processor
+export {
+  createStreamingToolProcessor,
+  createAccumulatingToolProcessor,
+  type StreamingToolEmitter,
+  type StreamingToolProcessor,
+  type AccumulatingToolProcessor,
+} from './streaming-processor.js';
+
+// Native tool call processing (Lumo SSE tool_call/tool_result)
+export {
+  NativeToolCallProcessor,
+  type NativeToolCallResult,
+} from './native-tool-call-processor.js';

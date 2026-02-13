@@ -12,15 +12,15 @@ import { logger } from '../../../app/logger.js';
 import { ResponseEventEmitter } from './events.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/index.js';
+import { generateCallId } from '../../tools/call-id.js';
+import { createStreamingToolProcessor } from '../../tools/streaming-processor.js';
 import {
   buildRequestContext,
   persistTitle,
   persistAssistantTurn,
-  createStreamingToolProcessor,
   generateResponseId,
   generateItemId,
   generateFunctionCallId,
-  generateCallId,
   mapToolCallsForPersistence,
   type ToolCallForPersistence,
 } from '../shared.js';
@@ -64,7 +64,7 @@ function buildOutputItems(options: BuildOutputOptions): OutputItem[] {
         : JSON.stringify(toolCall.arguments);
 
       // Use pre-generated call_id if available, otherwise generate new one
-      const callId = 'call_id' in toolCall ? (toolCall as ToolCallForPersistence).call_id : generateCallId();
+      const callId = 'call_id' in toolCall ? (toolCall as ToolCallForPersistence).call_id : generateCallId(toolCall.name);
 
       output.push({
         type: 'function_call',

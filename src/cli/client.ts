@@ -14,7 +14,6 @@ import { logger } from '../app/logger.js';
 import { getLocalActionsConfig, getCommandsConfig } from '../app/config.js';
 import { isCommand, executeCommand, type CommandContext } from '../app/commands.js';
 import type { AppContext } from '../app/index.js';
-import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
 import { CodeBlockDetector, type CodeBlock } from './code-block-detector.js';
 import { blockHandlers, type BlockResult } from './block-handlers.js';
 import { confirmAndApply } from './confirm.js';
@@ -95,10 +94,9 @@ export class CLIClient {
     }
     print('\n');
 
-    // Handle title
+    // Handle title (already processed by LumoClient)
     if (result.title) {
-      const processedTitle = postProcessTitle(result.title);
-      this.store.setTitle(this.conversationId, processedTitle);
+      this.store.setTitle(this.conversationId, result.title);
     }
 
     return { response: result.response, blocks, title: result.title };

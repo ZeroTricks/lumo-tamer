@@ -9,10 +9,10 @@ import {
   generateResponseId,
   generateItemId,
   generateFunctionCallId,
-  generateCallId,
   generateChatCompletionId,
-  createAccumulatingToolProcessor,
 } from '../../src/api/routes/shared.js';
+import { generateCallId, extractToolNameFromCallId } from '../../src/api/tools/call-id.js';
+import { createAccumulatingToolProcessor } from '../../src/api/tools/streaming-processor.js';
 
 describe('ID generators', () => {
   it('generateResponseId returns resp-{uuid} format', () => {
@@ -30,9 +30,16 @@ describe('ID generators', () => {
     expect(id).toMatch(/^fc-[0-9a-f-]{36}$/);
   });
 
-  it('generateCallId returns call_{24-char-hex} format', () => {
-    const id = generateCallId();
-    expect(id).toMatch(/^call_[0-9a-f]{24}$/);
+  it('generateCallId returns toolname__{24-char-hex} format', () => {
+    const id = generateCallId('my_tool');
+    expect(id).toMatch(/^my_tool__[0-9a-f]{24}$/);
+  });
+
+  it('extractToolNameFromCallId extracts tool name from call_id', () => {
+    expect(extractToolNameFromCallId('my_tool__abc123def456789012345678')).toBe('my_tool');
+    expect(extractToolNameFromCallId('search__0123456789abcdef01234567')).toBe('search');
+    expect(extractToolNameFromCallId('invalid_format')).toBeUndefined();
+    expect(extractToolNameFromCallId('call_abc123')).toBeUndefined();
   });
 
   it('generateChatCompletionId returns chatcmpl-{uuid} format', () => {

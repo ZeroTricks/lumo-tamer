@@ -7,14 +7,14 @@ import { convertMessagesToTurns, normalizeInputItem } from '../../message-conver
 import { getMetrics } from '../../metrics/index.js';
 import { ChatCompletionEventEmitter } from './events.js';
 import type { Turn } from '../../../lumo-client/index.js';
-import type { ConversationId } from '../../../conversations/index.js';
+import type { ConversationId } from '../../../conversations/types.js';
+import { trackCustomToolCompletion } from '../../tools/call-id.js';
+import { createStreamingToolProcessor } from '../../tools/streaming-processor.js';
 import {
   buildRequestContext,
   persistTitle,
   persistAssistantTurn,
   generateChatCompletionId,
-  createStreamingToolProcessor,
-  trackCustomToolCompletion,
   mapToolCallsForPersistence,
 } from '../shared.js';
 
@@ -68,12 +68,17 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       // No else - leave undefined for stateless requests
 
       // ===== Track tool completions (all requests) =====
+      // Set-based dedup in trackCustomToolCompletion prevents double-counting
       for (const msg of request.messages) {
         const callId = extractToolCallId(msg);
         if (callId) {
-          trackCustomToolCompletion(deps, conversationId, callId);
+          trackCustomToolCompletion(callId);
         }
       }
+
+      // ===== Convert messages to Lumo turns (includes system message injection) =====
+      // Pass tools to enable legacy tool instruction injection
+      const turns = convertMessagesToTurns(request.messages, request.tools);
 
       // ===== Persist incoming messages (stateful only) =====
       if (conversationId && deps.conversationStore) {
@@ -98,10 +103,6 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
         // Stateless request - track +1 user message (not deduplicated)
         getMetrics()?.messagesTotal.inc({ role: 'user' });
       }
-
-      // Convert messages to Lumo turns (includes system message injection)
-      // Pass tools to enable legacy tool instruction injection
-      const turns = convertMessagesToTurns(request.messages, request.tools);
 
       // Add to queue and process
       await handleChatRequest(res, deps, request, turns, conversationId, request.stream ?? false);
