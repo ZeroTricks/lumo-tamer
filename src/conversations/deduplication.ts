@@ -7,7 +7,6 @@
 
 import { createHash } from 'crypto';
 import type { Message, MessageFingerprint, MessageRole } from './types.js';
-import { normalizeInputItem } from '../api/message-converter.js';
 
 /**
  * Compute hash for a message (role + content)
@@ -49,35 +48,6 @@ export function fingerprintMessages(messages: Message[]): MessageFingerprint[] {
 export interface IncomingMessage {
     role: string;
     content: string;
-}
-
-/**
- * Normalize an array of incoming items to IncomingMessage[].
- * Handles both regular messages and tool-related items (function_call, function_call_output).
- */
-export function normalizeIncomingMessages(items: unknown[]): IncomingMessage[] {
-    const result: IncomingMessage[] = [];
-    for (const item of items) {
-        if (typeof item !== 'object' || item === null) continue;
-
-        // Try to normalize tool-related items first
-        const normalized = normalizeInputItem(item);
-        if (normalized) {
-            const normalizedArray = Array.isArray(normalized) ? normalized : [normalized];
-            result.push(...normalizedArray);
-            continue;
-        }
-
-        // Regular message with role/content
-        const obj = item as Record<string, unknown>;
-        if ('role' in obj && 'content' in obj) {
-            result.push({
-                role: String(obj.role),
-                content: String(obj.content ?? ''),
-            });
-        }
-    }
-    return result;
 }
 
 /**
