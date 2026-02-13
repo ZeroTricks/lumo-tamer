@@ -11,12 +11,6 @@ export {
   applyToolNamePrefix,
 } from './prefix.js';
 
-// Native SSE tool parsing
-export {
-  parseNativeToolCallJson,
-  isErrorResult,
-} from './native-tool-parser.js';
-
 // Tool call types
 export { isToolCallJson, type ParsedToolCall } from './types.js';
 
@@ -43,8 +37,8 @@ export {
   type AccumulatingToolProcessor,
 } from './streaming-processor.js';
 
-// Native tool tracking (Lumo SSE tool_call/tool_result)
+// Native tool call processing (Lumo SSE tool_call/tool_result)
 export {
-  NativeToolTracker,
-  type NativeToolResult,
-} from './native-tool-tracker.js';
+  NativeToolCallProcessor,
+  type NativeToolCallResult,
+} from './native-tool-call-processor.js';

@@ -24,7 +24,7 @@ import type {
 } from './types.js';
 import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
 import { getCommandsConfig, getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
-import { NativeToolTracker } from '../api/tools/native-tool-tracker.js';
+import { NativeToolCallProcessor } from '../api/tools/native-tool-call-processor.js';
 import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
 import type { ParsedToolCall } from '../api/tools/types.js';
 
@@ -121,8 +121,8 @@ export class LumoClient {
         let fullResponse = '';
         let fullTitle = '';
 
-        // Native tool call tracking (SSE tool_call/tool_result targets)
-        const nativeToolTracker = new NativeToolTracker(isBounce);
+        // Native tool call processing (SSE tool_call/tool_result targets)
+        const nativeToolProcessor = new NativeToolCallProcessor(isBounce);
         let suppressChunks = false;
         let abortEarly = false;
 
@@ -159,12 +159,12 @@ export class LumoClient {
                     // Accumulate title chunks (title streams before message)
                     fullTitle += content;
                 } else if (msg.target === 'tool_call') {
-                    if (nativeToolTracker.feedToolCall(content)) {
+                    if (nativeToolProcessor.feedToolCall(content)) {
                         suppressChunks = true;
                         abortEarly = true;
                     }
                 } else if (msg.target === 'tool_result') {
-                    nativeToolTracker.feedToolResult(content);
+                    nativeToolProcessor.feedToolResult(content);
                 }
             } else if (
                 msg.type === 'error' ||
@@ -198,8 +198,8 @@ export class LumoClient {
             }
 
             // Finalize tracking and get result
-            nativeToolTracker.finalize();
-            const result = nativeToolTracker.getResult();
+            nativeToolProcessor.finalize();
+            const result = nativeToolProcessor.getResult();
 
             return {
                 response: fullResponse,
