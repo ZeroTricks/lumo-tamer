@@ -53,6 +53,16 @@ describe('parseNativeToolCallJson', () => {
     expect(parseNativeToolCallJson('[1,2,3]')).toBeNull();
   });
 
+  it('parses JSON-string arguments', () => {
+    const result = parseNativeToolCallJson('{"name":"test","arguments":"{\\"a\\":1}"}');
+    expect(result).toEqual({ name: 'test', arguments: { a: 1 } });
+  });
+
+  it('supports nested OpenAI function shape', () => {
+    const result = parseNativeToolCallJson('{"type":"function","function":{"name":"test","arguments":"{\\"a\\":1}"}}');
+    expect(result).toEqual({ name: 'test', arguments: { a: 1 } });
+  });
+
   it('treats non-object arguments as empty object', () => {
     const result = parseNativeToolCallJson('{"name":"test","arguments":"invalid"}');
     expect(result).toEqual({ name: 'test', arguments: {} });

@@ -10,7 +10,7 @@
  * (custom tools Lumo mistakenly routed through the native pipeline).
  */
 
-import type { ParsedToolCall } from './types.js';
+import { parseToolCallJson, type ParsedToolCall } from './types.js';
 import { logger } from '../../app/logger.js';
 
 /**
@@ -21,19 +21,11 @@ import { logger } from '../../app/logger.js';
 export function parseNativeToolCallJson(json: string): ParsedToolCall | null {
     try {
         const parsed = JSON.parse(json);
-        if (typeof parsed !== 'object' || parsed === null || typeof parsed.name !== 'string') {
-            return null;
-        }
+        const normalized = parseToolCallJson(parsed);
+        if (!normalized) return null;
 
-        // Lumo uses 'parameters', our ParsedToolCall uses 'arguments'
-        const args = parsed.arguments ?? parsed.parameters ?? {};
-
-        logger.debug({ tool: parsed.name }, 'Parsed native tool call');
-
-        return {
-            name: parsed.name,
-            arguments: typeof args === 'object' && args !== null ? args : {},
-        };
+        logger.debug({ tool: normalized.name }, 'Parsed native tool call');
+        return normalized;
     } catch {
         return null;
     }

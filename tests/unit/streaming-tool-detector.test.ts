@@ -56,6 +56,16 @@ describe('StreamingToolDetector', () => {
       expect(allToolCalls[0].name).toBe('notag');
     });
 
+    it('detects tool call with parameters alias', () => {
+      const detector = new StreamingToolDetector();
+      const { allToolCalls } = processAll(detector, [
+        '```json\n{"name":"search","parameters":{"q":"weather"}}\n```',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0]).toEqual({ name: 'search', arguments: { q: 'weather' } });
+    });
+
     it('detects multiple tool calls', () => {
       const detector = new StreamingToolDetector();
       const { allToolCalls } = processAll(detector, [
@@ -113,6 +123,16 @@ describe('StreamingToolDetector', () => {
 
       expect(allToolCalls).toHaveLength(1);
       expect(allToolCalls[0].arguments).toEqual({ text: 'say "hello" world' });
+    });
+
+    it('detects nested OpenAI function shape', () => {
+      const detector = new StreamingToolDetector();
+      const { allToolCalls } = processAll(detector, [
+        '\n{"type":"function","function":{"name":"GetWeather","arguments":"{\\"city\\":\\"Boston\\"}"}}',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0]).toEqual({ name: 'GetWeather', arguments: { city: 'Boston' } });
     });
 
     it('detects raw JSON with character-by-character streaming', () => {
