@@ -1,5 +1,17 @@
 # lumo-tamer
 
+```
+                             ┌─────────────────┐     ┌─────────────────┐
+     ┌─────────────────┐     │   lumo-tamer    │◄───►│  Home Assistant │
+     │  Proton Lumo    │     │                 │     └─────────────────┘
+     │                 │     │   Translation   │     ┌─────────────────┐
+     │  Your favorite  │◄───►│   Encryption    │◄───►│  Open WebUI     │
+     │  private AI     │     │   Tooling       │     └─────────────────┘
+     │                 │     │                 │     ┌─────────────────┐
+     └─────────────────┘     │                 │◄───►│   CLI           │ 
+                             └─────────────────┘     └─────────────────┘
+```
+
 Use [Proton Lumo](https://lumo.proton.me/) in your favorite AI-enabled app or on the command line.
 
 [Lumo](https://lumo.proton.me/about) is Proton's privacy-first AI assistant, powered by open-source LLMs running exclusively on Proton-controlled servers. Your prompts and responses are never logged, stored, or used for training. See Proton's [security model](https://proton.me/blog/lumo-security-model) and [privacy policy](https://proton.me/support/lumo-privacy) for details.
@@ -8,7 +20,7 @@ lumo-tamer is a lightweight local proxy that talks to Proton's Lumo API using th
 
 ## Features
 
-- OpenAI-compatible API server.
+- OpenAI-compatible API server with experimental tool support.
 - Interactive CLI, let Lumo help you execute commands, read, create and edit files.
 - Sync your conversations with Proton to access them on https://lumo.proton.me or in mobile apps.
 
