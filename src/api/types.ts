@@ -61,7 +61,7 @@ export interface OpenAIToolCall {
 }
 
 export interface OpenAIChatRequest {
-  model: string;
+  model?: string;
   messages: ChatMessage[];
   stream?: boolean;
   temperature?: number;
@@ -144,6 +144,8 @@ export interface OpenAIResponseRequest {
   stream?: boolean;
   temperature?: number;
   max_output_tokens?: number;
+  // Compatibility alias accepted by some OpenAI-style clients.
+  max_tokens?: number;
   store?: boolean;
   metadata?: Record<string, string>;
   tools?: any[];

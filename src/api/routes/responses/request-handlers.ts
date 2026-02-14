@@ -24,6 +24,7 @@ import {
   mapToolCallsForPersistence,
   type ToolCallForPersistence,
 } from '../shared.js';
+import { sendServerError } from '../../openai-error.js';
 
 // ── Output building ────────────────────────────────────────────────
 
@@ -96,29 +97,29 @@ function createCompletedResponse(
     completed_at: Math.floor(Date.now() / 1000),
     error: null,
     incomplete_details: null,
-    instructions: request.instructions || null,
-    max_output_tokens: request.max_output_tokens || null,
+    instructions: request.instructions ?? null,
+    max_output_tokens: request.max_output_tokens ?? request.max_tokens ?? null,
     model: request.model || getServerConfig().apiModelName,
     output,
     parallel_tool_calls: false,
-    previous_response_id: null,
+    previous_response_id: request.previous_response_id ?? null,
     reasoning: {
       effort: null,
       summary: null,
     },
-    store: request.store || false,
-    temperature: request.temperature || 1.0,
+    store: request.store ?? false,
+    temperature: request.temperature ?? 1.0,
     text: {
       format: {
         type: 'text',
       },
     },
-    tool_choice: 'none',
-    tools: [],
+    tool_choice: request.tools && request.tools.length > 0 ? 'auto' : 'none',
+    tools: request.tools ?? [],
     top_p: 1.0,
     truncation: 'auto',
     usage: null,
-    user: null,
+    user: request.user ?? null,
     metadata: request.metadata || {},
   };
 }
@@ -211,7 +212,7 @@ export async function handleRequest(
       emitter.emitError(error as Error);
       res.end();
     } else {
-      res.status(500).json({ error: String(error) });
+      sendServerError(res);
     }
   }
 }

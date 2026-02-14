@@ -107,6 +107,12 @@ server:
   apiKey: "your-secret-api-key-here"
   apiModelName: "lumo"
 
+  # HTTP request parser limits (Express/body-parser)
+  # Increase if clients send large tool/context payloads.
+  requestBodyLimits:
+    json: "10mb"
+    urlencoded: "10mb"
+
   # Prometheus metrics endpoint
   metrics:
     # Enable /metrics endpoint

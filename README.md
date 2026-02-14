@@ -88,11 +88,21 @@ server:
   apiKey: my-super-secret-key
 ```
 
+Optional: adjust HTTP parser limits for larger client payloads (tool/context-heavy requests):
+```yaml
+server:
+  requestBodyLimits:
+    json: "25mb"
+    urlencoded: "25mb"
+```
+
 Run `tamer server`
 
 Then, point your favorite OpenAI-compatible app to `https://yourhost:3003/v1` and provide your API key.
 
 **Note:** The API implements a subset of OpenAI-compatible endpoints and has only been tested with a handful of clients (Home Assistant and Open WebUI).
+
+Compatibility handling includes normalization for OpenAI-style tool-call shapes and API error formatting across `/v1/chat/completions` and `/v1/responses`.
 
 | Endpoint | Description |
 |----------|-------------|

@@ -56,6 +56,11 @@ const metricsConfigSchema = z.object({
   prefix: z.string(),
 });
 
+const requestBodyLimitsSchema = z.object({
+  json: z.union([z.string().min(1), z.number().positive()]),
+  urlencoded: z.union([z.string().min(1), z.number().positive()]),
+});
+
 // Instructions schemas
 const cliInstructionsConfigSchema = z.object({
   template: z.string(),
@@ -117,6 +122,7 @@ const serverMergedConfigSchema = z.object({
   customTools: customToolsConfigSchema,
   instructions: serverInstructionsConfigSchema,
   metrics: metricsConfigSchema,
+  requestBodyLimits: requestBodyLimitsSchema,
   port: z.number().int().positive(),
   apiKey: z.string().min(1, 'server.apiKey is required'),
   apiModelName: z.string().min(1),
