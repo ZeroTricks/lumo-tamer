@@ -219,20 +219,30 @@ export class StreamingToolDetector {
   /**
    * Try to extract a tool name from content, even if JSON is malformed.
    * Uses regex to find "name": "..." pattern.
+   * Returns null if no name found (indicating this isn't a tool call attempt).
    */
-  private extractToolName(content: string): string {
+  private extractToolName(content: string): string | null {
     const match = content.match(/"name"\s*:\s*"([^"]+)"/);
     if (match) {
       const prefix = getCustomToolsConfig().prefix;
       return stripToolPrefix(match[1], prefix);
     }
-    return 'unknown';
+    return null;
+  }
+
+  /**
+   * Log and track an invalid tool call attempt.
+   * Only called when we've determined this was actually a tool call attempt (has a name).
+   */
+  private trackInvalidToolCall(reason: string, content: string, toolName: string): void {
+    logger.info(`Invalid tool call (${reason}): ${content.replace(/\n/g, ' ')}`);
+    getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: toolName });
   }
 
   /**
    * Try to parse content as a tool call JSON.
    * Strips the configured prefix from the tool name.
-   * Logs and tracks metrics for both valid and invalid tool calls.
+   * Only logs/tracks as invalid if content appears to be an attempted tool call (has a name).
    */
   private tryParseToolCall(content: string): ParsedToolCall | null {
     try {
@@ -248,15 +258,20 @@ export class StreamingToolDetector {
           arguments: normalized.arguments,
         };
       }
-      // JSON parsed but schema invalid (missing name or arguments)
-      const toolName = this.extractToolName(content);
-      logger.info(`Invalid tool call (bad schema): ${content.replace(/\n/g, ' ')}`);
-      getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: toolName });
+      // JSON parsed but schema invalid - only track if it has a name (looks like attempted tool call)
+      if ('name' in parsed && typeof parsed.name === 'string') {
+        const prefix = getCustomToolsConfig().prefix;
+        const toolName = stripToolPrefix(parsed.name, prefix);
+        this.trackInvalidToolCall('missing arguments', content, toolName);
+      }
+      // Otherwise it's just regular JSON, don't track
     } catch {
-      // JSON parse failed
+      // JSON parse failed - only track if regex finds a name (looks like attempted tool call)
       const toolName = this.extractToolName(content);
-      logger.info(`Invalid tool call (malformed JSON): ${content.replace(/\n/g, ' ')}`);
-      getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: toolName });
+      if (toolName) {
+        this.trackInvalidToolCall('malformed JSON', content, toolName);
+      }
+      // Otherwise it's just broken/regular JSON, don't track
     }
     return null;
   }

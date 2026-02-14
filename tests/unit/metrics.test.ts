@@ -94,9 +94,9 @@ describe('MetricsService', () => {
 
   describe('toolCallsTotal', () => {
     it('tracks tool calls by type, status, and tool_name', async () => {
-      // Native tools: success/failed (tracked on completion)
-      metrics.toolCallsTotal.inc({ type: 'native', status: 'success', tool_name: 'web_search' });
-      metrics.toolCallsTotal.inc({ type: 'native', status: 'failed', tool_name: 'proton_info' });
+      // Native tools: detected (no success/failed - unreliable)
+      metrics.toolCallsTotal.inc({ type: 'native', status: 'detected', tool_name: 'web_search' });
+      metrics.toolCallsTotal.inc({ type: 'native', status: 'detected', tool_name: 'proton_info' });
       // Custom tools: completed (tracked on function_call_output)
       metrics.toolCallsTotal.inc({ type: 'custom', status: 'completed', tool_name: 'my_tool' });
       // Custom tools: invalid (malformed JSON)
@@ -108,8 +108,7 @@ describe('MetricsService', () => {
       expect(output).toContain('test_tool_calls_total');
       expect(output).toContain('type="native"');
       expect(output).toContain('type="custom"');
-      expect(output).toContain('status="success"');
-      expect(output).toContain('status="failed"');
+      expect(output).toContain('status="detected"');
       expect(output).toContain('status="completed"');
       expect(output).toContain('status="invalid"');
       expect(output).toContain('status="misrouted"');

@@ -1,16 +1,18 @@
 #!/bin/bash
 #
 # Sync upstream changes from Proton WebClients repository
-# Usage: npm run sync-upstream
+# Usage: npm run sync-upstream (must be run from project root)
 #
 # Fetches files directly from GitHub without requiring a local clone.
 #
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-cd "$PROJECT_DIR"
+# Verify we're in project root
+if [ ! -f "package.json" ] || [ ! -d "src/proton-upstream" ]; then
+    echo "Error: Must be run from project root via 'npm run sync-upstream'"
+    exit 1
+fi
 
 # Configuration
 UPSTREAM_REPO="ProtonMail/WebClients"
@@ -48,9 +50,6 @@ declare -A UPSTREAM_FILES=(
     ["util/date.ts"]="util/date.ts"
     ["util/objects.ts"]="util/objects.ts"
     ["util/sorting.ts"]="util/sorting.ts"
-
-    # Note: config.ts is a shim - we only track it to detect APP_VERSION changes
-    ["config.ts"]="config.ts"
 )
 
 echo -e "${BLUE}=== Proton WebClients Upstream Sync ===${NC}\n"
@@ -123,11 +122,15 @@ for local_path in "${!UPSTREAM_FILES[@]}"; do
 done
 
 # Check APP_VERSION specifically (important for x-pm-appversion header)
-UPSTREAM_VERSION=$(grep -oP "APP_VERSION\s*=\s*'\\K[^']+" "${TEMP_DIR}/config.ts" 2>/dev/null || echo "")
-LOCAL_VERSION=$(grep -oP "APP_VERSION\s*=\s*'\\K[^']+" "${UPSTREAM_DIR}/config.ts" 2>/dev/null || echo "")
-if [ -n "$UPSTREAM_VERSION" ] && [ "$UPSTREAM_VERSION" != "$LOCAL_VERSION" ]; then
-    echo -e "\n${YELLOW}⚠ APP_VERSION changed upstream: ${LOCAL_VERSION} -> ${UPSTREAM_VERSION}${NC}"
-    echo -e "  Update src/proton-upstream/config.ts if needed."
+# config.ts is a shim locally, so we download upstream version just for version comparison
+UPSTREAM_CONFIG_TEMP="${TEMP_DIR}/_upstream_config.ts"
+if curl -sfL -o "$UPSTREAM_CONFIG_TEMP" "${UPSTREAM_BASE_URL}/config.ts" 2>/dev/null; then
+    UPSTREAM_VERSION=$(grep -oP "APP_VERSION\s*=\s*'\\K[^']+" "$UPSTREAM_CONFIG_TEMP" 2>/dev/null || echo "")
+    LOCAL_VERSION=$(grep -oP "APP_VERSION\s*=\s*'\\K[^']+" "${UPSTREAM_DIR}/config.ts" 2>/dev/null || echo "")
+    if [ -n "$UPSTREAM_VERSION" ] && [ "$UPSTREAM_VERSION" != "$LOCAL_VERSION" ]; then
+        echo -e "\n${YELLOW}⚠ APP_VERSION changed upstream: ${LOCAL_VERSION} -> ${UPSTREAM_VERSION}${NC}"
+        echo -e "  Update src/proton-upstream/config.ts if needed."
+    fi
 fi
 
 # Check adapted (not 1:1) upstream files for changes

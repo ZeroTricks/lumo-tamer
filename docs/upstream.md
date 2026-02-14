@@ -10,8 +10,8 @@ The `@proton/*` imports are resolved via TypeScript path aliases to our shims.
 ## Source Information
 
 - **Repository:** https://github.com/ProtonMail/WebClients
-- **Commit:** 8206a9933db97d0e62d45d7f4c9a7248c30e67b5
-- **Sync Date:** 2026-01-22
+- **Commit:** 6dfd1f7954d2ca716789a96badb81e45941fa845
+- **Sync Date:** 2026-02-13
 - **License:** GPLv3
 
 ## Directory Structure

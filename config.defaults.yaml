@@ -96,7 +96,8 @@ commands:
   # Enable slash commands (/save, /help, /logout, etc.)
   # When disabled, commands are ignored and treated as regular messages.
   enabled: true
-  # Alternative prefix for commands (useful for voice assistants).
+  # Alternative wakeword for commands
+  # Useful for voice assistants or clients that have /commands themselves.
   # Example: "tamer help" instead of "/help"
   wakeword: "tamer"
 

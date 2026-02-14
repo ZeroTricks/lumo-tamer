@@ -2,23 +2,24 @@
 This project creates an OpenAI-compatible API on top of Proton's conversation agent Lumo.
 
 ## Architecture
-lumo-tamer consists of following parts: API, bridge, Lumo WebClient
 
-- API:
-  2 main API endpoints:
-  - /v1/responses, see src/api/routes/responses
-  - /v1/chat/completions, see src/api/routes/chat-completions.ts
+**Entry point**: `src/tamer.ts` - dispatches to server (`tamer server`), CLI (default), or auth (`tamer auth`).
 
+**Application** (`src/app/`): Shared bootstrap for all modes. Loads config, initializes auth, creates LumoClient + ConversationStore + optional sync. Exposes `AppContext` to consumers.
 
-- The bridge:
-  See src/lumo-client, src/conversations. Our own code connecting the API to Proton's Lumo WebClient. It provides:
-  - Things we can't reuse from The Lumo WebClient itself, ie. authentication
-  - Own functionality: command parsing (user want to do something), tool parsing (Lumo calls tool/function), etc.
+**Clients** (both use LumoClient + ConversationStore):
+- API (`src/api/`): `/v1/responses` (primary), `/v1/chat/completions`. Message conversion in `message-converter.ts`, tool call parsing in `tools/`, shared logic in `routes/shared.ts`.
+- CLI (`src/cli/`): Interactive client with code block detection/execution.
 
-- Lumo's WebClient:
-  Code from Proton's open source Lumo WebClient applications/lumo in monorepo https://github.com/ProtonMail/WebClients/ . A clone of the monorepo can be found in ~/integrations/WebClients . Use docs/proton-webclients-analysis.md as a starting point.
-  - src/proton-upstream: files pulled 1:1, see docs/upstream.md
-  - src/proton-shims: partially reimplements (closed source) `@proton/crypto/*` using standard libraries
+**Core**:
+- **LumoClient** (`src/lumo-client/client.ts`): Bridge to Proton. Handles U2L encryption, SSE streaming, native tool call detection (web_search, weather, etc.), bounces misrouted custom tools.
+- **ConversationStore** (`src/conversations/store.ts`): In-memory LRU cache. Message deduplication, turn conversion, dirty-flagging for sync.
+- **Auth** (`src/auth/`): Three providers (login/Go SRP, browser token extraction, rclone). `AuthManager` handles auto-refresh + 401 retries.
+- **Sync** (`src/conversations/sync/`, `encryption/`): Optional Proton-native storage. KeyManager for user keys, SyncService for push/pull.
+
+**Proton integration**:
+- `src/proton-upstream/`: Unmodified files from WebClients monorepo (see `docs/upstream.md`)
+- `src/proton-shims/`: Reimplements `@proton/crypto/*` and others for Node.js, without large dependency trees.
 
 
   ## Coding guidelines:
@@ -27,14 +28,12 @@ lumo-tamer consists of following parts: API, bridge, Lumo WebClient
     - Use TS aliases and shims to make them work.
     - Update src/proton-upstream/sync-upstream.sh when pulling new files.
     - Always mention sources/inspiration when you write code in src/proton-shims or src/lumo-client .
-  - API: /v1/responses is the most important endpoint, always implement/test this one first.
   - Write modular code, reuse common logic between:
     - different authentication methods
-    - /responses and /chat/completions endpoints
+    - /v1/responses and /v1/chat/completions endpoints
     - API and CLI calls
-  - Use src/logger.ts for logging. Use print() to force printing to stdout. Don't use console.log().
   - Use config.ts, config.yaml and config.defaults.yaml to add configuration parameters. Don't put defaults in config.ts or other code; config.defaults.yaml is the single source of truth.
-  - Ignore todos within code unless you need to rewrite code anyway, or unless specifically mentioned.
+  - Use src/logger.ts for logging. Use print() to force printing to stdout. Don't use console.log().
 
   ## Testing:
   - Framework: Vitest. Run `npm test` (all) or `npm run test:unit` / `npm run test:integration`.

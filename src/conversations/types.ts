@@ -84,9 +84,6 @@ export interface ConversationState {
     dirty: boolean;             // Needs sync to server
     remoteId?: RemoteId;        // Server-assigned ID (if synced)
     lastSyncedAt?: number;      // Last successful sync timestamp
-    // Request deduplication (per-conversation)
-    lastFunctionCallId?: string;
-    generatedCallIds: Map<string, string>;  // call_id -> tool_name mapping
 }
 
 /**

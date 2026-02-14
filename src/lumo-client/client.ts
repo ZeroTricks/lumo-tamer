@@ -23,11 +23,9 @@ import type {
     Turn,
 } from './types.js';
 import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
-import { getCommandsConfig, getLogConfig, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
-import { JsonBraceTracker } from '../api/tools/json-brace-tracker.js';
-import { parseNativeToolCallJson, isErrorResult } from '../api/tools/native-tool-parser.js';
-import { stripToolPrefix } from '../api/tools/prefix.js';
-import { getMetrics } from '../api/metrics/index.js';
+import { getCommandsConfig, getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
+import { NativeToolCallProcessor } from '../api/tools/native-tool-call-processor.js';
+import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
 import type { ParsedToolCall } from '../api/tools/types.js';
 
 export interface LumoClientOptions {
@@ -50,23 +48,31 @@ export interface ChatResult {
     nativeToolCall?: ParsedToolCall;
     /** Whether the native tool call failed server-side (tool_result contained error). */
     nativeToolCallFailed?: boolean;
+    /** Whether a misrouted custom tool was detected (routed through native SSE pipeline). */
+    misrouted?: boolean;
 }
 
 const DEFAULT_INTERNAL_TOOLS: ToolName[] = ['proton_info'];
 const DEFAULT_EXTERNAL_TOOLS: ToolName[] = ['web_search', 'weather', 'stock', 'cryptocurrency'];
-const KNOWN_NATIVE_TOOLS = new Set<string>([...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]);
 const DEFAULT_ENDPOINT = 'ai/v1/chat';
 
-/** A misrouted tool call is a custom tool Lumo mistakenly routed through its native SSE pipeline. */
-function isMisroutedToolCall(toolCall: ParsedToolCall | undefined): boolean {
-    return !!toolCall && !KNOWN_NATIVE_TOOLS.has(toolCall.name);
-}
+/** Build the bounce instruction: config text + the misrouted tool call as JSON example.
+ *  Includes the prefix in the example JSON so Lumo outputs it correctly. */
+function buildBounceInstruction(toolCall: ParsedToolCall): string {
+    const instruction = getInstructionsConfig().forToolBounce;
 
-/** Build a custom-tool JSON payload that the server-side detector can parse. */
-function buildCustomToolJson(toolCall: ParsedToolCall): string {
-    const prefix = getCustomToolsConfig().prefix;
-    const strippedName = stripToolPrefix(toolCall.name, prefix);
-    return JSON.stringify({ name: strippedName, arguments: toolCall.arguments }, null, 2);
+    // In server mode, add the prefix to the tool name in the example
+    // (the tool name in toolCall has already been stripped, so we re-add it)
+    let toolName = toolCall.name;
+    if (getConfigMode() === 'server') {
+        const prefix = getCustomToolsConfig().prefix;
+        if (prefix && !toolName.startsWith(prefix)) {
+            toolName = `${prefix}${toolName}`;
+        }
+    }
+
+    const toolCallJson = JSON.stringify({ name: toolName, arguments: toolCall.arguments }, null, 2);
+    return `${instruction}\n${toolCallJson}`;
 }
 
 export class LumoClient {
@@ -115,14 +121,9 @@ export class LumoClient {
         let fullResponse = '';
         let fullTitle = '';
 
-        // Native tool call tracking (SSE tool_call/tool_result targets)
-        const toolCallTracker = new JsonBraceTracker();
-        const toolResultTracker = new JsonBraceTracker();
-        let firstNativeToolCall: ParsedToolCall | null = null;
-        let nativeToolCallFailed = false;
-        // Suppress onChunk when a custom tool call is detected in native SSE stream
+        // Native tool call processing (SSE tool_call/tool_result targets)
+        const nativeToolProcessor = new NativeToolCallProcessor(isBounce);
         let suppressChunks = false;
-        // Signal to break read loop early once we have a native custom tool call
         let abortEarly = false;
 
         const processMessage = async (msg: GenerationToFrontendMessage) => {
@@ -144,7 +145,7 @@ export class LumoClient {
                             adString
                         );
                     } catch (error) {
-                        console.error('Failed to decrypt chunk:', error);
+                        logger.error(error, 'Failed to decrypt chunk:');
                         // Continue with encrypted content
                     }
                 }
@@ -158,35 +159,12 @@ export class LumoClient {
                     // Accumulate title chunks (title streams before message)
                     fullTitle += content;
                 } else if (msg.target === 'tool_call') {
-                    for (const json of toolCallTracker.feed(content)) {
-                        if (!firstNativeToolCall) {
-                            firstNativeToolCall = parseNativeToolCallJson(json);
-                            if (firstNativeToolCall) {
-                                if (isMisroutedToolCall(firstNativeToolCall) && !isBounce) {
-                                    // Treat native custom-tool calls as first-class, then convert to
-                                    // our JSON tool-call text format for downstream compatibility.
-                                    suppressChunks = true;
-                                    abortEarly = true;
-                                    const strippedName = stripToolPrefix(firstNativeToolCall.name, getCustomToolsConfig().prefix);
-                                    getMetrics()?.toolCallsTotal.inc({ type: 'custom', status: 'misrouted', tool_name: strippedName });
-                                    logger.debug({
-                                        tool: firstNativeToolCall.name,
-                                        partialResponse: fullResponse
-                                    }, 'Native custom tool call detected; converting to JSON tool call');
-                                } else {
-                                    logger.debug({ raw: json }, 'Native SSE tool_call');
-                                    // Native tool calls are tracked on completion (success/failed)
-                                }
-                            }
-                        }
+                    if (nativeToolProcessor.feedToolCall(content)) {
+                        suppressChunks = true;
+                        abortEarly = true;
                     }
                 } else if (msg.target === 'tool_result') {
-                    for (const json of toolResultTracker.feed(content)) {
-                        logger.debug({ raw: json }, 'Native SSE tool_result');
-                        if (firstNativeToolCall && !nativeToolCallFailed && isErrorResult(json)) {
-                            nativeToolCallFailed = true;
-                        }
-                    }
+                    nativeToolProcessor.feedToolResult(content);
                 }
             } else if (
                 msg.type === 'error' ||
@@ -219,32 +197,16 @@ export class LumoClient {
                 await processMessage(msg);
             }
 
-            // If native SSE carried a custom tool call, synthesize JSON text for the
-            // existing server-side detector path (backward-compatible with current pipeline).
-            if (firstNativeToolCall && abortEarly && isMisroutedToolCall(firstNativeToolCall) && !isBounce) {
-                const toolJson = buildCustomToolJson(firstNativeToolCall);
-                const synthesized = `\`\`\`json\n${toolJson}\n\`\`\``;
-                fullResponse = synthesized;
-                onChunk?.(synthesized);
-            }
-
-            // Track native tool call completion (but not if misrouted - already tracked as custom/misrouted)
-            if (firstNativeToolCall && !abortEarly) {
-                const toolCall = firstNativeToolCall as ParsedToolCall;
-                logger.debug({ toolCall, failed: nativeToolCallFailed }, 'Lumo native tool call');
-                // Track tool call success/failure
-                if (nativeToolCallFailed) {
-                    getMetrics()?.toolCallsTotal.inc({ type: 'native', status: 'failed', tool_name: toolCall.name });
-                } else {
-                    getMetrics()?.toolCallsTotal.inc({ type: 'native', status: 'success', tool_name: toolCall.name });
-                }
-            }
+            // Finalize tracking and get result
+            nativeToolProcessor.finalize();
+            const result = nativeToolProcessor.getResult();
 
             return {
                 response: fullResponse,
                 title: fullTitle || undefined,
-                nativeToolCall: firstNativeToolCall ?? undefined,
-                nativeToolCallFailed: firstNativeToolCall ? nativeToolCallFailed : undefined,
+                nativeToolCall: result.toolCall,
+                nativeToolCallFailed: result.toolCall ? result.failed : undefined,
+                misrouted: result.misrouted,
             };
         } finally {
             reader.releaseLock();
@@ -357,8 +319,24 @@ export class LumoClient {
             }
         }
 
-        // Native custom-tool calls are converted during stream processing; no bounce loop.
+        // Bounce misrouted tool calls: ask Lumo to re-output as JSON text
+        if (!isBounce && result.misrouted && result.nativeToolCall) {
+            const bounceInstruction = buildBounceInstruction(result.nativeToolCall);
+            logger.info({ tool: result.nativeToolCall.name }, 'Bouncing misrouted tool call');
 
-        return result;
+            const bounceTurns: Turn[] = [
+                ...turns,
+                { role: 'assistant', content: result.response },
+                { role: 'user', content: bounceInstruction },
+            ];
+
+            return this.chatWithHistory(bounceTurns, onChunk, options, true);
+        }
+
+        // Post-process title (remove quotes, trim, limit length)
+        return {
+            ...result,
+            title: result.title ? postProcessTitle(result.title) : undefined,
+        };
     }
 }
