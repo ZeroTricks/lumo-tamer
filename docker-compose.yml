@@ -14,7 +14,9 @@ services:
       - NODE_ENV=production
     restart: unless-stopped
 
-  # Browser service - runs Chromium with CDP enabled (headed mode for dev)
+  # Optional: Browser service
+  # Only needed when using "browser" auth method and you can't use your own browser.
+  # Runs Chromium with CDP enabled, UI accessible via :3001
   browser:
     # image: lscr.io/linuxserver/chromium:latest
     build:
