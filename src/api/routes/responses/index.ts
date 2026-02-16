@@ -7,8 +7,9 @@ import { convertResponseInputToTurns, normalizeInputItem } from '../../message-c
 import { getConversationsConfig } from '../../../app/config.js';
 import { getMetrics } from '../../metrics/index.js';
 import { trackCustomToolCompletion } from '../../tools/call-id.js';
+import { sendInvalidRequest, sendServerError } from '../../openai-error.js';
 
-import type { ConversationId } from '../../../conversations/types.js';
+import type { ConversationId } from '../../../conversations/index.js';
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session
 // This prevents 409 conflicts with deleted conversations from previous sessions
@@ -71,6 +72,15 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
 
       // ===== STEP 1: Determine conversation ID =====
       // Without a deterministic ID, treat the request as stateless (no persistence/dedup).
+      if (request.previous_response_id && request.conversation) {
+        return sendInvalidRequest(
+          res,
+          'previous_response_id and conversation cannot be used together',
+          'previous_response_id',
+          'mutually_exclusive_fields'
+        );
+      }
+
       let conversationId: ConversationId | undefined;
       const conversationFromRequest = getConversationIdFromRequest(request);
 
@@ -88,15 +98,15 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       // No else - leave undefined for stateless requests
 
       // ===== STEP 2: Validate input =====
-      if (!request.input) {
-        return res.status(400).json({ error: 'Input is required (string or message array)' });
+      if (request.input === undefined || request.input === null) {
+        return sendInvalidRequest(res, 'input is required (string or message array)', 'input', 'missing_input');
       }
       if (Array.isArray(request.input)) {
         const hasUserMessage = request.input.some((m) =>
           typeof m === 'object' && 'role' in m && m.role === 'user'
         );
         if (!hasUserMessage) {
-          return res.status(400).json({ error: 'No user message found in input array' });
+          return sendInvalidRequest(res, 'input array must include at least one user message', 'input', 'missing_user_message');
         }
       }
 
@@ -149,7 +159,7 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
     } catch (error) {
       logger.error('Error processing response:');
       logger.error(error);
-      res.status(500).json({ error: String(error) });
+      return sendServerError(res);
     }
   });
 
