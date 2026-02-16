@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse } from '../../types.js';
-import { getServerConfig, getConversationsConfig } from '../../../app/config.js';
+import { getServerConfig, getConversationsConfig, getLogConfig } from '../../../app/config.js';
 import { logger } from '../../../app/logger.js';
 import { convertMessagesToTurns, normalizeInputItem } from '../../message-converter.js';
 import { getMetrics } from '../../metrics/index.js';
@@ -55,11 +55,11 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
                 i,
                 role: m.role,
                 contentLength: content.length,
-                preview: content.slice(0, 120).replace(/\n/g, '\\n'),
+                preview: getLogConfig().messageContent ? content.slice(0, 120).replace(/\n/g, '\\n') : 'hidden',
               };
             })
           : [];
-        logger.info({
+        logger.debug({
           model: request.model,
           stream: request.stream ?? false,
           messageCount: Array.isArray(request.messages) ? request.messages.length : 0,
