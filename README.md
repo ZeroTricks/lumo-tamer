@@ -99,6 +99,8 @@ Run `tamer server`
 
 Then, point your favorite OpenAI-compatible app to `https://yourhost:3003/v1` and provide your API key.
 
+**Tip:** Run `tamer server` as a docker service or use a tool like nohup to run it in the background.
+
 **Note:** The API implements a subset of OpenAI-compatible endpoints and has only been tested with a handful of clients (see [API clients](#api-clients))
 
 | Endpoint | Description |
@@ -249,6 +251,12 @@ Following API clients have been tested and are known to work.
 ### OpenClaw
 Add Lumo to `models.providers` in your OpenClaw config. [Example](docs/openclaw.md).
 
+
+### Nanocoder
+Status: very experimental.
+
+Nanocoder sends many instructions and relies on Lumo calling **a lot** of tools. Lumo will misroute many tool calls and will retry by calling tools with wrong parameters. Basic usage works, but don't expect a fully working coding assistant experience.
+
 ### Open WebUI
 
 For your convenience, an Open WebUI service is included in `docker-compose.yml`. Launch `docker compose up open-webui` and open `http://localhost:8080`
@@ -276,10 +284,6 @@ To test an API client, increase log levels on both the client and lumo-tamer: `s
 
 Please share your experiences with new API clients (both issues and successes!) by [creating an issue](https://github.com/ZeroTricks/lumo-tamer/issues/new).
 
-### Unsupported API clients
-
-Following clients are known not to work:
-- **Nanocoder:** Initial connection works, but nanocoder sends many instructions and relies on Lumo calling **a lot** of tools. Lumo will misroute many tool calls and will retry by calling tools with wrong parameters. Not usable, lumo-tamer needs better instructions on tool calls.
 
 ### Docker
 
