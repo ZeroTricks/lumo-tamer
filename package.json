@@ -1,6 +1,6 @@
 {
   "name": "lumo-tamer",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Use Proton's Lumo AI through OpenAI-compatible API and CLI",
   "main": "dist/tamer.js",
   "type": "module",

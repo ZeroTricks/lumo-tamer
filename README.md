@@ -1,15 +1,15 @@
 # lumo-tamer
 
 ```
-                             ┌─────────────────┐     ┌─────────────────┐
-     ┌─────────────────┐     │   lumo-tamer    │◄───►│  Home Assistant │
-     │  Proton Lumo    │     │                 │     └─────────────────┘
-     │                 │     │   Translation   │     ┌─────────────────┐
-     │  Your favorite  │◄───►│   Encryption    │◄───►│  Open WebUI     │
-     │  private AI     │     │   Tooling       │     └─────────────────┘
-     │                 │     │                 │     ┌─────────────────┐
-     └─────────────────┘     │                 │◄───►│   CLI           │ 
-                             └─────────────────┘     └─────────────────┘
+                        ┌─────────────────┐     ┌─────────────────┐
+┌─────────────────┐     │   lumo-tamer    │◄───►│  Home Assistant │
+│  Proton Lumo    │     │                 │     └─────────────────┘
+│                 │     │   Translation   │     ┌─────────────────┐
+│  Your favorite  │◄───►│   Encryption    │◄───►│  Open WebUI     │
+│  private AI     │     │   Tooling       │     └─────────────────┘
+│                 │     │                 │     ┌─────────────────┐
+└─────────────────┘     │                 │◄───►│   CLI           │ 
+                        └─────────────────┘     └─────────────────┘
 ```
 
 Use [Proton Lumo](https://lumo.proton.me/) in your favorite AI-enabled app or on the command line.
