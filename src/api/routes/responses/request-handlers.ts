@@ -24,7 +24,7 @@ import {
   mapToolCallsForPersistence,
   type ToolCallForPersistence,
 } from '../shared.js';
-import { sendServerError } from '../../openai-error.js';
+import { sendServerError } from '../../error-handler.js';
 
 // ── Output building ────────────────────────────────────────────────
 

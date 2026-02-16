@@ -8,7 +8,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { applyReadBlock, isBinaryFile, getFileSizeKB } from '../../src/cli/file-reader.js';
+import { applyReadBlock, isBinaryFile, getFileSize } from '../../src/cli/file-reader.js';
 import { initConfig, getLocalActionsConfig } from '../../src/app/config.js';
 import type { CodeBlock } from '../../src/cli/block-handlers.js';
 
@@ -62,18 +62,18 @@ describe('isBinaryFile', () => {
   });
 });
 
-describe('getFileSizeKB', () => {
-  it('returns correct size', () => {
+describe('getFileSize', () => {
+  it('returns correct size in bytes', () => {
     // 'Hello, world!\n' = 14 bytes
-    expect(getFileSizeKB(textFile)).toBeCloseTo(14 / 1024, 2);
+    expect(getFileSize(textFile)).toBe(14);
   });
 
   it('returns 0 for empty file', () => {
-    expect(getFileSizeKB(emptyFile)).toBe(0);
+    expect(getFileSize(emptyFile)).toBe(0);
   });
 
   it('throws for nonexistent file', () => {
-    expect(() => getFileSizeKB('/nonexistent/path')).toThrow();
+    expect(() => getFileSize('/nonexistent/path')).toThrow();
   });
 });
 
@@ -105,26 +105,26 @@ describe('applyReadBlock', () => {
   });
 
   describe('size guard', () => {
-    let originalMaxSize: number;
+    let originalMaxSize: string | number;
 
     beforeAll(() => {
-      originalMaxSize = getLocalActionsConfig().fileReads.maxFileSizeKB;
+      originalMaxSize = getLocalActionsConfig().fileReads.maxFileSize;
     });
 
     afterAll(() => {
-      (getLocalActionsConfig().fileReads as any).maxFileSizeKB = originalMaxSize;
+      (getLocalActionsConfig().fileReads as any).maxFileSize = originalMaxSize;
     });
 
-    it('rejects a file exceeding maxFileSizeKB', async () => {
-      (getLocalActionsConfig().fileReads as any).maxFileSizeKB = 1; // 1 KB
+    it('rejects a file exceeding maxFileSize', async () => {
+      (getLocalActionsConfig().fileReads as any).maxFileSize = '1kb';
       const result = await applyReadBlock(readBlock(largeFile));
       expect(result.success).toBe(false);
       expect(result.output).toContain('File too large');
-      expect(result.output).toContain('Maximum allowed size is 1 KB');
+      expect(result.output).toContain('Maximum allowed size is 1kb');
     });
 
     it('accepts a file within the size limit', async () => {
-      (getLocalActionsConfig().fileReads as any).maxFileSizeKB = 1; // 1 KB
+      (getLocalActionsConfig().fileReads as any).maxFileSize = '1kb';
       const result = await applyReadBlock(readBlock(textFile)); // 14 bytes
       expect(result.success).toBe(true);
     });

@@ -7,7 +7,7 @@ import { convertResponseInputToTurns, normalizeInputItem } from '../../message-c
 import { getConversationsConfig } from '../../../app/config.js';
 import { getMetrics } from '../../metrics/index.js';
 import { trackCustomToolCompletion } from '../../tools/call-id.js';
-import { sendInvalidRequest, sendServerError } from '../../openai-error.js';
+import { sendInvalidRequest, sendServerError } from '../../error-handler.js';
 
 import type { ConversationId } from '../../../conversations/index.js';
 

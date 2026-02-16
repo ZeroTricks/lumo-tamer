@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { sendInvalidRequest, sendServerError } from '../../src/api/openai-error.js';
+import { sendInvalidRequest, sendServerError } from '../../src/api/error-handler.js';
 
 function createMockResponse() {
   const res: any = {};

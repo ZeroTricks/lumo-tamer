@@ -17,7 +17,7 @@ import {
   generateChatCompletionId,
   mapToolCallsForPersistence,
 } from '../shared.js';
-import { sendInvalidRequest, sendServerError } from '../../openai-error.js';
+import { sendInvalidRequest, sendServerError } from '../../error-handler.js';
 
 // Session ID generated once at module load - makes deterministic IDs unique per server session
 const SESSION_ID = randomUUID();
