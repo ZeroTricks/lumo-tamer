@@ -28,7 +28,7 @@ RUN CGO_ENABLED=0 go build -o proton-auth
 FROM base AS builder
 
 # Install all dependencies (including dev dependencies for building)
-RUN npm i
+RUN npm ci
 
 # Copy source code
 COPY src ./src
@@ -42,7 +42,7 @@ RUN npm run build
 FROM base
 
 # Install production dependencies and clean cache
-RUN npm i --only=production && npm cache clean --force
+RUN npm ci --only=production && npm cache clean --force
 
 # Copy compiled TypeScript from builder
 COPY --from=builder /app/dist ./dist
