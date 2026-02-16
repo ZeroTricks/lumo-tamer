@@ -5,7 +5,9 @@
 import type { ChatMessage, ResponseInputItem, OpenAITool, OpenAIToolCall } from './types.js';
 import type { Turn } from '../lumo-client/index.js';
 import { isCommand } from '../app/commands.js';
+import { getServerInstructionsConfig } from '../app/config.js';
 import { buildInstructions } from './instructions.js';
+import { injectInstructionsIntoTurns } from '../app/instructions.js';
 import { addToolNameToFunctionOutput } from './tools/call-id.js';
 
 // ── Input normalization ───────────────────────────────────────────────
@@ -20,7 +22,7 @@ import { addToolNameToFunctionOutput } from './tools/call-id.js';
 //   injects instructions, and applies Lumo-specific prefixing via addToolNameToFunctionOutput().
 //
 // Current differences between stored format and Lumo turns:
-// - Instructions: Injected into first user message for Lumo, not stored
+// - Instructions: Injected into last user message for Lumo, not stored
 // - Tool name prefix: Added to function_call_output for Lumo context, not stored
 //
 // If we later need WebClient compatibility for synced conversations, we may
@@ -85,15 +87,16 @@ export function normalizeInputItem(item: unknown): NormalizedMessage | Normalize
   if (typeof item !== 'object' || item === null) return null;
   const obj = item as Record<string, unknown>;
 
-  // Chat Completions: role: 'tool' -> user with JSON
+  // Chat Completions: role: 'tool' -> user with fenced JSON
   if (obj.role === 'tool' && 'tool_call_id' in obj) {
+    const json = JSON.stringify({
+      type: 'function_call_output',
+      call_id: obj.tool_call_id,
+      output: obj.content,
+    });
     return {
       role: 'user',
-      content: JSON.stringify({
-        type: 'function_call_output',
-        call_id: obj.tool_call_id,
-        output: obj.content,
-      }),
+      content: '```json\n' + json + '\n```',
     };
   }
 
@@ -135,15 +138,16 @@ export function normalizeInputItem(item: unknown): NormalizedMessage | Normalize
     };
   }
 
-  // Responses API: function_call_output -> user with JSON
+  // Responses API: function_call_output -> user with fenced JSON
   if (obj.type === 'function_call_output') {
+    const json = JSON.stringify({
+      type: 'function_call_output',
+      call_id: obj.call_id,
+      output: obj.output,
+    });
     return {
       role: 'user',
-      content: JSON.stringify({
-        type: 'function_call_output',
-        call_id: obj.call_id,
-        output: obj.output,
-      }),
+      content: '```json\n' + json + '\n```',
     };
   }
 
@@ -164,19 +168,16 @@ function extractSystemMessage(messages: ChatMessage[]): string | undefined {
   return undefined;
 }
 
+
 /**
- * Core conversion: ChatMessage[] to Turn[] with instruction injection.
- *
- * Per Lumo's pattern, instructions are injected as
- * "[Personal context: ...]" appended to the first user message.
+ * Core conversion: ChatMessage[] to Turn[].
  *
  * Handles tool-related messages:
  * - role: 'tool' -> user turn with JSON content
  * - assistant with tool_calls -> assistant turn(s) with JSON content
  */
-function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: string): Turn[] {
+function convertChatMessagesToTurns(messages: ChatMessage[]): Turn[] {
   const turns: Turn[] = [];
-  let instructionsInjected = false;
 
   for (const msg of messages) {
     // Skip system/developer messages - they're handled via instructions parameter
@@ -199,21 +200,9 @@ function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: stri
     }
 
     // Regular user/assistant message
-    const content = extractTextContent(msg.content);
-
-    // Inject instructions into first user message (but not if it's a command)
-    if (msg.role === 'user' && instructions && !instructionsInjected && !isCommand(content)) {
-      turns.push({
-        role: 'user',
-        content: `${content}\n\n[Personal context: ${instructions}]`,
-      });
-      instructionsInjected = true;
-      continue;
-    }
-
     turns.push({
       role: msg.role as 'user' | 'assistant',
-      content,
+      content: extractTextContent(msg.content),
     });
   }
 
@@ -227,9 +216,11 @@ function convertChatMessagesToTurns(messages: ChatMessage[], instructions?: stri
  * @param tools - Optional array of tool definitions (triggers legacy tool mode)
  */
 export function convertMessagesToTurns(messages: ChatMessage[], tools?: OpenAITool[]): Turn[] {
+  const { injectInto } = getServerInstructionsConfig();
   const systemContent = extractSystemMessage(messages);
   const instructions = buildInstructions(tools, systemContent);
-  return convertChatMessagesToTurns(messages, instructions);
+  const turns = convertChatMessagesToTurns(messages);
+  return injectInstructionsIntoTurns(turns, instructions, injectInto);
 }
 
 /**
@@ -247,13 +238,13 @@ export function convertResponseInputToTurns(
 
   // Simple string input
   if (typeof input === 'string') {
-    // Don't append instructions to commands (e.g., /help, /save)
+    // Don't prepend instructions to commands (e.g., /help, /save)
     if (isCommand(input)) {
       return [{ role: 'user', content: input }];
     }
 
     const instructions = buildInstructions(tools, requestInstructions);
-    const content = `${input}\n\n[Personal context: ${instructions}]`;
+    const content = `[Project instructions: ${instructions}]\n\n${input}`;
     return [{ role: 'user', content }];
   }
 
@@ -293,7 +284,9 @@ export function convertResponseInputToTurns(
     chatMessages.unshift({ role: 'system', content: requestInstructions });
   }
 
+  const { injectInto } = getServerInstructionsConfig();
   const systemContent = extractSystemMessage(chatMessages);
   const instructions = buildInstructions(tools, systemContent);
-  return convertChatMessagesToTurns(chatMessages, instructions);
+  const turns = convertChatMessagesToTurns(chatMessages);
+  return injectInstructionsIntoTurns(turns, instructions, injectInto);
 }

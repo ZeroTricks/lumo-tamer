@@ -11,7 +11,9 @@ import type { AuthManager } from '../auth/index.js';
 /**
  * Check if a message is a command (starts with / or wakeword)
  */
-export function isCommand(message: string): boolean {
+export function isCommand(message?: string): boolean {
+  if(!message)
+    return false;
   const trimmed = message.trim();
   if (trimmed.startsWith('/')) return true;
 

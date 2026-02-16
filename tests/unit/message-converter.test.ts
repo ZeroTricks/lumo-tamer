@@ -5,7 +5,7 @@
  * including instruction injection and system message handling.
  *
  * Note: These tests use the default config from config.defaults.yaml.
- * The default instructions and append behavior affect the output.
+ * The default instructions and prepend behavior affect the output.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -30,20 +30,37 @@ describe('convertMessagesToTurns', () => {
       { role: 'user', content: 'Hello' },
     ]);
 
-    // System message is extracted and injected as [Personal context: ...]
+    // System message is extracted and injected as [Project instructions: ...]
     expect(turns).toHaveLength(1);
     expect(turns[0].role).toBe('user');
   });
 
-  it('injects instructions into first user message', () => {
+  it('injects instructions into last user message (prepended)', () => {
     const turns = convertMessagesToTurns([
       { role: 'system', content: 'Be concise' },
       { role: 'user', content: 'Hello' },
     ]);
 
-    // Instructions should be appended as [Personal context: ...]
-    expect(turns[0].content).toContain('[Personal context:');
+    // Instructions should be prepended as [Project instructions: ...]
+    expect(turns[0].content).toContain('[Project instructions:');
     expect(turns[0].content).toContain('Be concise');
+    // Verify prepend format: instructions come BEFORE user content
+    expect(turns[0].content).toMatch(/^\[Project instructions:.*\]\n\nHello$/s);
+  });
+
+  it('injects instructions into first user message in multi-turn (default)', () => {
+    const turns = convertMessagesToTurns([
+      { role: 'system', content: 'Be concise' },
+      { role: 'user', content: 'First message' },
+      { role: 'assistant', content: 'Response' },
+      { role: 'user', content: 'Second message' },
+    ]);
+
+    // First user message should have instructions (default injectInto: "first")
+    expect(turns[0].content).toContain('[Project instructions:');
+    expect(turns[0].content).toMatch(/^\[Project instructions:.*\]\n\nFirst message$/s);
+    // Last user message should NOT have instructions
+    expect(turns[2].content).toBe('Second message');
   });
 
   it('does not inject instructions into command messages', () => {
@@ -54,6 +71,19 @@ describe('convertMessagesToTurns', () => {
 
     // Commands (starting with /) should not get instructions injected
     expect(turns[0].content).toBe('/help');
+  });
+
+  it('skips command messages when finding first user message', () => {
+    const turns = convertMessagesToTurns([
+      { role: 'system', content: 'Be concise' },
+      { role: 'user', content: '/help' },
+      { role: 'user', content: 'Hello' },
+    ]);
+
+    // Command message should be unchanged
+    expect(turns[0].content).toBe('/help');
+    // First non-command user message should get instructions
+    expect(turns[1].content).toContain('[Project instructions:');
   });
 
   it('handles empty messages array', () => {
@@ -71,12 +101,14 @@ describe('convertResponseInputToTurns', () => {
     expect(turns[0].content).toContain('Hello');
   });
 
-  it('handles string input with request instructions', () => {
+  it('handles string input with request instructions (prepended)', () => {
     const turns = convertResponseInputToTurns('Hello', 'Be concise');
 
     expect(turns).toHaveLength(1);
     expect(turns[0].content).toContain('Hello');
     expect(turns[0].content).toContain('Be concise');
+    // Verify prepend format: instructions come BEFORE user content
+    expect(turns[0].content).toMatch(/^\[Project instructions:.*Be concise.*\]\n\nHello$/s);
   });
 
   it('handles message array input', () => {
@@ -126,7 +158,7 @@ describe('convertResponseInputToTurns', () => {
 });
 
 describe('normalizeInputItem', () => {
-  it('normalizes role: "tool" message to user with JSON content', () => {
+  it('normalizes role: "tool" message to user with fenced JSON content', () => {
     const result = normalizeInputItem({
       role: 'tool',
       tool_call_id: 'call_abc123',
@@ -137,7 +169,12 @@ describe('normalizeInputItem', () => {
     expect(Array.isArray(result)).toBe(false);
     const normalized = result as { role: string; content: string };
     expect(normalized.role).toBe('user');
-    const parsed = JSON.parse(normalized.content);
+    // Content should be fenced JSON
+    expect(normalized.content).toMatch(/^```json\n.*\n```$/s);
+    // Extract and parse the JSON inside the fence
+    const jsonMatch = normalized.content.match(/```json\n(.*)\n```/s);
+    expect(jsonMatch).not.toBeNull();
+    const parsed = JSON.parse(jsonMatch![1]);
     expect(parsed.type).toBe('function_call_output');
     expect(parsed.call_id).toBe('call_abc123');
     expect(parsed.output).toBe('Tool output here');
@@ -208,7 +245,7 @@ describe('normalizeInputItem', () => {
     expect(JSON.parse(parsed.arguments)).toEqual({ query: 'test' });
   });
 
-  it('normalizes function_call_output (Responses API) to user with JSON', () => {
+  it('normalizes function_call_output (Responses API) to user with fenced JSON', () => {
     const result = normalizeInputItem({
       type: 'function_call_output',
       call_id: 'call_xyz',
@@ -219,7 +256,12 @@ describe('normalizeInputItem', () => {
     expect(Array.isArray(result)).toBe(false);
     const normalized = result as { role: string; content: string };
     expect(normalized.role).toBe('user');
-    const parsed = JSON.parse(normalized.content);
+    // Content should be fenced JSON
+    expect(normalized.content).toMatch(/^```json\n.*\n```$/s);
+    // Extract and parse the JSON inside the fence
+    const jsonMatch = normalized.content.match(/```json\n(.*)\n```/s);
+    expect(jsonMatch).not.toBeNull();
+    const parsed = JSON.parse(jsonMatch![1]);
     expect(parsed.type).toBe('function_call_output');
     expect(parsed.call_id).toBe('call_xyz');
     expect(parsed.output).toBe('Search results here');
@@ -240,19 +282,22 @@ describe('normalizeInputItem', () => {
 });
 
 describe('convertMessagesToTurns with tool messages', () => {
-  it('converts role: "tool" message to user turn with JSON', () => {
+  it('converts role: "tool" message to user turn with fenced JSON', () => {
     const turns = convertMessagesToTurns([
       { role: 'user', content: 'Call a tool' },
       { role: 'tool', tool_call_id: 'call_abc', content: 'Tool result' } as any,
     ]);
 
     expect(turns).toHaveLength(2);
+    // First user message gets instructions (default injectInto: "first")
     expect(turns[0].role).toBe('user');
-    expect(turns[1].role).toBe('user'); // tool -> user
-    const parsed = JSON.parse(turns[1].content);
-    expect(parsed.type).toBe('function_call_output');
-    expect(parsed.call_id).toBe('call_abc');
-    expect(parsed.output).toBe('Tool result');
+    expect(turns[0].content).toContain('[Project instructions:');
+    expect(turns[0].content).toContain('Call a tool');
+    // Tool message is converted to user turn with fenced JSON
+    expect(turns[1].role).toBe('user');
+    expect(turns[1].content).toContain('```json\n');
+    expect(turns[1].content).toContain('"type":"function_call_output"');
+    expect(turns[1].content).toContain('"call_id":"call_abc"');
   });
 
   it('converts assistant with tool_calls to assistant turns with JSON', () => {

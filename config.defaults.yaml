@@ -193,6 +193,14 @@ server:
       The user's system will execute them and return results.
       === END PROTOCOL ===
 
+
+    # Where to inject instructions: "first" or "last" user message to Lumo
+    # - first: inject once into first user message (may reduce token usage in multi-turn conversations,
+    #   but Lumo may "forget" instructions in long conversations)
+    # - last: inject into last user message each request (matches WebClient behaviour, might use more tokens, but instructions always fresh)
+    injectInto: "first"
+
+
     # Bounce instruction sent when Lumo routes a custom tool through its native tool pipeline.
     # The actual tool call JSON is appended at runtime.
     forToolBounce: |
@@ -272,6 +280,11 @@ cli:
       new text
       >>>>>>> REPLACE
       ```
+    # Where to inject instructions: "first" or "last" user message to Lumo
+    # - first: inject once into first user message (may reduce token usage in multi-turn conversations,
+    #   but Lumo may "forget" instructions in long conversations)
+    # - last: inject into last user message each request (matches WebClient behaviour, might use more tokens, but instructions always fresh)
+    injectInto: "first"
 
     forToolBounce: |
       You tried to execute an action using your built-in tool system, but these actions must be called by providing a code block. Use for example:

@@ -174,15 +174,19 @@ Native and custom tools work together: native tools execute server-side, custom 
 
 1. **Tool definitions are prefixed** with `customTools.prefix` (e.g., `get_weather` becomes `user:get_weather`)
 2. **Instructions are assembled** from `instructions.template` with tool definitions as JSON
-3. **Lumo outputs tool calls** as JSON in code fences:
+3. **Instructions are prepended** to a user message as `[Project instructions: ...]`
+   - `instructions.injectInto: "first"` (default): inject into first user message (less token usage in multi-turn)
+   - `instructions.injectInto: "last"`: inject into last user message each request (matches WebClient)
+4. **Lumo outputs tool calls** as JSON in code fences:
    ````
    I'll check the weather for you.
    ```json
    {"name": "user:get_weather", "arguments": {"city": "Paris"}}
    ```
    ````
-4. **lumo-tamer detects and extracts** tool calls, strips the prefix, and returns in OpenAI format
-5. **Your client executes** the tool and sends results back
+   *If Lumo misroutes the tool call through its native pipeline, lumo-tamer bounces it, after which Lumo will output JSON (hopefully). See [Misrouted Tool Calls](#misrouted-tool-calls).*
+5. **lumo-tamer detects and extracts** tool calls, strips the prefix, and returns in OpenAI format
+6. **Your client executes** the tool and sends results back
 
 ### Response Format
 

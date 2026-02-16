@@ -3,13 +3,16 @@
  *
  * CLI equivalent of src/api/message-converter.ts.
  * Builds effective instructions from config and injects them
- * into the first user message as [Personal context: ...].
+ * into the first or last user message as [Project instructions: ...].
  */
 
 import type { Turn } from '../lumo-client/index.js';
 import { getCliInstructionsConfig, getLocalActionsConfig } from '../app/config.js';
-import { isCommand } from '../app/commands.js';
-import { interpolateTemplate } from '../api/instructions.js';
+import {
+  interpolateTemplate,
+  sanitizeInstructions,
+  injectInstructionsIntoTurns,
+} from '../app/instructions.js';
 
 /**
  * Build effective instructions for CLI using template system.
@@ -26,32 +29,24 @@ function buildEffectiveInstructions(): string | undefined {
   const forLocalActions = interpolateTemplate(instructionsConfig.forLocalActions, { executors });
 
   // Interpolate main template
-  return interpolateTemplate(instructionsConfig.template, {
+  const result = interpolateTemplate(instructionsConfig.template, {
     localActions: localActionsConfig.enabled ? 'true' : undefined,
     forLocalActions,
     executors,
   });
+
+  // Sanitize to avoid breaking the [Project instructions: ...] wrapper
+  return result ? sanitizeInstructions(result) : undefined;
 }
 
 /**
- * Inject instructions into the first user message of turns.
- * Uses the same pattern as API: [Personal context: ...]
+ * Inject instructions into a user message of turns.
+ *
+ * Reads config for injectInto setting, builds CLI instructions,
+ * and delegates to shared injectInstructionsIntoTurns.
  */
 export function injectInstructions(turns: Turn[]): Turn[] {
+  const { injectInto } = getCliInstructionsConfig();
   const instructions = buildEffectiveInstructions();
-  if (!instructions) return turns;
-
-  return turns.map((turn, index) => {
-    // Find first user message that isn't a command
-    const isFirstUser = turn.role === 'user' &&
-      !turns.slice(0, index).some(t => t.role === 'user' && !isCommand(t.content || ''));
-
-    if (isFirstUser && turn.content && !isCommand(turn.content)) {
-      return {
-        ...turn,
-        content: `${turn.content}\n\n[Personal context: ${instructions}]`,
-      };
-    }
-    return turn;
-  });
+  return injectInstructionsIntoTurns(turns, instructions, injectInto);
 }

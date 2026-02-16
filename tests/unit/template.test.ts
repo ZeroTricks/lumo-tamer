@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { interpolateTemplate, applyReplacePatterns } from '../../src/api/instructions.js';
+import { interpolateTemplate, applyReplacePatterns, sanitizeInstructions } from '../../src/api/instructions.js';
 
 describe('interpolateTemplate', () => {
   describe('variable substitution', () => {
@@ -269,5 +269,68 @@ describe('applyReplacePatterns', () => {
     const patterns = [{ pattern: 'function (\\w+)\\(\\)', replacement: 'method $1' }];
 
     expect(applyReplacePatterns(text, patterns)).toBe('Call method foo now.');
+  });
+});
+
+describe('sanitizeInstructions', () => {
+  it('inserts space between ] and newline to break wrapper pattern', () => {
+    const input = 'array: [1, 2, 3]\nNext line';
+    const result = sanitizeInstructions(input);
+    expect(result).toBe('array: [1, 2, 3] \nNext line');
+  });
+
+  it('preserves JSON structure while breaking ] + newline pattern', () => {
+    // Note: only ] followed by newline gets space inserted, not }
+    const input = '{"items": [1, 2, 3]}\n{"more": true}';
+    const result = sanitizeInstructions(input);
+    // The ] before } doesn't get modified since it's not followed by newline
+    // The } is followed by newline but we only handle ]
+    expect(result).toBe('{"items": [1, 2, 3]}\n{"more": true}');
+    // JSON is still valid (brackets preserved)
+    expect(result).toContain('[');
+    expect(result).toContain(']');
+  });
+
+  it('handles ] directly followed by newline in JSON array', () => {
+    const input = '[\n  1,\n  2\n]\nmore text';
+    const result = sanitizeInstructions(input);
+    expect(result).toBe('[\n  1,\n  2\n] \nmore text');
+  });
+
+  it('handles multiple ] + newline occurrences', () => {
+    const input = '[a]\n[b]\n[c]';
+    const result = sanitizeInstructions(input);
+    expect(result).toBe('[a] \n[b] \n[c]');
+  });
+
+  it('collapses excessive newlines', () => {
+    const input = 'Line 1\n\n\n\nLine 2';
+    const result = sanitizeInstructions(input);
+    expect(result).toBe('Line 1\n\nLine 2');
+  });
+
+  it('preserves double newlines', () => {
+    const input = 'Para 1\n\nPara 2';
+    const result = sanitizeInstructions(input);
+    expect(result).toBe('Para 1\n\nPara 2');
+  });
+
+  it('handles empty string', () => {
+    expect(sanitizeInstructions('')).toBe('');
+  });
+
+  it('handles text without brackets', () => {
+    const input = 'Plain text without any brackets';
+    expect(sanitizeInstructions(input)).toBe(input);
+  });
+
+  it('does not modify ] not followed by newline', () => {
+    const input = '[a] and [b] inline';
+    expect(sanitizeInstructions(input)).toBe('[a] and [b] inline');
+  });
+
+  it('handles ] at end of string (no newline)', () => {
+    const input = 'array: [1, 2, 3]';
+    expect(sanitizeInstructions(input)).toBe('array: [1, 2, 3]');
   });
 });

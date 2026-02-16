@@ -63,13 +63,18 @@ const byteSizeSchema = z.union([
   z.number().positive(),
 ]);
 
+// Injection location enum
+const injectIntoSchema = z.enum(['first', 'last']);
+
 // Instructions schemas
 const cliInstructionsConfigSchema = z.object({
+  injectInto: injectIntoSchema,
   template: z.string(),
   forLocalActions: z.string(),
   forToolBounce: z.string(),
 });
 const serverInstructionsConfigSchema = z.object({
+  injectInto: injectIntoSchema,
   template: z.string(),
   forTools: z.string(),
   fallback: z.string(),

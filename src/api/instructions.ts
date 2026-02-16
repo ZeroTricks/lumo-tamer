@@ -1,36 +1,19 @@
 /**
- * Instructions processing utilities
+ * API-specific instruction processing utilities
  *
- * - Template interpolation using Handlebars
+ * - Template validation
  * - Replace patterns for cleaning client instructions
+ * - Instruction building with tool prefixing
  */
 
-import Handlebars from 'handlebars';
 import { logger } from '../app/logger.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
+import { interpolateTemplate, sanitizeInstructions } from '../app/instructions.js';
 import { applyToolPrefix, applyToolNamePrefix } from './tools/prefix.js';
 import type { OpenAITool } from './types.js';
 
-// ── Template interpolation ────────────────────────────────────────────
-
-/**
- * Interpolate a Handlebars template with variables.
- *
- * Supported syntax:
- * - {{varName}} - variable substitution
- * - {{#if varName}}...{{/if}} - conditional block (included if var is truthy)
- * - {{#if varName}}...{{else}}...{{/if}} - conditional with else branch
- */
-export function interpolateTemplate(
-  template: string,
-  vars: Record<string, string | undefined>
-): string {
-  const compiled = Handlebars.compile(template, { noEscape: true });
-  const result = compiled(vars);
-
-  // Clean up excessive blank lines left by removed blocks
-  return result.replace(/\n{3,}/g, '\n\n').trim();
-}
+// Re-export shared utilities for backwards compatibility
+export { interpolateTemplate, sanitizeInstructions } from '../app/instructions.js';
 
 // ── Template validation ───────────────────────────────────────────────
 
@@ -166,11 +149,14 @@ export function buildInstructions(tools?: OpenAITool[], clientInstructions?: str
   }
 
   // Interpolate main template with all variables
-  return interpolateTemplate(instructionsConfig.template, {
+  const result = interpolateTemplate(instructionsConfig.template, {
     prefix,
     tools: toolsJson,
     clientInstructions: cleanedClientInstructions,
     forTools,
     fallback: instructionsConfig.fallback,
   });
+
+  // Sanitize to avoid breaking the [Project instructions: ...] wrapper
+  return sanitizeInstructions(result);
 }
