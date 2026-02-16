@@ -19,7 +19,7 @@ export const setupApiErrorHandler = (): ErrorRequestHandler => {
       logger.warn({ err }, 'Request body exceeds parser limit');
       return res.status(413).json({
         error: {
-          message: 'Request body too large for this server. Reduce payload size or increase server.requestBodyLimits in config.yaml.',
+          message: 'Request body too large for this server. Reduce payload size or increase server.bodyLimit',
           type: 'invalid_request_error',
           param: null,
           code: 'request_too_large',

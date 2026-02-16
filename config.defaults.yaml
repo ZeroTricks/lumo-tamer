@@ -107,11 +107,11 @@ server:
   apiKey: "your-secret-api-key-here"
   apiModelName: "lumo"
 
-  # HTTP request parser limits (Express/body-parser)
-  # Increase if clients send large tool/context payloads.
-  requestBodyLimits:
-    json: "10mb"
-    urlencoded: "10mb"
+  # Max request body size
+  # Increase if clients send larger tool/context payloads, but be aware:
+  # 360kb (for a typical request, containing mainly ASCII characters)
+  # translates to roughly 22.5K tokens, which is Lumo's "warning level" on context size.
+  bodyLimit: "360kb"
 
   # Prometheus metrics endpoint
   metrics:
@@ -221,8 +221,9 @@ cli:
       # Enable ```read blocks
       # Note that if this is false, Lumo can still ask to read a file using shell tools (ie. cat)
       enabled: true
-      # Max file size in KB. Files larger than this are skipped with an error.
-      maxFileSizeKB: 512
+      # Max file size. Reading files larger than this fail with an error.
+      # 512kb translates to roughly 32K tokens (Lumo's "warning level" on context size).
+      maxFileSize: "360kb"
 
     # Executors for code block execution
     # Maps language tag -> [command, ...args]. Code is appended as last arg.

@@ -88,12 +88,11 @@ server:
   apiKey: my-super-secret-key
 ```
 
-Optional: adjust HTTP parser limits for larger client payloads (tool/context-heavy requests):
+Optional: adjust listening port, or bodyLimit for larger client payloads.
 ```yaml
 server:
-  requestBodyLimits:
-    json: "25mb"
-    urlencoded: "25mb"
+  port: 9001
+  bodyLimit: "1mb"
 ```
 
 Run `tamer server`

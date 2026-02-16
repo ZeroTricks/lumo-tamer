@@ -11,6 +11,7 @@
  */
 
 import { readFileSync, statSync, openSync, readSync, closeSync } from 'fs';
+import bytes from 'bytes';
 import type { CodeBlock, BlockHandler } from './block-handlers.js';
 import { FILE_PREFIX } from './edit-applier.js';
 import { getLocalActionsConfig } from '../app/config.js';
@@ -56,10 +57,10 @@ export function isBinaryFile(filePath: string): boolean {
 }
 
 /**
- * Get file size in KB.
+ * Get file size in bytes.
  */
-export function getFileSizeKB(filePath: string): number {
-  return statSync(filePath).size / 1024;
+export function getFileSize(filePath: string): number {
+  return statSync(filePath).size;
 }
 
 /**
@@ -67,7 +68,7 @@ export function getFileSizeKB(filePath: string): number {
  */
 export async function applyReadBlock(block: CodeBlock): Promise<ReadResult> {
   const { fileReads } = getLocalActionsConfig();
-  const maxFileSizeKB = fileReads.maxFileSizeKB;
+  const maxFileSize = bytes.parse(fileReads.maxFileSize);
 
   const paths = block.content.split('\n').map(l => l.trim()).filter(Boolean);
 
@@ -83,11 +84,11 @@ export async function applyReadBlock(block: CodeBlock): Promise<ReadResult> {
     files.push(path);
     try {
       // Guard: file size
-      const sizeKB = getFileSizeKB(path);
-      if (sizeKB > maxFileSizeKB) {
+      const size = getFileSize(path);
+      if (maxFileSize !== null && size > maxFileSize) {
         allSuccess = false;
         sections.push(
-          `${FILE_PREFIX} ${path}\nError: File too large (${Math.round(sizeKB)} KB). Maximum allowed size is ${maxFileSizeKB} KB.`
+          `${FILE_PREFIX} ${path}\nError: File too large (${bytes(size)}). Maximum allowed size is ${fileReads.maxFileSize}.`
         );
         continue;
       }

@@ -31,8 +31,7 @@ export class APIServer {
   }
 
   private setupMiddleware(): void {
-    this.expressApp.use(express.json({ limit: this.serverConfig.requestBodyLimits.json }));
-    this.expressApp.use(express.urlencoded({ limit: this.serverConfig.requestBodyLimits.urlencoded, extended: true }));
+    this.expressApp.use(express.json({ limit: this.serverConfig.bodyLimit }));
     this.expressApp.use(setupAuthMiddleware(this.serverConfig.apiKey));
     this.expressApp.use(setupLoggingMiddleware());
     if (this.metrics) {

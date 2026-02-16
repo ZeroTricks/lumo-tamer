@@ -52,8 +52,8 @@ cli:
       # Enable ```read blocks
       # Note: if disabled, Lumo can still ask to read files using shell tools (e.g., cat)
       enabled: true
-      # Max file size in KB. Files larger than this are skipped with an error.
-      maxFileSizeKB: 512
+      # Max file size. Files larger than this are skipped with an error.
+      maxFileSize: "512kb"
 ```
 
 ### Code Executors
@@ -112,7 +112,7 @@ cli:
 - Verify the command exists on your system (e.g., `python` vs `python3`)
 
 **File reads failing**
-- Check `fileReads.maxFileSizeKB` - large files are rejected
+- Check `fileReads.maxFileSize` - large files are rejected
 - Verify file path is correct (relative to working directory)
 
 **Edits not applying**

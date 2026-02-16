@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { load } from 'js-yaml';
 import { z } from 'zod';
 import merge from 'lodash/merge.js';
+import bytes from 'bytes';
 import { resolveProjectPath } from './paths.js';
 
 // Load defaults from YAML (single source of truth)
@@ -56,10 +57,11 @@ const metricsConfigSchema = z.object({
   prefix: z.string(),
 });
 
-const requestBodyLimitsSchema = z.object({
-  json: z.union([z.string().min(1), z.number().positive()]),
-  urlencoded: z.union([z.string().min(1), z.number().positive()]),
-});
+// Validates size strings using the bytes library (same parser Express uses)
+const byteSizeSchema = z.union([
+  z.string().refine((val) => bytes.parse(val) !== null, 'Invalid size format (e.g., "360kb", "1mb")'),
+  z.number().positive(),
+]);
 
 // Instructions schemas
 const cliInstructionsConfigSchema = z.object({
@@ -80,7 +82,7 @@ const localActionsConfigSchema = z.object({
   enabled: z.boolean(),
   fileReads: z.object({
     enabled: z.boolean(),
-    maxFileSizeKB: z.number().positive(),
+    maxFileSize: byteSizeSchema,
   }),
   executors: z.record(z.string(), z.array(z.string())),
 });
@@ -122,7 +124,7 @@ const serverMergedConfigSchema = z.object({
   customTools: customToolsConfigSchema,
   instructions: serverInstructionsConfigSchema,
   metrics: metricsConfigSchema,
-  requestBodyLimits: requestBodyLimitsSchema,
+  bodyLimit: byteSizeSchema,
   port: z.number().int().positive(),
   apiKey: z.string().min(1, 'server.apiKey is required'),
   apiModelName: z.string().min(1),
