@@ -8,3 +8,4 @@ extra-docs/
 secrets/
 browser-data/
 coverage/
+*.pid
