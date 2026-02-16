@@ -88,7 +88,7 @@ server:
   apiKey: my-super-secret-key
 ```
 
-Optional: adjust listening port, or bodyLimit for larger client payloads.
+Optionally, adjust listening port, or bodyLimit for larger client payloads.
 ```yaml
 server:
   port: 9001
@@ -99,9 +99,7 @@ Run `tamer server`
 
 Then, point your favorite OpenAI-compatible app to `https://yourhost:3003/v1` and provide your API key.
 
-**Note:** The API implements a subset of OpenAI-compatible endpoints and has only been tested with a handful of clients (Home Assistant and Open WebUI).
-
-Compatibility handling includes normalization for OpenAI-style tool-call shapes and API error formatting across `/v1/chat/completions` and `/v1/responses`.
+**Note:** The API implements a subset of OpenAI-compatible endpoints and has only been tested with a handful of clients (see [API clients](#api-clients))
 
 | Endpoint | Description |
 |----------|-------------|
@@ -247,6 +245,9 @@ Following API clients have been tested and are known to work.
   - Experiment with changing the instructions sent by Home Assistant.
   - Limit the number of exposed entities in Home Assistant's settings.
   - Limit the number of entity aliases.
+
+### OpenClaw
+Add Lumo to `models.providers` in your OpenClaw config. [Example](docs/openclaw.md).
 
 ### Open WebUI
 
