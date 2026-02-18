@@ -232,6 +232,12 @@ export class ConversationStore {
      * Append tool calls as assistant messages.
      * Each tool call stored as separate message with JSON content.
      * Arguments are expected to already be normalized (via streaming-processor).
+     *
+     * NOTE: Currently unused. persistAssistantTurn() skips persistence when tool calls
+     * are present, relying on the client returning the assistant message when responding with tool output.
+     * (More robust as order of tool_calls & text may change)
+     * Kept for potential future use if we change the persistence strategy.
+     * (streaming tool processor should then return text & tool call blocks in order)
      */
     appendAssistantToolCalls(
         id: ConversationId,

@@ -71,7 +71,12 @@ export function persistTitle(result: ChatResult, deps: EndpointDependencies, con
 }
 
 /**
- * Persist an assistant turn (response text and optional tool calls).
+ * Persist an assistant turn (response text only, no tool calls).
+ *
+ * When tool calls are present, we skip persistence entirely. The client (e.g. Home Assistant)
+ * will send the assistant message back with the tool output in the next request, and
+ * appendMessages() will handle it via ID-based deduplication. This avoids order mismatches
+ * between what we persist and what the client sends back.
  */
 export function persistAssistantTurn(
   deps: EndpointDependencies,
@@ -80,12 +85,13 @@ export function persistAssistantTurn(
   toolCalls?: Array<{ name: string; arguments: string; call_id: string }>
 ): void {
   if (conversationId && deps.conversationStore) {
-    // Stateful: persist to store
+    // Stateful: persist to store (only when no tool calls)
     if (toolCalls && toolCalls.length > 0) {
-      deps.conversationStore.appendAssistantToolCalls(conversationId, toolCalls);
-    } else {
-      deps.conversationStore.appendAssistantResponse(conversationId, content);
+      // Skip persistence - client will send assistant message back with tool output,
+      // and appendMessages() will persist it with proper ID-based deduplication
+      return;
     }
+    deps.conversationStore.appendAssistantResponse(conversationId, content);
   } else {
     // Stateless: track metric only (no persistence)
     getMetrics()?.messagesTotal.inc({ role: 'assistant' });
