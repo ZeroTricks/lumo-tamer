@@ -118,8 +118,8 @@ tests/
 
 ## Metrics
 
-The server exposes Prometheus-compatible metrics at `/metrics`. Configure in `config.yaml`:
-
+The server can expose Prometheus-compatible metrics at `/metrics`. To enable and configure:  
+`config.yaml`:
 ```yaml
 server:
   metrics:

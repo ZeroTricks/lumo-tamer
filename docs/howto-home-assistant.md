@@ -360,6 +360,15 @@ This usually indicates Lumo has trouble understanding the exposed entities and t
 ### Home Assistant still shows "OpenAI" in some messages
 This is expected. The integrations refer to OpenAI here and there (e.g., "Error talking to OpenAI"), while they're actually talking to Lumo through lumo-tamer.
 
+### The Lumo (web) app shows many duplicated chats from Home Assistant
+If you enabled syncing your conversations with the Lumo app, set `conversations.deriveIdFromUser: true` to properly group messages per conversation:
+```yaml
+conversations:
+  sync:
+    enabled: true
+    deriveIdFromUser: true
+```
+
 ---
 
 ## Further Reading
