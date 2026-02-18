@@ -13,6 +13,7 @@ import { logger } from '../app/logger.js';
 import type { Turn } from '../lumo-client/types.js';
 import {
     findNewMessages,
+    hashMessage,
     isValidContinuation,
     type IncomingMessage,
 } from './deduplication.js';
@@ -135,6 +136,9 @@ export class ConversationStore {
         let parentId = lastMessageId;
 
         for (const msg of newMessages) {
+            // Use provided ID (for tool messages) or compute hash (for regular messages)
+            const semanticId = msg.id ?? hashMessage(msg.role, msg.content).slice(0, 16);
+
             const message: Message = {
                 id: randomUUID(),
                 conversationId: id,
@@ -143,6 +147,7 @@ export class ConversationStore {
                 parentId,
                 status: 'completed',
                 content: msg.content,
+                semanticId,
             };
 
             state.messages.push(message);
@@ -177,13 +182,15 @@ export class ConversationStore {
      * @param id - Conversation ID
      * @param content - Assistant's response content
      * @param status - Message status (default: completed)
+     * @param semanticId - Optional semantic ID for deduplication (e.g., call_id for tool calls)
      * @returns The created message
      * @todo Refactor to share code with appendMessages()
      */
     appendAssistantResponse(
         id: ConversationId,
         content: string,
-        status: 'completed' | 'failed' = 'completed'
+        status: 'completed' | 'failed' = 'completed',
+        semanticId?: string
     ): Message {
         const state = this.getOrCreate(id);
         const now = Date.now();
@@ -201,6 +208,7 @@ export class ConversationStore {
             parentId,
             status,
             content,
+            semanticId: semanticId ?? hashMessage('assistant', content).slice(0, 16),
         };
 
         state.messages.push(message);
@@ -236,7 +244,7 @@ export class ConversationStore {
                 name: tc.name,
                 arguments: tc.arguments,
             });
-            this.appendAssistantResponse(id, content);
+            this.appendAssistantResponse(id, content, 'completed', tc.call_id);
         }
     }
 
@@ -259,6 +267,7 @@ export class ConversationStore {
             parentId,
             status: 'completed',
             content,
+            semanticId: hashMessage('user', content).slice(0, 16),
         };
 
         state.messages.push(message);

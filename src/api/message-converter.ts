@@ -35,6 +35,7 @@ import { addToolNameToFunctionOutput } from './tools/call-id.js';
 export interface NormalizedMessage {
   role: 'user' | 'assistant';
   content: string;
+  id?: string;  // Semantic ID for deduplication (call_id for tools)
 }
 
 /**
@@ -97,6 +98,7 @@ export function normalizeInputItem(item: unknown): NormalizedMessage | Normalize
     return {
       role: 'user',
       content: '```json\n' + json + '\n```',
+      id: obj.tool_call_id as string,
     };
   }
 
@@ -116,6 +118,7 @@ export function normalizeInputItem(item: unknown): NormalizedMessage | Normalize
           name: tc.function.name,
           arguments: args,
         }),
+        id: tc.id,
       };
     });
   }
@@ -135,6 +138,7 @@ export function normalizeInputItem(item: unknown): NormalizedMessage | Normalize
         name: obj.name,
         arguments: args,
       }),
+      id: obj.call_id as string,
     };
   }
 
@@ -148,6 +152,7 @@ export function normalizeInputItem(item: unknown): NormalizedMessage | Normalize
     return {
       role: 'user',
       content: '```json\n' + json + '\n```',
+      id: obj.call_id as string,
     };
   }
 

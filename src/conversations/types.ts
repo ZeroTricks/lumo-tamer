@@ -65,6 +65,7 @@ export interface MessagePrivate {
     context?: string;
     toolCall?: string;          // JSON string of tool call
     toolResult?: string;        // JSON string of tool result
+    semanticId?: string;        // For deduplication (call_id for tools, hash for regular). Not synced.
 }
 
 /**

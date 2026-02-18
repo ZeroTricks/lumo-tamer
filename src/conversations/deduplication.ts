@@ -48,14 +48,15 @@ export function fingerprintMessages(messages: Message[]): MessageFingerprint[] {
 export interface IncomingMessage {
     role: string;
     content: string;
+    id?: string;  // Semantic ID for deduplication (call_id for tools)
 }
 
 /**
  * Find new messages that aren't already stored
  *
  * Strategy:
- * 1. Create fingerprints for both incoming and stored messages
- * 2. Match by sequence - incoming[0..n] should match stored[0..n]
+ * 1. Build set of stored semantic IDs (cached on messages)
+ * 2. Match by sequence using semantic IDs
  * 3. Return incoming messages after the matching prefix
  */
 export function findNewMessages(
@@ -70,16 +71,21 @@ export function findNewMessages(
         return [];
     }
 
-    // Create fingerprints
-    const storedFingerprints = fingerprintMessages(stored);
-    const incomingFingerprints = incoming.map((msg, index) =>
-        createFingerprint(msg.role as MessageRole, msg.content, index)
-    );
+    // Build set of stored semantic IDs (already cached on messages)
+    const storedIds = new Set<string>();
+    for (const msg of stored) {
+        if (msg.semanticId) storedIds.add(msg.semanticId);
+    }
 
     // Find where incoming messages diverge from stored
     let matchedCount = 0;
-    for (let i = 0; i < Math.min(storedFingerprints.length, incomingFingerprints.length); i++) {
-        if (storedFingerprints[i].hash === incomingFingerprints[i].hash) {
+    for (let i = 0; i < Math.min(stored.length, incoming.length); i++) {
+        const incomingMsg = incoming[i];
+
+        // Compute semantic ID for incoming message
+        const incomingSemanticId = incomingMsg.id ?? hashMessage(incomingMsg.role, incomingMsg.content).slice(0, 16);
+
+        if (storedIds.has(incomingSemanticId)) {
             matchedCount++;
         } else {
             // Divergence found - stop matching
@@ -95,7 +101,7 @@ export function findNewMessages(
  * Check if incoming messages are a valid continuation of stored conversation
  *
  * Valid if:
- * - Incoming starts with the same messages as stored (prefix match)
+ * - Incoming starts with the same messages as stored (prefix match by semantic ID)
  * - Or incoming is entirely new (stored is empty)
  */
 export function isValidContinuation(
@@ -113,12 +119,12 @@ export function isValidContinuation(
         };
     }
 
-    // Check if incoming starts with the same messages
+    // Check if incoming starts with the same messages (using semantic IDs)
     for (let i = 0; i < stored.length; i++) {
-        const storedHash = hashMessage(stored[i].role, stored[i].content);
-        const incomingHash = hashMessage(incoming[i].role, incoming[i].content);
+        const storedSemanticId = stored[i].semanticId;
+        const incomingSemanticId = incoming[i].id ?? hashMessage(incoming[i].role, incoming[i].content).slice(0, 16);
 
-        if (storedHash !== incomingHash) {
+        if (storedSemanticId !== incomingSemanticId) {
             return {
                 valid: false,
                 reason: `Message mismatch at index ${i} - history may have been modified`,
@@ -153,10 +159,10 @@ export function detectBranching(
     const minLength = Math.min(stored.length, incoming.length);
 
     for (let i = 0; i < minLength; i++) {
-        const storedHash = hashMessage(stored[i].role, stored[i].content);
-        const incomingHash = hashMessage(incoming[i].role, incoming[i].content);
+        const storedSemanticId = stored[i].semanticId;
+        const incomingSemanticId = incoming[i].id ?? hashMessage(incoming[i].role, incoming[i].content).slice(0, 16);
 
-        if (storedHash !== incomingHash) {
+        if (storedSemanticId !== incomingSemanticId) {
             divergePoint = i;
             break;
         }
