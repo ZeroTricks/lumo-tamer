@@ -19,7 +19,9 @@ You should be comfortable with editing configuration files, running terminal com
 **Prerequisites**
 - Home Assistant installed and running
 - A Proton account (free works, [Lumo Plus](https://lumo.proton.me/) gives unlimited daily chats and more)
-- A computer or server to run lumo-tamer on the same private network or machine as Home Assistant.
+- A computer or server to run lumo-tamer on the same private network or machine as Home Assistan
+
+**Be aware:** The use of lumo-tamer may violate Proton's terms of service; use at your own risk. [Full Disclaimer](../README.md/#full-disclaimer)
 
 ---
 
