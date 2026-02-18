@@ -83,7 +83,7 @@ server:
   enableWebSearch: true # optionally, enable Lumo's own websearch
 ```
 
-> **Security:** Keep your API key private and make sure lumo-tamer is only be accessible from your local network, not the internet.
+> **Security:** Keep your API key private and make sure lumo-tamer is only accessible from your local network, not the internet.
 
 #### Step 4: Start the server
 
@@ -169,9 +169,7 @@ auth:
 ```
 </details>
 
-
 #### Step 4: Configure
-
 
 Add to `config.yaml`:
 
@@ -180,10 +178,10 @@ server:
   apiKey: "your-secret-api-key-here"
   customTools:
     enabled: true  # allows Lumo to control your devices
-    enableWebSearch: true # optionally, enable Lumo's own websearch
+  enableWebSearch: true # optionally, enable Lumo's own websearch
 ```
 
-> **Security:** Keep your API key private and make sure lumo-tamer is only be accessible from your local network, not the internet.
+> **Security:** Keep your API key private and make sure lumo-tamer is only accessible from your local network, not the internet.
 
 #### Step 5: Start the server
 
