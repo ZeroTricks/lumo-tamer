@@ -8,7 +8,7 @@ For CLI local actions (file operations, code execution), see [local-actions.md](
 
 ## Warning
 
-Custom tool support is experimental. Tool calls can fail because:
+Custom tool support is experimental. Tool calls can fail because of:
 
 - **Too many tools**: Lumo gets confused when the client provides many tools or (very) long instructions.
 - **Misrouted calls**: Lumo routes custom tools through its native pipeline, which fails server-side. lumo-tamer bounces these back, but this adds latency and isn't always reliable.
