@@ -397,6 +397,46 @@ export class SyncService {
     }
 
     /**
+     * Sync a single conversation by ID
+     *
+     * @param conversationId - The conversation ID to sync
+     * @returns true if synced, false if not found or not dirty
+     */
+    async syncById(conversationId: string): Promise<boolean> {
+        if (!this.keyManager.isInitialized()) {
+            throw new Error('KeyManager not initialized - cannot sync without encryption keys');
+        }
+
+        const store = getConversationStore();
+        const conversation = store.get(conversationId);
+
+        if (!conversation) {
+            logger.warn({ conversationId }, 'Conversation not found for sync');
+            return false;
+        }
+
+        if (!conversation.dirty) {
+            logger.info({ conversationId }, 'Conversation already synced');
+            return true;
+        }
+
+        // Ensure we have a space
+        const { remoteId: spaceRemoteId } = await this.getOrCreateSpace();
+
+        logger.info({ conversationId }, 'Syncing single conversation');
+
+        try {
+            await this.syncConversation(conversation, spaceRemoteId);
+            store.markSynced(conversationId);
+            logger.info({ conversationId }, 'Conversation synced successfully');
+            return true;
+        } catch (error) {
+            logger.error({ conversationId, error }, 'Failed to sync conversation');
+            throw error;
+        }
+    }
+
+    /**
      * Sync a single conversation to the server
      */
     private async syncConversation(

@@ -74,8 +74,10 @@ export async function executeCommand(
         return getHelpText();
 
       case 'save':
+        return await handleSaveCommand(params, context);
+
       case 'sync':
-        return await handleSaveCommand(context);
+        return await handleSyncCommand(context);
 
       case 'title':
         return handleTitleCommand(params, context);
@@ -112,7 +114,8 @@ function getHelpText(): string {
   return `Available commands:
   /help              - Show this help message
   /title <text>      - Set conversation title
-  /save, /sync       - Sync conversations to Proton server
+  /save [title]      - Save current conversation (optionally set title) to Proton
+  /sync              - Sync all conversations to Proton
   /refreshtokens     - Manually refresh auth tokens
   /logout            - Revoke session and delete tokens
   /quit              - Exit CLI (CLI mode only)${wakewordHint}`;
@@ -141,9 +144,48 @@ function handleTitleCommand(params: string, context?: CommandContext): string {
 }
 
 /**
- * Handle /save command - sync conversations to server
+ * Handle /save command - save current conversation only
+ * Optionally set title first with /save <title>
  */
-async function handleSaveCommand(context?: CommandContext): Promise<string> {
+async function handleSaveCommand(params: string, context?: CommandContext): Promise<string> {
+  try {
+    if (!context?.syncInitialized) {
+      return 'Sync not initialized. Persistence may be disabled or KeyManager not ready.';
+    }
+
+    if (!context?.conversationId) {
+      return 'No active conversation to save.';
+    }
+
+    // If title provided, set it first
+    if (params.trim()) {
+      const store = getConversationStore();
+      const title = params.trim().substring(0, 100);
+      store.setTitle(context.conversationId, title);
+    }
+
+    const syncService = getSyncService();
+    const synced = await syncService.syncById(context.conversationId);
+
+    if (!synced) {
+      return 'Conversation not found or could not be saved.';
+    }
+
+    const store = getConversationStore();
+    const conversation = store.get(context.conversationId);
+    const title = conversation?.title ?? 'Unknown';
+
+    return `Saved conversation: ${title}`;
+  } catch (error) {
+    logger.error({ error }, 'Failed to execute /save command');
+    return `Save failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+  }
+}
+
+/**
+ * Handle /sync command - sync all conversations to server
+ */
+async function handleSyncCommand(context?: CommandContext): Promise<string> {
   try {
     if (!context?.syncInitialized) {
       return 'Sync not initialized. Persistence may be disabled or KeyManager not ready.';
@@ -158,7 +200,7 @@ async function handleSaveCommand(context?: CommandContext): Promise<string> {
            `Mapped conversations: ${stats.mappedConversations}\n` +
            `Mapped messages: ${stats.mappedMessages}`;
   } catch (error) {
-    logger.error({ error }, 'Failed to execute /save command');
+    logger.error({ error }, 'Failed to execute /sync command');
     return `Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
   }
 }
