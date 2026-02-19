@@ -66,6 +66,14 @@ export async function readVault(vaultPath: string, keyConfig?: VaultKeyConfig): 
         throw new Error(`Vault not found: ${vaultPath}`);
     }
 
+    // Check vault isn't a directory (could happen if misconfigured)
+    if (!statSync(vaultPath).isFile()) {
+        throw new Error(
+            `Vault ${vaultPath} is a directory, not a file.\n` +
+            `Remove ${vaultPath} and try again.`
+        );
+    }
+
     const key = await getVaultKey(keyConfig);
     const ciphertext = readFileSync(vaultPath);
 
