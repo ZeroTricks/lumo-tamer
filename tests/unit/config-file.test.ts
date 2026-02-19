@@ -5,45 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { Document, parseDocument } from 'yaml';
 
-// We need to test the functions with a custom path, so we'll import the internals
-// and create wrapper functions that work with our test directory
-import { existsSync, statSync } from 'fs';
-
-interface ConfigFileStatus {
-  exists: boolean;
-  isDirectory: boolean;
-  isEmpty: boolean;
-  path: string;
-  error: string | null;
-}
-
-// Re-implement the functions for testing with custom paths
-function checkConfigFileAt(path: string): ConfigFileStatus {
-  if (!existsSync(path)) {
-    return { exists: false, isDirectory: false, isEmpty: false, path, error: null };
-  }
-
-  if (statSync(path).isDirectory()) {
-    return {
-      exists: true,
-      isDirectory: true,
-      isEmpty: false,
-      path,
-      error:
-        'config.yaml is a directory, not a file.\n' +
-        'This usually happens when Docker creates it automatically.\n' +
-        'Fix: rm -rf config.yaml && touch config.yaml',
-    };
-  }
-
-  const raw = readFileSync(path, 'utf8');
-  return { exists: true, isDirectory: false, isEmpty: raw.trim() === '', path, error: null };
-}
+import { checkConfigFileAt } from '../../src/app/config-file.js';
 
 function loadConfigYamlAt(path: string): Record<string, unknown> {
   const status = checkConfigFileAt(path);

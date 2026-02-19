@@ -50,12 +50,10 @@ export function getConfigPath(): string {
 }
 
 /**
- * Check config.yaml status without reading content.
+ * Check config file status at a given path without reading content.
  * Returns error message if the file is a directory or other issues.
  */
-export function checkConfigFile(): ConfigFileStatus {
-  const path = getConfigPath();
-
+export function checkConfigFileAt(path: string): ConfigFileStatus {
   if (!existsSync(path)) {
     return { exists: false, isDirectory: false, isEmpty: false, path, error: null };
   }
@@ -75,6 +73,14 @@ export function checkConfigFile(): ConfigFileStatus {
 
   const raw = readFileSync(path, 'utf8');
   return { exists: true, isDirectory: false, isEmpty: raw.trim() === '', path, error: null };
+}
+
+/**
+ * Check config.yaml status without reading content.
+ * Returns error message if the file is a directory or other issues.
+ */
+export function checkConfigFile(): ConfigFileStatus {
+  return checkConfigFileAt(getConfigPath());
 }
 
 /**
