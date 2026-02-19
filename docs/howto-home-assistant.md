@@ -44,14 +44,27 @@ Choose your installation method for lumo-tamer. Docker is recommended if you're 
 git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
 docker compose build tamer
-touch config.yaml
 # Create secret key to encrypt the token vault (or alternatively, use another secrets manager)
 mkdir -p secrets && chmod 700 secrets
 openssl rand -base64 32 > secrets/lumo-vault-key
 chmod 600 secrets/lumo-vault-key
 ```
 
-#### Step 2: Authenticate with Proton
+#### Step 2: Configure
+
+Create `config.yaml`:
+
+```yaml
+server:
+  apiKey: "your-secret-api-key-here"
+  customTools:
+    enabled: true  # allows Lumo to control your devices
+  enableWebSearch: true # optionally, enable Lumo's own websearch
+```
+
+> **Security:** Keep your API key private and make sure lumo-tamer is only accessible from your local network, not the internet.
+
+#### Step 3: Authenticate with Proton
 
 ```bash
 docker compose run --rm -it tamer auth login
@@ -72,20 +85,6 @@ Proton's security model doesn't allow for a simple OAuth authentication. Your cr
 
 </details>
 <br>
-
-#### Step 3: Configure
-
-Add to `config.yaml`:
-
-```yaml
-server:
-  apiKey: "your-secret-api-key-here"
-  customTools:
-    enabled: true  # allows Lumo to control your devices
-  enableWebSearch: true # optionally, enable Lumo's own websearch
-```
-
-> **Security:** Keep your API key private and make sure lumo-tamer is only accessible from your local network, not the internet.
 
 #### Step 4: Start the server
 
@@ -135,7 +134,21 @@ npm install && npm run build:all
 npm link
 ```
 
-#### Step 3: Authenticate with Proton
+#### Step 3: Configure
+
+Create `config.yaml`:
+
+```yaml
+server:
+  apiKey: "your-secret-api-key-here"
+  customTools:
+    enabled: true  # allows Lumo to control your devices
+  enableWebSearch: true # optionally, enable Lumo's own websearch
+```
+
+> **Security:** Keep your API key private and make sure lumo-tamer is only accessible from your local network, not the internet.
+
+#### Step 4: Authenticate with Proton
 
 ```bash
 tamer auth login
@@ -172,20 +185,6 @@ auth:
     keyFilePath: "/path/to/your/lumo-vault-key"
 ```
 </details>
-
-#### Step 4: Configure
-
-Add to `config.yaml`:
-
-```yaml
-server:
-  apiKey: "your-secret-api-key-here"
-  customTools:
-    enabled: true  # allows Lumo to control your devices
-  enableWebSearch: true # optionally, enable Lumo's own websearch
-```
-
-> **Security:** Keep your API key private and make sure lumo-tamer is only accessible from your local network, not the internet.
 
 #### Step 5: Start the server
 
