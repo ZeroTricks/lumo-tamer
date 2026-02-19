@@ -3,7 +3,7 @@
  *
  * Prompts the user to paste their rclone protondrive config section,
  * then saves tokens in the unified format used by all auth providers.
- * Used by CLI (npm run auth) for rclone authentication method.
+ * Used by CLI (tamer auth) for rclone authentication method.
  */
 
 import * as readline from 'readline';

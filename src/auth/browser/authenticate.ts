@@ -3,7 +3,7 @@
  *
  * Extracts auth tokens from an existing browser session via CDP.
  * This module exports functions that can be called programmatically
- * (by AuthManager for scheduled refresh) or via CLI (npm run extract-tokens).
+ * (by AuthManager for scheduled refresh) or via CLI (tamer auth browser).
  */
 
 import * as readline from 'readline';
@@ -700,7 +700,7 @@ async function promptForCdpEndpoint(defaultEndpoint?: string): Promise<string> {
  * Run browser authentication
  *
  * Prompts for CDP endpoint, extracts tokens from browser session, and saves to encrypted vault.
- * Used by CLI (npm run auth) for browser authentication method.
+ * Used by CLI (tamer auth) for browser authentication method.
  *
  * @returns Extraction result
  */

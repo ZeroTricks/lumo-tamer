@@ -45,6 +45,7 @@ git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
 npm install && npm run build:all
 # Optionally install command `tamer` globally
+# If you don't, replace "tamer" with "npx lumo-tamer" in all commands
 npm link
 ```
 

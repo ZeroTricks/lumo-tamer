@@ -91,7 +91,7 @@ export abstract class BaseAuthProvider implements AuthProvider {
         if (this.tokens?.method !== this.method) {
             throw new Error(
                 `Token file is not from ${this.method} auth (method: ${this.tokens?.method}).\n` +
-                'Run: npm run auth'
+                'Run: tamer auth'
             );
         }
     }
@@ -189,7 +189,7 @@ export abstract class BaseAuthProvider implements AuthProvider {
         if (!existsSync(vaultPath)) {
             throw new Error(
                 `Vault not found: ${vaultPath}\n` +
-                'Run: npm run auth'
+                'Run: tamer auth'
             );
         }
 
