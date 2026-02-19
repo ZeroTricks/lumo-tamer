@@ -32,21 +32,25 @@ export function updateAuthConfig(updates: AuthConfigUpdates): void {
   }
 
   updateConfigYaml((doc) => {
-    // Ensure auth section exists
+    // Ensure root is a map
     if (!isMap(doc.contents)) {
       doc.contents = doc.createNode({});
     }
-    if (!doc.getIn(['auth'])) {
-      doc.setIn(['auth'], {});
+
+    // Ensure auth section is a map (not a scalar like "auth: browser")
+    const authNode = doc.getIn(['auth'], true);
+    if (!authNode || !isMap(authNode)) {
+      doc.setIn(['auth'], doc.createNode({}));
     }
 
     if (validated.method) {
       doc.setIn(['auth', 'method'], validated.method);
     }
     if (validated.cdpEndpoint) {
-      // Ensure auth.browser section exists
-      if (!doc.getIn(['auth', 'browser'])) {
-        doc.setIn(['auth', 'browser'], {});
+      // Ensure auth.browser section is a map
+      const browserNode = doc.getIn(['auth', 'browser'], true);
+      if (!browserNode || !isMap(browserNode)) {
+        doc.setIn(['auth', 'browser'], doc.createNode({}));
       }
       doc.setIn(['auth', 'browser', 'cdpEndpoint'], validated.cdpEndpoint);
     }
