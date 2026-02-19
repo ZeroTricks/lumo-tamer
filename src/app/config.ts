@@ -1,12 +1,10 @@
-import { existsSync, readFileSync } from 'fs';
-import { load } from 'js-yaml';
 import { z } from 'zod';
 import merge from 'lodash/merge.js';
 import bytes from 'bytes';
-import { resolveProjectPath } from './paths.js';
+import { loadConfigYaml, loadDefaultsYaml } from './config-file.js';
 
 // Load defaults from YAML (single source of truth)
-const configDefaults = load(readFileSync(resolveProjectPath('config.defaults.yaml'), 'utf8')) as Record<string, unknown>;
+const configDefaults = loadDefaultsYaml();
 
 // Config loading
 export type ConfigMode = 'server' | 'cli';
@@ -159,12 +157,9 @@ let userConfigCache: Record<string, unknown> | null = null;
 function loadUserYaml(): Record<string, unknown> {
   if (userConfigCache !== null) return userConfigCache;
 
-  const configPath = resolveProjectPath('config.yaml');
-  if (!existsSync(configPath)) {
+  userConfigCache = loadConfigYaml();
+  if (Object.keys(userConfigCache).length === 0) {
     console.log('No config.yaml found, using defaults from config.defaults.yaml');
-    userConfigCache = {};
-  } else {
-    userConfigCache = load(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
   }
   return userConfigCache;
 }

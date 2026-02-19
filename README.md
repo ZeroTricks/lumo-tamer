@@ -284,6 +284,7 @@ It is recommended to run lumo-tamer's server in a Docker container for a more se
 git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
 docker compose build tamer
+touch config.yaml
 # use docker swarm secrets for something more secure
 mkdir -p secrets && chmod 700 secrets
 openssl rand -base64 32 > secrets/lumo-vault-key
