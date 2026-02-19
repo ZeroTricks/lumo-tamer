@@ -7,6 +7,7 @@ import { logger } from './logger.js';
 import { getCommandsConfig } from './config.js';
 import { getSyncService, getConversationStore, getAutoSyncService } from '../conversations/index.js';
 import type { AuthManager } from '../auth/index.js';
+import type { Turn } from '../lumo-client/index.js';
 
 /**
  * Check if a message is a command (starts with / or wakeword)
@@ -32,6 +33,32 @@ export interface CommandContext {
   conversationId?: string;
   /** AuthManager for logout and token refresh commands */
   authManager?: AuthManager;
+  /** Turns from the current request (for /save on stateless requests) */
+  turns?: Turn[];
+}
+
+export interface CommandResult {
+  isCommand: true;
+  response: string;
+}
+
+/**
+ * Check if the last user message is a command and execute it.
+ * Returns the command result if executed, or undefined if not a command.
+ */
+export async function tryExecuteCommand(
+  turns: Turn[],
+  commandContext: CommandContext
+): Promise<CommandResult | undefined> {
+  if (!getCommandsConfig().enabled) return undefined;
+
+  const lastUserTurn = [...turns].reverse().find(t => t.role === 'user');
+  if (!lastUserTurn?.content || !isCommand(lastUserTurn.content)) return undefined;
+
+  const response = await executeCommand(lastUserTurn.content, { ...commandContext, turns });
+  logger.info({ command: lastUserTurn.content, response }, 'Command executed via API');
+
+  return { isCommand: true, response };
 }
 
 /**
@@ -146,6 +173,9 @@ function handleTitleCommand(params: string, context?: CommandContext): string {
 /**
  * Handle /save command - save current conversation only
  * Optionally set title first with /save <title>
+ *
+ * For stateless requests (no conversationId), creates a new conversation
+ * from the provided messages and saves it.
  */
 async function handleSaveCommand(params: string, context?: CommandContext): Promise<string> {
   try {
@@ -153,28 +183,41 @@ async function handleSaveCommand(params: string, context?: CommandContext): Prom
       return 'Sync not initialized. Persistence may be disabled or KeyManager not ready.';
     }
 
-    if (!context?.conversationId) {
-      return 'No active conversation to save.';
-    }
+    const store = getConversationStore();
+    let conversationId = context?.conversationId;
+    let wasCreated = false;
 
-    // If title provided, set it first
-    if (params.trim()) {
-      const store = getConversationStore();
-      const title = params.trim().substring(0, 100);
-      store.setTitle(context.conversationId, title);
+    // Handle stateless requests - create conversation from turns
+    if (!conversationId) {
+      if (!context?.turns || context.turns.length === 0) {
+        return 'No messages to save.';
+      }
+
+      const result = store.createFromTurns(context.turns, params.trim() || undefined);
+      conversationId = result.conversationId;
+      wasCreated = true;
+    } else {
+      // Stateful request - optionally set title
+      if (params.trim()) {
+        const title = params.trim().substring(0, 100);
+        store.setTitle(conversationId, title);
+      }
     }
 
     const syncService = getSyncService();
-    const synced = await syncService.syncById(context.conversationId);
+    const synced = await syncService.syncById(conversationId);
 
     if (!synced) {
       return 'Conversation not found or could not be saved.';
     }
 
-    const store = getConversationStore();
-    const conversation = store.get(context.conversationId);
+    const conversation = store.get(conversationId);
     const title = conversation?.title ?? 'Unknown';
 
+    // Different message for newly created vs existing conversation
+    if (wasCreated) {
+      return `Created and saved conversation: ${title}`;
+    }
     return `Saved conversation: ${title}`;
   } catch (error) {
     logger.error({ error }, 'Failed to execute /save command');

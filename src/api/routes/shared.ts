@@ -1,10 +1,14 @@
 import { randomUUID } from 'crypto';
+import type { Response } from 'express';
 import { getCustomToolsConfig } from '../../app/config.js';
 import { getMetrics } from '../metrics/index.js';
-import type { EndpointDependencies, OpenAITool, OpenAIToolCall } from '../types.js';
 import type { CommandContext } from '../../app/commands.js';
+import type { EndpointDependencies, OpenAITool, OpenAIToolCall } from '../types.js';
 import type { ConversationId } from '../../conversations/types.js';
 import type { ChatResult } from '../../lumo-client/index.js';
+
+// Re-export for convenience
+export { tryExecuteCommand, type CommandResult } from '../../app/commands.js';
 
 // ── Tool call type for persistence ─────────────────────────────────
 
@@ -118,4 +122,13 @@ export function generateFunctionCallId(): string {
 /** Generate a chat completion ID (`chatcmpl-xxx`). */
 export function generateChatCompletionId(): string {
   return `chatcmpl-${randomUUID()}`;
+}
+
+// ── SSE headers ───────────────────────────────────────────────────
+
+/** Set standard SSE headers on the response. */
+export function setSSEHeaders(res: Response): void {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
 }

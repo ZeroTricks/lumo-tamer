@@ -10,6 +10,7 @@
 
 import { randomUUID } from 'crypto';
 import { logger } from '../app/logger.js';
+import { deterministicUUID } from '../app/id-generator.js';
 import type { Turn } from '../lumo-client/types.js';
 import {
     findNewMessages,
@@ -137,7 +138,7 @@ export class ConversationStore {
 
         for (const msg of newMessages) {
             // Use provided ID (for tool messages) or compute hash (for regular messages)
-            const semanticId = msg.id ?? hashMessage(msg.role, msg.content).slice(0, 16);
+            const semanticId = msg.id ?? hashMessage(msg.role, msg.content ?? '').slice(0, 16);
 
             const message: Message = {
                 id: randomUUID(),
@@ -145,7 +146,7 @@ export class ConversationStore {
                 createdAt: now,
                 role: msg.role as MessageRole,
                 parentId,
-                status: 'completed',
+                status: 'succeeded',
                 content: msg.content,
                 semanticId,
             };
@@ -189,7 +190,7 @@ export class ConversationStore {
     appendAssistantResponse(
         id: ConversationId,
         content: string,
-        status: 'completed' | 'failed' = 'completed',
+        status: 'succeeded' | 'failed' = 'succeeded',
         semanticId?: string
     ): Message {
         const state = this.getOrCreate(id);
@@ -250,7 +251,7 @@ export class ConversationStore {
                 name: tc.name,
                 arguments: tc.arguments,
             });
-            this.appendAssistantResponse(id, content, 'completed', tc.call_id);
+            this.appendAssistantResponse(id, content, 'succeeded', tc.call_id);
         }
     }
 
@@ -271,7 +272,7 @@ export class ConversationStore {
             createdAt: now,
             role: 'user',
             parentId,
-            status: 'completed',
+            status: 'succeeded',
             content,
             semanticId: hashMessage('user', content).slice(0, 16),
         };
@@ -287,6 +288,32 @@ export class ConversationStore {
         }, 'Appended user message');
 
         return message;
+    }
+
+    /**
+     * Create a conversation from turns (for stateless /save commands).
+     *
+     * Generates a deterministic conversation ID from the title to allow
+     * re-saving the same conversation without creating duplicates.
+     *
+     * @param turns - Turns to populate the conversation
+     * @param title - Optional title (auto-generated if not provided)
+     * @returns The created conversation ID and title
+     */
+    createFromTurns(
+        turns: Turn[],
+        title?: string
+    ): { conversationId: ConversationId; title: string } {
+        const effectiveTitle = title?.trim().substring(0, 100) || generateAutoTitle(turns);
+        const conversationId = deterministicUUID(`save:${effectiveTitle}`);
+
+        this.getOrCreate(conversationId);
+        this.appendMessages(conversationId, turns);
+        this.setTitle(conversationId, effectiveTitle);
+
+        logger.info({ conversationId, title: effectiveTitle, turnCount: turns.length }, 'Created conversation from turns');
+
+        return { conversationId, title: effectiveTitle };
     }
 
     /**
@@ -465,6 +492,24 @@ export class ConversationStore {
             }
         }
     }
+}
+
+/**
+ * Generate an auto-title from turns.
+ *
+ * Unlike other auto-title generation (which uses Lumo to summarize),
+ * this uses the first user message truncated to 50 chars.
+ * Used for stateless /save where we don't have a Lumo-generated title.
+ */
+function generateAutoTitle(turns: Turn[]): string {
+    const firstUserTurn = turns.find(t => t.role === 'user');
+    if (firstUserTurn?.content) {
+        const content = firstUserTurn.content.trim();
+        return content.length > 50 ? content.slice(0, 47) + '...' : content;
+    }
+    // Fallback to timestamp if no user message
+    const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+    return `Chat (${timestamp})`;
 }
 
 // Singleton instance

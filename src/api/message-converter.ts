@@ -2,31 +2,17 @@
  * Converts OpenAI message format to Lumo Turn format
  */
 
-import type { ChatMessage, ResponseInputItem, OpenAITool, OpenAIToolCall } from './types.js';
+import type { ChatMessage, ResponseInputItem, OpenAIToolCall } from './types.js';
 import type { Turn } from '../lumo-client/index.js';
-import { isCommand } from '../app/commands.js';
-import { getServerInstructionsConfig } from '../app/config.js';
-import { buildInstructions } from './instructions.js';
-import { injectInstructionsIntoTurns } from '../app/instructions.js';
 import { addToolNameToFunctionOutput } from './tools/call-id.js';
 
 // ── Input normalization ───────────────────────────────────────────────
 //
-// Design: Keep stored format as close to Lumo turns as possible.
+// - normalizeInputItem(): Converts OpenAI tool formats (role:'tool', tool_calls,
+//   function_call, function_call_output) to normalized {role, content} with JSON.
 //
-// - normalizeInputItem(): Does the heavy lifting - converts OpenAI tool formats
-//   (role:'tool', tool_calls, function_call, function_call_output) to normalized
-//   {role, content} with JSON. Used for persistence (clean, no prefix).
-//
-// - convertChatMessagesToTurns(): Minimal transform on top - skips system messages,
-//   injects instructions, and applies Lumo-specific prefixing via addToolNameToFunctionOutput().
-//
-// Current differences between stored format and Lumo turns:
-// - Instructions: Injected into last user message for Lumo, not stored
-// - Tool name prefix: Added to function_call_output for Lumo context, not stored
-//
-// If we later need WebClient compatibility for synced conversations, we may
-// need to store the prefixed/instructed format instead.
+// - convertMessagesToTurns() / convertResponseInputToTurns(): Build clean Turn[]
+//   for persistence. Instruction injection happens later in LumoClient.
 
 /**
  * Normalized message format (role + content only).
@@ -161,8 +147,9 @@ export function normalizeInputItem(item: unknown): NormalizedMessage | Normalize
 
 /**
  * Extract system/developer message content from a ChatMessage array.
+ * Exported for routes to build instructions.
  */
-function extractSystemMessage(messages: ChatMessage[]): string | undefined {
+export function extractSystemMessage(messages: ChatMessage[]): string | undefined {
   const systemMsg = messages.find(m =>
     m.role === 'system' || (m.role as string) === 'developer'
   );
@@ -215,27 +202,23 @@ function convertChatMessagesToTurns(messages: ChatMessage[]): Turn[] {
 }
 
 /**
- * Convert OpenAI ChatMessage[] to Lumo Turn[] with system message injection.
+ * Convert OpenAI ChatMessage[] to Lumo Turn[].
+ * Returns clean turns without instruction injection (injection happens in LumoClient).
  *
  * @param messages - Array of chat messages
- * @param tools - Optional array of tool definitions (triggers legacy tool mode)
  */
-export function convertMessagesToTurns(messages: ChatMessage[], tools?: OpenAITool[]): Turn[] {
-  const { injectInto } = getServerInstructionsConfig();
-  const systemContent = extractSystemMessage(messages);
-  const instructions = buildInstructions(tools, systemContent);
-  const turns = convertChatMessagesToTurns(messages);
-  return injectInstructionsIntoTurns(turns, instructions, injectInto);
+export function convertMessagesToTurns(messages: ChatMessage[]): Turn[] {
+  return convertChatMessagesToTurns(messages);
 }
 
 /**
  * Convert OpenAI Responses API input to Lumo Turn[].
+ * Returns clean turns without instruction injection (injection happens in LumoClient).
  * Handles both string input and message array input.
  */
 export function convertResponseInputToTurns(
   input: string | ResponseInputItem[] | undefined,
-  requestInstructions?: string,
-  tools?: OpenAITool[]
+  requestInstructions?: string
 ): Turn[] {
   if (!input) {
     return [];
@@ -243,14 +226,7 @@ export function convertResponseInputToTurns(
 
   // Simple string input
   if (typeof input === 'string') {
-    // Don't prepend instructions to commands (e.g., /help, /save)
-    if (isCommand(input)) {
-      return [{ role: 'user', content: input }];
-    }
-
-    const instructions = buildInstructions(tools, requestInstructions);
-    const content = `[Project instructions: ${instructions}]\n\n${input}`;
-    return [{ role: 'user', content }];
+    return [{ role: 'user', content: input }];
   }
 
   // Array of messages -> ChatMessage[]
@@ -289,9 +265,5 @@ export function convertResponseInputToTurns(
     chatMessages.unshift({ role: 'system', content: requestInstructions });
   }
 
-  const { injectInto } = getServerInstructionsConfig();
-  const systemContent = extractSystemMessage(chatMessages);
-  const instructions = buildInstructions(tools, systemContent);
-  const turns = convertChatMessagesToTurns(chatMessages);
-  return injectInstructionsIntoTurns(turns, instructions, injectInto);
+  return convertChatMessagesToTurns(chatMessages);
 }

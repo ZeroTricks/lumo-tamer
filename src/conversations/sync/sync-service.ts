@@ -99,11 +99,9 @@ const RoleToInt: Record<MessageRole, number> = {
 };
 
 // Status mapping: our internal status to API integer values
-const StatusToInt: Record<MessageStatus, number | undefined> = {
+const StatusToInt: Record<MessageStatus, number> = {
     failed: StatusInt.Failed,
-    completed: StatusInt.Succeeded,
-    pending: undefined,
-    streaming: undefined,
+    succeeded: StatusInt.Succeeded,
 };
 
 export class SyncService {
@@ -549,7 +547,7 @@ export class SyncService {
             Role: RoleToInt[message.role] ?? RoleInt.User,
             ParentID: parentRemoteId,
             ParentId: parentRemoteId,  // Duplicate for buggy backend (lowercase 'd')
-            Status: StatusToInt[message.status],
+            Status: StatusToInt[message.status ?? 'succeeded'],
             MessageTag: message.id,
             Encrypted: encryptedPrivate,
         }, 'background');

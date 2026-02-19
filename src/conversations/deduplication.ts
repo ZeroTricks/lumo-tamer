@@ -37,7 +37,7 @@ export function createFingerprint(
 export function fingerprintMessages(messages: Message[]): MessageFingerprint[] {
     return messages.map((msg, index) => createFingerprint(
         msg.role,
-        msg.content,
+        msg.content ?? '',
         index
     ));
 }
@@ -47,7 +47,7 @@ export function fingerprintMessages(messages: Message[]): MessageFingerprint[] {
  */
 export interface IncomingMessage {
     role: string;
-    content: string;
+    content?: string;
     id?: string;  // Semantic ID for deduplication (call_id for tools)
 }
 
@@ -83,7 +83,7 @@ export function findNewMessages(
         const incomingMsg = incoming[i];
 
         // Compute semantic ID for incoming message
-        const incomingSemanticId = incomingMsg.id ?? hashMessage(incomingMsg.role, incomingMsg.content).slice(0, 16);
+        const incomingSemanticId = incomingMsg.id ?? hashMessage(incomingMsg.role, incomingMsg.content ?? '').slice(0, 16);
 
         if (storedIds.has(incomingSemanticId)) {
             matchedCount++;
@@ -122,15 +122,15 @@ export function isValidContinuation(
     // Check if incoming starts with the same messages (using semantic IDs)
     for (let i = 0; i < stored.length; i++) {
         const storedSemanticId = stored[i].semanticId;
-        const incomingSemanticId = incoming[i].id ?? hashMessage(incoming[i].role, incoming[i].content).slice(0, 16);
+        const incomingSemanticId = incoming[i].id ?? hashMessage(incoming[i].role, incoming[i].content ?? '').slice(0, 16);
 
         if (storedSemanticId !== incomingSemanticId) {
             return {
                 valid: false,
                 reason: `Message mismatch at index ${i} - history may have been modified`,
                 debugInfo: {
-                    storedMsg: `${stored[i].role}: ${stored[i].content}`,
-                    incomingMsg: `${incoming[i].role}: ${incoming[i].content}`,
+                    storedMsg: `${stored[i].role}: ${stored[i].content ?? ''}`,
+                    incomingMsg: `${incoming[i].role}: ${incoming[i].content ?? ''}`,
                 }
             };
         }
@@ -160,7 +160,7 @@ export function detectBranching(
 
     for (let i = 0; i < minLength; i++) {
         const storedSemanticId = stored[i].semanticId;
-        const incomingSemanticId = incoming[i].id ?? hashMessage(incoming[i].role, incoming[i].content).slice(0, 16);
+        const incomingSemanticId = incoming[i].id ?? hashMessage(incoming[i].role, incoming[i].content ?? '').slice(0, 16);
 
         if (storedSemanticId !== incomingSemanticId) {
             divergePoint = i;
