@@ -29,48 +29,43 @@ if (args['--help'] || args._.includes('--help') || args._.includes('-h')) {
 }
 
 
-function handleFatalError(error: unknown): never {
+// Handle uncaught errors with proper log flush (stack trace depends on log.target config)
+async function handleFatalError(error: unknown): Promise<never> {
   logger.fatal({ error });
-  logger.flush();
-  setTimeout(() => process.exit(1), 200);
-  throw error; // never reached, satisfies return type
+  await new Promise<void>((resolve) => logger.flush(() => resolve()));
+  process.exit(1);
 }
+process.on('unhandledRejection', handleFatalError);
+process.on('uncaughtException', handleFatalError);
 
 // Route commands
-try {
-  if (args._[0] === 'auth') {
-    const { runAuthCommand } = await import('./auth/authenticate.js');
-    await runAuthCommand(args._.slice(1));
-    process.exit(0);
-  }
+if (args._[0] === 'auth') {
+  const { runAuthCommand } = await import('./auth/authenticate.js');
+  await runAuthCommand(args._.slice(1));
+  process.exit(0);
+} else if (args._[0] === 'server') {
+  const { Application } = await import('./app/index.js');
+  const { APIServer } = await import('./api/server.js');
+  const { validateTemplateOnce } = await import('./api/instructions.js');
 
-  if (args._[0] === 'server') {
-    const { Application } = await import('./app/index.js');
-    const { APIServer } = await import('./api/server.js');
-    const { validateTemplateOnce } = await import('./api/instructions.js');
+  const serverConfig = getServerConfig();
+  validateTemplateOnce(serverConfig.instructions.template);
+  logger.info('Starting lumo-tamer API Server...');
 
-    const serverConfig = getServerConfig();
-    validateTemplateOnce(serverConfig.instructions.template);
-    logger.info('Starting lumo-tamer API Server...');
+  const app = await Application.create();
+  const apiServer = new APIServer(app);
+  await apiServer.start();
 
-    const app = await Application.create();
-    const apiServer = new APIServer(app);
-    await apiServer.start();
+  process.on('SIGINT', () => { logger.info('\nShutting down...'); process.exit(0); });
+  process.on('SIGTERM', () => { logger.info('\nShutting down...'); process.exit(0); });
+} else {
+  // Default: CLI chat
+  const { Application } = await import('./app/index.js');
+  const { CLIClient } = await import('./cli/client.js');
 
-    process.on('SIGINT', () => { logger.info('\nShutting down...'); process.exit(0); });
-    process.on('SIGTERM', () => { logger.info('\nShutting down...'); process.exit(0); });
-  }
-  else {
-    // Default: CLI chat
-    const { Application } = await import('./app/index.js');
-    const { CLIClient } = await import('./cli/client.js');
-
-    logger.info('Starting lumo-tamer cli...');
-    const app = await Application.create();
-    const cliClient = new CLIClient(app);
-    await cliClient.run();
-    process.exit(0);
-  }
-} catch (error) {
-  handleFatalError(error);
+  logger.info('Starting lumo-tamer cli...');
+  const app = await Application.create();
+  const cliClient = new CLIClient(app);
+  await cliClient.run();
+  process.exit(0);
 }
