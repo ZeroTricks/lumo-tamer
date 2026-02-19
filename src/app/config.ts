@@ -1,12 +1,10 @@
-import { existsSync, readFileSync } from 'fs';
-import { load } from 'js-yaml';
 import { z } from 'zod';
 import merge from 'lodash/merge.js';
 import bytes from 'bytes';
-import { resolveProjectPath } from './paths.js';
+import { fatalExit, loadConfigYaml, loadDefaultsYaml } from './config-file.js';
 
 // Load defaults from YAML (single source of truth)
-const configDefaults = load(readFileSync(resolveProjectPath('config.defaults.yaml'), 'utf8')) as Record<string, unknown>;
+const configDefaults = loadDefaultsYaml();
 
 // Config loading
 export type ConfigMode = 'server' | 'cli';
@@ -159,12 +157,9 @@ let userConfigCache: Record<string, unknown> | null = null;
 function loadUserYaml(): Record<string, unknown> {
   if (userConfigCache !== null) return userConfigCache;
 
-  const configPath = resolveProjectPath('config.yaml');
-  if (!existsSync(configPath)) {
+  userConfigCache = loadConfigYaml();
+  if (Object.keys(userConfigCache).length === 0) {
     console.log('No config.yaml found, using defaults from config.defaults.yaml');
-    userConfigCache = {};
-  } else {
-    userConfigCache = load(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
   }
   return userConfigCache;
 }
@@ -191,11 +186,7 @@ function loadMergedConfig(mode: ConfigMode): MergedConfig {
 
     return (mode === 'server' ? serverMergedConfigSchema : cliMergedConfigSchema).parse(merged);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      console.error('Configuration validation failed:');
-      error.issues.forEach((e) => console.error(`  - ${e.path.join('.')}: ${e.message}`));
-      throw new Error('Invalid configuration. Please check config.yaml and config.defaults.yaml');
-    }
+    catchZodErrors(error);
     throw error;
   }
 }
@@ -206,6 +197,13 @@ function loadMergedConfig(mode: ConfigMode): MergedConfig {
 
 let config: MergedConfig | null = null;
 let configMode: ConfigMode | null = null;
+
+function catchZodErrors(error: unknown, path="") {
+  if (error instanceof z.ZodError) {
+    const errors = error.issues.map((e) => `  - ${path ? (path + '.') : ""}${e.path.join('.')}: ${e.message}`).join('\n');
+    fatalExit(`Configuration validation for config.yaml failed:\n${errors}`);
+  }
+}
 
 export function initConfig(mode: ConfigMode): void {
   configMode = mode;
@@ -280,9 +278,14 @@ export function getInstructionsConfig() {
 
 // Legacy export (for scripts before initConfig, e.g. auth)
 export const authConfig = ((): z.infer<typeof authConfigSchema> => {
-  const userConfig = loadUserYaml();
-  const merged = merge({}, configDefaults.auth, userConfig.auth);
-  return authConfigSchema.parse(merged);
+  try {
+    const userConfig = loadUserYaml();
+    const merged = merge({}, configDefaults.auth, userConfig.auth);
+    return authConfigSchema.parse(merged);
+  } catch (error) {
+    catchZodErrors(error, "auth");
+    throw error;
+  }
 })();
 
 // Mock config (eagerly loaded, needed before initConfig to decide auth vs mock)

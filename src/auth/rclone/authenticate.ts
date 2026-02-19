@@ -3,7 +3,7 @@
  *
  * Prompts the user to paste their rclone protondrive config section,
  * then saves tokens in the unified format used by all auth providers.
- * Used by CLI (npm run auth) for rclone authentication method.
+ * Used by CLI (tamer auth) for rclone authentication method.
  */
 
 import * as readline from 'readline';
@@ -13,6 +13,7 @@ import { logger } from '../../app/logger.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { writeVault, type VaultKeyConfig } from '../vault/index.js';
 import type { StoredTokens } from '../types.js';
+import { print } from '../../app/terminal.js';
 
 /**
  * Read multi-line input from stdin until an empty line is entered
@@ -23,18 +24,18 @@ async function readMultilineInput(): Promise<string> {
         output: process.stdout,
     });
 
-    console.log('Paste your rclone protondrive config section below.');
-    console.log('You can find it in ~/.config/rclone/rclone.conf');
-    console.log('');
-    console.log('Example:');
-    console.log('  [proton]');
-    console.log('  type = protondrive');
-    console.log('  client_uid = ...');
-    console.log('  client_access_token = ...');
-    console.log('  client_refresh_token = ...');
-    console.log('  client_salted_key_pass = ...');
-    console.log('');
-    console.log('(Press Enter on an empty line when done)\n');
+    print('Paste your rclone protondrive config section below.');
+    print('You can find it in ~/.config/rclone/rclone.conf (Linux/macOS) or `%APPDATA%\\rclone\\rclone.conf` (Windows)');
+    print('');
+    print('Example:');
+    print('  [lumo]');
+    print('  type = protondrive');
+    print('  client_uid = ...');
+    print('  client_access_token = ...');
+    print('  client_refresh_token = ...');
+    print('  client_salted_key_pass = ...');
+    print('');
+    print('(Press Enter on an empty line when done)\n');
 
     const lines: string[] = [];
 

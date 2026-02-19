@@ -92,7 +92,7 @@ function validateReplacePatternsOnce(): void {
     try {
       new RegExp(pattern, 'gi');
     } catch (e) {
-      logger.warn(`Ignoring "${pattern}" in instructions.replacePatterns:${(e as Error).message}`);
+      logger.warn({ error: e, pattern }, `Ignoring "${pattern}" in instructions.replacePatterns`);
     }
   }
 }

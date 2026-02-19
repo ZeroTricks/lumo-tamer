@@ -45,6 +45,7 @@ git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
 npm install && npm run build:all
 # Optionally install command `tamer` globally
+# If you don't, replace "tamer" with "npx lumo-tamer" in all commands
 npm link
 ```
 
@@ -55,13 +56,43 @@ For Docker installation, see [Docker](#docker).
 - Run `tamer auth login`
 - Enter your Proton credentials and (optionally) 2FA code.
 
-> **Tip:** If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first. This may clear the challenge for subsequent login attempts.
+<details>
+<summary><strong>I'm asked to enter a CAPTCHA</strong></summary>
 
-Alternative auth methods:
+Log in to Proton in a regular browser from the same IP first. This often clears the challenge. If you're still hit with a CAPTCHA challenge after, you might want to try an [alternative auth method](docs/authentication.md).
+</details>
+
+<details>
+<summary><strong>Why do I have to enter my password?</strong></summary>
+
+Proton's security model doesn't allow for a simple OAuth authentication. Your credentials are not saved or logged, and security tokens are stored encrypted.
+Alternatively, you can authenticate via:
 - **browser**: Extract tokens from a Chrome session. Required when you want to sync conversations with Lumo's webclient.
 - **rclone**: Paste tokens from an rclone configuration with proton-drive.
 
 See [docs/authentication.md](docs/authentication.md) for details and troubleshooting.
+
+</details>
+
+<details>
+<summary><strong>I get an error saying no secure key storage is available.</strong></summary>
+
+By default, lumo-tamer will encrypt fetched tokens with a password saved to your OS keychain. If this is unavailable (for example on headless environments), you can alternatively create a keyfile and guard it with your life:
+
+```bash
+openssl rand -base64 32 > /path/to/your/lumo-vault-key
+chmod 600 /path/to/your/lumo-vault-key
+```
+
+And add to `config.yaml`:
+```yaml
+auth:
+  vault:
+    keyFilePath: "/path/to/your/lumo-vault-key"
+```
+</details>
+
+
 
 
 ### 3. Run
@@ -284,17 +315,35 @@ It is recommended to run lumo-tamer's server in a Docker container for a more se
 git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
 docker compose build tamer
-# use docker swarm secrets for something more secure
+# Create secret key to encrypt the token vault (or alternatively, use another secrets manager)
 mkdir -p secrets && chmod 700 secrets
 openssl rand -base64 32 > secrets/lumo-vault-key
 chmod 600 secrets/lumo-vault-key
 ```
 
+#### Configure
+
+Create `config.yaml` with your settings. See [Configuration](#configuration) for all options.
+
 #### Authenticate
 
 ```bash
-docker compose run --rm -it tamer auth
+docker compose run --rm -it tamer auth login
 ```
+
+Enter your Proton email, password, and 2FA code (if enabled).
+
+<details>
+<summary><strong>I'm asked to enter a CAPTCHA</strong></summary>
+
+Log in to Proton in a regular browser from the same IP first. This often clears the challenge. If you're still hit with a CAPTCHA challenge after, you might want to try an [alternative auth method](docs/authentication.md).
+</details>
+
+<details>
+<summary><strong>Why do I have to enter my password?</strong></summary>
+
+Proton's security model doesn't allow for a simple OAuth authentication. Your credentials are not saved or logged, and security tokens are stored encrypted. [Read further](docs/authentication.md#security) for more information or other authentication methods.
+</details>
 
 #### Run
 Server:

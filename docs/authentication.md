@@ -243,7 +243,7 @@ When token refresh fails, make sure that:
 Check current authentication status:
 
 ```bash
-npm run auth-status
+tamer auth status
 ```
 
 Shows:

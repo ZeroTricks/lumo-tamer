@@ -1,10 +1,10 @@
 # Authentication configuration
 auth:
-  # - browser: token extraction via browser
   # - login: enter Proton credentials via go-proton-api
+  # - browser: token extraction via browser
   # - rclone: paste rclone config
   # See docs/authentication.md
-  method: "browser"
+  method: "login"
 
   # Encrypted vault for secure token storage (AES-256-GCM)
   # Key is stored in OS keychain (desktop) or Docker secret (containers)
