@@ -9,7 +9,7 @@
  * to avoid the "key taped to the door" anti-pattern.
  */
 
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, statSync } from 'fs';
 import { randomBytes } from 'crypto';
 import { logger } from '../../app/logger.js';
 import { authConfig } from '../../app/config.js';
@@ -77,6 +77,14 @@ export async function getVaultKey(config: VaultKeyConfig = getDefaultKeyConfig()
 
     // Try key file (fallback for Docker/headless)
     if (existsSync(config.keyFilePath)) {
+        // Check it's actually a file, not a directory
+        if (!statSync(config.keyFilePath).isFile()) {
+            throw new Error(
+                `Key file ${config.keyFilePath} is a directory, not a file.\n` +
+                'This usually happens when Docker creates it automatically.\n' +
+                'Remove and recreate ' + config.keyFilePath + ' to continue (see README.md).'
+            );
+        }
         try {
             const content = readFileSync(config.keyFilePath);
             // Support both raw binary (32 bytes) and base64 (44 chars)
@@ -93,7 +101,7 @@ export async function getVaultKey(config: VaultKeyConfig = getDefaultKeyConfig()
             logger.debug({ source: 'file', path: config.keyFilePath }, 'Vault key loaded from file');
             return cachedKey;
         } catch (err) {
-            logger.debug({ err }, 'Failed to read key file');
+            logger.debug({ err }, `Failed to read key file ${config.keyFilePath}`);
         }
     }
 

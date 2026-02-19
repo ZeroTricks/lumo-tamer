@@ -81,9 +81,9 @@ export function createFetchAdapter(protonApi: ProtonApi): typeof globalThis.fetc
             const status = err.status || 500;
 
             if (status >= 400 && status < 500) {
-                logger.warn({ url: apiUrl, method, status }, `API request failed: ${err.message}`);
+                logger.warn({ url: apiUrl, method, status, error }, 'API request failed');
             } else {
-                logger.debug({ url: apiUrl, method, status, error: err.message }, 'Fetch adapter: request failed');
+                logger.debug({ url: apiUrl, method, status, error }, 'Fetch adapter: request failed');
             }
 
             // Return error response that LumoApi can handle
