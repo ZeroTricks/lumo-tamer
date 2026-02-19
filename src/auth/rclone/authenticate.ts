@@ -13,7 +13,7 @@ import { logger } from '../../app/logger.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { writeVault, type VaultKeyConfig } from '../vault/index.js';
 import type { StoredTokens } from '../types.js';
-import { print } from 'app/terminal.js';
+import { print } from '../../app/terminal.js';
 
 /**
  * Read multi-line input from stdin until an empty line is entered
