@@ -411,6 +411,16 @@ export class ConversationStore {
     }
 
     /**
+     * Mark a conversation as dirty (needs sync)
+     */
+    markDirtyById(id: ConversationId): void {
+        const state = this.conversations.get(id);
+        if (state) {
+            this.markDirty(state);
+        }
+    }
+
+    /**
      * Get store statistics
      */
     getStats(): {

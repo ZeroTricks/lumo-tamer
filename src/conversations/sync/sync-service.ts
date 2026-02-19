@@ -421,14 +421,18 @@ export class SyncService {
         // Ensure we have a space
         const { remoteId: spaceRemoteId } = await this.getOrCreateSpace();
 
+        // Mark as synced early to prevent auto-sync from picking it up concurrently
+        store.markSynced(conversationId);
+
         logger.info({ conversationId }, 'Syncing single conversation');
 
         try {
             await this.syncConversation(conversation, spaceRemoteId);
-            store.markSynced(conversationId);
             logger.info({ conversationId }, 'Conversation synced successfully');
             return true;
         } catch (error) {
+            // Re-mark as dirty so it can be retried
+            store.markDirtyById(conversationId);
             logger.error({ conversationId, error }, 'Failed to sync conversation');
             throw error;
         }
