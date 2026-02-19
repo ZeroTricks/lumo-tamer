@@ -16,7 +16,7 @@ import { resolveProjectPath } from './paths.js';
  * Exit with a fatal error message.
  * Used for config errors that occur before logger is initialized.
  */
-function fatalExit(message: string): never {
+export function fatalExit(message: string): never {
   console.error(`FATAL: ${message}`);
   process.exit(1);
 }
