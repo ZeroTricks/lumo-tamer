@@ -6,6 +6,8 @@ services:
     ports:
       - "3003:3003"
     volumes:
+      # NOTE: config.yaml must exist before first run (touch config.yaml).
+      # Docker creates a directory if the file doesn't exist, causing errors.
       - ./config.yaml:/app/config.yaml
       - ./sessions:/app/sessions
     secrets:

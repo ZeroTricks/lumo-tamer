@@ -1,7 +1,7 @@
 /**
  * Rclone Auth Provider
  *
- * Uses tokens extracted from rclone config via npm run extract-rclone.
+ * Uses tokens extracted from rclone config via tamer auth rclone.
  * Supports automatic token refresh since rclone extraction includes refreshToken.
  */
 
@@ -32,7 +32,7 @@ export class RcloneAuthProvider extends BaseAuthProvider {
         if (this.tokens?.method !== 'rclone') {
             throw new Error(
                 `Token file is not from rclone extraction (method: ${this.tokens?.method}).\n` +
-                'Run: npm run auth and select rclone'
+                'Run: tamer auth rclone'
             );
         }
     }
@@ -74,7 +74,7 @@ export class RcloneAuthProvider extends BaseAuthProvider {
 
         if (!this.tokens) {
             status.warnings.push(`Vault not found: ${this.config.vaultPath}`);
-            status.warnings.push('Run: npm run auth');
+            status.warnings.push('Run: tamer auth');
             return status;
         }
 
@@ -89,7 +89,7 @@ export class RcloneAuthProvider extends BaseAuthProvider {
 
         if (!this.tokens.accessToken) {
             status.warnings.push('Missing access token');
-            status.warnings.push('Run: npm run extract-rclone');
+            status.warnings.push('Run: tamer auth rclone');
         } else {
             status.valid = true;
         }

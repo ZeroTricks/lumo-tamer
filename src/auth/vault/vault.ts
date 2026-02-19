@@ -9,7 +9,7 @@
  * Inspired by proton-bridge vault implementation.
  */
 
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, statSync } from 'fs';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { dirname } from 'path';
 import { logger } from '../../app/logger.js';
@@ -66,6 +66,14 @@ export async function readVault(vaultPath: string, keyConfig?: VaultKeyConfig): 
         throw new Error(`Vault not found: ${vaultPath}`);
     }
 
+    // Check vault isn't a directory (could happen if misconfigured)
+    if (!statSync(vaultPath).isFile()) {
+        throw new Error(
+            `Vault ${vaultPath} is a directory, not a file.\n` +
+            `Remove ${vaultPath} and try again.`
+        );
+    }
+
     const key = await getVaultKey(keyConfig);
     const ciphertext = readFileSync(vaultPath);
 
@@ -103,6 +111,14 @@ export async function writeVault(vaultPath: string, tokens: StoredTokens, keyCon
     const dir = dirname(vaultPath);
     if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true });
+    }
+
+    // Check vaultPath isn't a directory (could happen if misconfigured)
+    if (existsSync(vaultPath) && !statSync(vaultPath).isFile()) {
+        throw new Error(
+            `Vault ${vaultPath} is a directory, not a file.\n` +
+            `Remove ${vaultPath} and try again.`
+        );
     }
 
     // Atomic write: write to temp file, then rename

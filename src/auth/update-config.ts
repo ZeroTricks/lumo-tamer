@@ -1,17 +1,19 @@
 /**
  * Update config.yaml with auth settings after successful authentication
+ *
+ * Uses the 'yaml' package to preserve comments and formatting.
  */
 
 import { z } from 'zod';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { resolveProjectPath } from '../app/paths.js';
+import { isMap } from 'yaml';
 import { logger } from '../app/logger.js';
 import { authMethodSchema } from '../app/config.js';
+import { updateConfigYaml } from '../app/config-file.js';
 
 /** Schema for validating config updates */
 const authConfigUpdatesSchema = z.object({
-    method: authMethodSchema.optional(),
-    cdpEndpoint: z.string().optional(),
+  method: authMethodSchema.optional(),
+  cdpEndpoint: z.string().optional(),
 });
 
 export type AuthConfigUpdates = z.infer<typeof authConfigUpdatesSchema>;
@@ -19,59 +21,40 @@ export type AuthConfigUpdates = z.infer<typeof authConfigUpdatesSchema>;
 /**
  * Update auth-related values in config.yaml
  *
- * Uses simple string replacement to preserve formatting and comments.
- * Validates inputs using Zod before writing.
+ * Preserves existing comments and formatting.
+ * Creates file if it doesn't exist.
  */
 export function updateAuthConfig(updates: AuthConfigUpdates): void {
-    // Validate inputs
-    const validated = authConfigUpdatesSchema.parse(updates);
+  const validated = authConfigUpdatesSchema.parse(updates);
 
-    if (!validated.method && !validated.cdpEndpoint) {
-        return;
+  if (!validated.method && !validated.cdpEndpoint) {
+    return;
+  }
+
+  updateConfigYaml((doc) => {
+    // Ensure root is a map
+    if (!isMap(doc.contents)) {
+      doc.contents = doc.createNode({});
     }
 
-    const configPath = resolveProjectPath('config.yaml');
-
-    if (!existsSync(configPath)) {
-        const stub = [
-            'auth:',
-            `  method: "${validated.method ?? 'browser'}"`,
-            '  browser:',
-            `    cdpEndpoint: "${validated.cdpEndpoint}"`,
-            '',
-        ].join('\n');
-        writeFileSync(configPath, stub);
-        logger.debug({ updates }, 'Created config.yaml with auth stub');
-        return;
+    // Ensure auth section is a map (not a scalar like "auth: browser")
+    const authNode = doc.getIn(['auth'], true);
+    if (!authNode || !isMap(authNode)) {
+      doc.setIn(['auth'], doc.createNode({}));
     }
-
-    let content = readFileSync(configPath, 'utf8');
-    let changed = false;
 
     if (validated.method) {
-        const newContent = content.replace(
-            /^(\s*method:\s*)"?(\w+)"?/m,
-            `$1"${validated.method}"`
-        );
-        if (newContent !== content) {
-            content = newContent;
-            changed = true;
-        }
+      doc.setIn(['auth', 'method'], validated.method);
     }
-
     if (validated.cdpEndpoint) {
-        const newContent = content.replace(
-            /^(\s*cdpEndpoint:\s*)"?([^"\n]+)"?/m,
-            `$1"${validated.cdpEndpoint}"`
-        );
-        if (newContent !== content) {
-            content = newContent;
-            changed = true;
-        }
+      // Ensure auth.browser section is a map
+      const browserNode = doc.getIn(['auth', 'browser'], true);
+      if (!browserNode || !isMap(browserNode)) {
+        doc.setIn(['auth', 'browser'], doc.createNode({}));
+      }
+      doc.setIn(['auth', 'browser', 'cdpEndpoint'], validated.cdpEndpoint);
     }
+  });
 
-    if (changed) {
-        writeFileSync(configPath, content);
-        logger.debug({ updates }, 'Updated config.yaml');
-    }
+  logger.debug({ updates }, 'Updated config.yaml');
 }

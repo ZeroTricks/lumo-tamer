@@ -20,7 +20,7 @@ function getTransport(config: LogConfig): pino.TransportSingleOptions | pino.Tra
           target: 'pino-pretty',
           options: {
             colorize: true,
-            ignore: 'pid,hostname,time,stack,error',
+            ignore: 'pid,hostname,time,stack,err,error',
             messageFormat: '{if msg}{msg}{end}{if error.message}{if msg}: {end}{error.message}{end}',
             destination: 2, // stderr
           },

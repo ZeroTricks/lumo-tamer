@@ -2,7 +2,7 @@
  * Login Authentication Entry Point
  *
  * Run interactive login using username/password credentials.
- * Used by CLI (npm run auth) for login authentication method.
+ * Used by CLI (tamer auth) for login authentication method.
  */
 
 import { authConfig } from '../../app/config.js';

@@ -43,7 +43,7 @@ export class BrowserAuthProvider extends BaseAuthProvider {
         if (this.tokens?.method && this.tokens.method !== 'browser') {
             throw new Error(
                 `Token file is not from browser auth (method: ${this.tokens.method}).\n` +
-                'Run: npm run auth and select browser'
+                'Run: tamer auth browser'
             );
         }
     }
@@ -103,7 +103,7 @@ export class BrowserAuthProvider extends BaseAuthProvider {
 
         if (!this.tokens) {
             status.warnings.push(`Vault not found: ${this.config.vaultPath}`);
-            status.warnings.push('Run: npm run auth');
+            status.warnings.push('Run: tamer auth');
             return status;
         }
 
@@ -132,7 +132,7 @@ export class BrowserAuthProvider extends BaseAuthProvider {
                 status.warnings.push('No persisted session blob found');
             }
             if (!this.tokens.persistedSession?.clientKey) {
-                status.warnings.push('No clientKey available - run npm run auth');
+                status.warnings.push('No clientKey available - run tamer auth');
             }
         }
 
