@@ -1,6 +1,6 @@
 
 
-import type { Turn } from './index.js';
+import type { Turn } from './types.js';
 
 // ── Instruction sanitization ─────────────────────────────────────────
 

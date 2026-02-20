@@ -15,7 +15,8 @@ import { getLocalActionsConfig, getCommandsConfig, getCliInstructionsConfig } fr
 import { isCommand, executeCommand, type CommandContext } from '../app/commands.js';
 import type { AppContext } from '../app/index.js';
 import { CodeBlockDetector, type CodeBlock } from './code-block-detector.js';
-import { blockHandlers, type BlockResult } from './block-handlers.js';
+import { blockHandlers } from './block-handlers.js';
+import { type BlockResult } from './types.js';
 import { confirmAndApply } from './confirm.js';
 import { buildCliInstructions } from './message-converter.js';
 import { print, clearBusyIndicator, BUSY_INDICATOR } from '../app/terminal.js';

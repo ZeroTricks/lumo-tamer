@@ -12,8 +12,9 @@
 
 import { readFileSync, statSync, openSync, readSync, closeSync } from 'fs';
 import bytes from 'bytes';
-import type { CodeBlock, BlockHandler } from './block-handlers.js';
-import { FILE_PREFIX } from './edit-applier.js';
+import type { BlockHandler } from './types.js';
+import type { CodeBlock } from './types.js';
+import { FILE_PREFIX } from './types.js';
 import { getLocalActionsConfig } from '../app/config.js';
 
 export interface ReadResult {

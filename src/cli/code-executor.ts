@@ -5,7 +5,7 @@
  */
 
 import { spawn } from 'child_process';
-import type { CodeBlock, BlockHandler } from './block-handlers.js';
+import type { CodeBlock, BlockHandler } from './types.js';
 import { getLocalActionsConfig } from '../app/config.js';
 
 export interface ExecutionResult {

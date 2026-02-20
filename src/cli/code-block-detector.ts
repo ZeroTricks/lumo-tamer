@@ -5,7 +5,8 @@
  * Simpler than API's StreamingToolDetector - no JSON parsing needed.
  */
 
-import { blockHandlers, type CodeBlock } from './block-handlers.js';
+import { blockHandlers } from './block-handlers.js';
+import { type CodeBlock } from './types.js';
 
 export type { CodeBlock };
 
