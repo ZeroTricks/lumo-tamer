@@ -46,10 +46,7 @@ if (args._[0] === 'auth') {
 } else if (args._[0] === 'server') {
   const { Application } = await import('./app/index.js');
   const { APIServer } = await import('./api/server.js');
-  const { validateTemplateOnce } = await import('./api/instructions.js');
 
-  const serverConfig = getServerConfig();
-  validateTemplateOnce(serverConfig.instructions.template);
   logger.info('Starting lumo-tamer API Server...');
 
   const app = await Application.create();

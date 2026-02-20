@@ -35,8 +35,8 @@ export function validateTemplateOnce(template: string): void {
   templateValidated = true;
 
   for (const [varName, warning] of Object.entries(TEMPLATE_VARIABLE_WARNINGS)) {
-    // Check for {{varName}} or {{#if varName}}
-    const pattern = new RegExp(`\\{\\{#?(?:if\\s+)?${varName}\\}\\}`);
+    // Check for {{varName}}
+    const pattern = new RegExp(`\\{\\{${varName}\\}\\}`);
     if (!pattern.test(template)) {
       logger.warn(`Template missing {{${varName}}}. ${warning}`);
     }

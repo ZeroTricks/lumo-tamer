@@ -71,6 +71,9 @@ export class APIServer {
   }
 
   async start(): Promise<void> {
+    const { validateTemplateOnce } = await import('./instructions.js');
+    validateTemplateOnce(this.serverConfig.instructions.template);
+
     return new Promise((resolve) => {
       this.expressApp.listen(this.serverConfig.port, () => {
         logger.info('========================================');
