@@ -15,9 +15,3 @@ export {
     type CachedMasterKey,
 } from './key-manager.js';
 
-// Re-export session key utilities
-export {
-    decryptPersistedSession,
-    canDecryptSession,
-    getMailboxPassword,
-} from '../session-keys.js';

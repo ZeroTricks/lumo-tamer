@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import arg from 'arg';
-import { initConfig, getLogConfig, getServerConfig } from './app/config.js';
+import { initConfig, getLogConfig } from './app/config.js';
 import { initLogger, logger } from './app/logger.js';
 import { printAuthHelp, printHelp, printServerHelp } from 'app/terminal.js';
 
