@@ -5,7 +5,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { interpolateTemplate, applyReplacePatterns, sanitizeInstructions } from '../../src/api/instructions.js';
+import { sanitizeInstructions } from '../../src/lumo-client/instructions.js';
+import { interpolateTemplate } from '../../src/app/template.js';
+import { applyReplacePatterns } from '../../src/api/instructions.js'
 
 describe('interpolateTemplate', () => {
   describe('variable substitution', () => {
