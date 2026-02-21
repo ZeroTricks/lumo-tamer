@@ -69,12 +69,20 @@ export interface MessagePublic {
  *
  * WebClient also has: attachments?: ShallowAttachment[], contextFiles?: AttachmentId[]
  * We don't handle attachments yet.
+ *
+ * Tool calls (native tools like web_search, weather):
+ * - Legacy: Single tool call stored in `toolCall` (JSON string) and `toolResult` (JSON string),
+ *   with the synthesized response in `content`. All in the same assistant message.
+ * - v2: Multiple/interleaved tool calls use `blocks?: ContentBlock[]` where ContentBlock is
+ *   TextBlock | ToolCallBlock | ToolResultBlock. We don't support this yet - would need to
+ *   check if the API returns this format or if it requires a different endpoint.
  */
 export interface MessagePrivate {
     content?: string;
     context?: string;
-    toolCall?: string;          // JSON string of tool call
-    toolResult?: string;        // JSON string of tool result
+    toolCall?: string;          // JSON string of tool call (legacy, single tool)
+    toolResult?: string;        // JSON string of tool result (legacy, single tool)
+    // blocks?: ContentBlock[]; // v2: interleaved text/tool_call/tool_result blocks (not yet supported)
     semanticId?: string;        // For deduplication (call_id for tools, hash for regular). Not synced.
 }
 

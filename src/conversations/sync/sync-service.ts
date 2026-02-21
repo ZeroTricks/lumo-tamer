@@ -22,6 +22,7 @@ import {
 import {
     createLumoApi,
     type LumoApi,
+    type RemoteMessage,
     RoleInt,
     StatusInt,
 } from './lumo-api.js';
@@ -54,12 +55,14 @@ interface ConversationPrivate {
 
 /**
  * Message private data (encrypted)
+ * See src/conversations/types.ts MessagePrivate for full documentation.
  */
 interface MessagePrivate {
     content?: string;
     context?: string;
     toolCall?: string;
     toolResult?: string;
+    // blocks?: ContentBlock[]; // v2: not yet supported
 }
 
 /**
@@ -123,6 +126,9 @@ export class SyncService {
         conversations: new Map(),
         messages: new Map(),
     };
+
+    // Lazy loading flag for existing conversations
+    private existingConversationsLoaded = false;
 
     constructor(config: SyncServiceConfig) {
         if (!config.spaceId && !config.spaceName) {
@@ -313,10 +319,11 @@ export class SyncService {
     }
 
     /**
-     * Load existing conversations from server to populate idMap
-     * Prevents 409 errors when conversations already exist from previous sessions
+     * Ensure existing conversations are loaded from server (lazy, called once)
+     * Populates idMap with conversation IDs to prevent 409 errors on sync
      */
-    private async loadExistingConversations(): Promise<void> {
+    async ensureExistingConversationsLoaded(): Promise<void> {
+        if (this.existingConversationsLoaded) return;
         if (!this.spaceRemoteId || !this.spaceId) return;
 
         try {
@@ -327,26 +334,25 @@ export class SyncService {
             }
 
             for (const conv of spaceData.conversations ?? []) {
-                // id is our local conversationId (was ConversationTag in old API)
-                this.idMap.conversations.set(conv.id, conv.remoteId);
-
-                // Load messages for this conversation
+                // Need to fetch each conversation to get the local ID (ConversationTag)
+                // which is stored inside the conversation, not in the space listing
                 try {
                     const convData = await this.lumoApi.getConversation(conv.remoteId, this.spaceId);
-                    if (convData) {
-                        for (const msg of convData.messages ?? []) {
-                            this.idMap.messages.set(msg.id, msg.remoteId);
-                        }
+                    if (convData?.conversation) {
+                        const localId = convData.conversation.id;
+                        this.idMap.conversations.set(localId, conv.remoteId);
+                        logger.debug({ localId, remoteId: conv.remoteId }, 'Mapped conversation');
                     }
                 } catch (error) {
-                    logger.warn({ conversationId: conv.id, error }, 'Failed to load messages for conversation');
+                    logger.warn({ remoteId: conv.remoteId, error }, 'Failed to fetch conversation');
                 }
             }
 
+            this.existingConversationsLoaded = true;
+
             logger.info({
                 conversations: this.idMap.conversations.size,
-                messages: this.idMap.messages.size,
-            }, 'Loaded existing conversations from server');
+            }, 'Loaded existing conversation IDs from server');
         } catch (error) {
             logger.error({ error }, 'Failed to load existing conversations');
             // Don't throw - idMap will just be empty and we'll get 409 errors as before
@@ -697,6 +703,200 @@ export class SyncService {
         } catch (error) {
             logger.warn({ spaceId, error }, 'Failed to decrypt space private data');
             return null;
+        }
+    }
+
+    /**
+     * Decrypt conversation private data
+     *
+     * AD format must match Lumo WebClient (json-stable-stringify with alphabetically sorted keys):
+     * {"app":"lumo","id":"<conversationId>","spaceId":"<spaceId>","type":"conversation"}
+     */
+    private async decryptConversationPrivate(
+        encryptedBase64: string,
+        conversationId: string,
+        spaceId: string
+    ): Promise<ConversationPrivate | null> {
+        if (!this.dataEncryptionKey) {
+            throw new Error('Data encryption key not initialized');
+        }
+
+        try {
+            const encrypted = Buffer.from(encryptedBase64, 'base64');
+            const adString = stableStringify({
+                app: 'lumo',
+                type: 'conversation',
+                id: conversationId,
+                spaceId: spaceId,
+            });
+            logger.debug({ adString, conversationId }, 'Decrypting conversation with AD');
+            const ad = new TextEncoder().encode(adString);
+
+            const decrypted = await decryptData(this.dataEncryptionKey, new Uint8Array(encrypted), ad);
+            const json = new TextDecoder().decode(decrypted);
+            return JSON.parse(json) as ConversationPrivate;
+        } catch (error) {
+            logger.warn({ conversationId, error }, 'Failed to decrypt conversation private data');
+            return null;
+        }
+    }
+
+    /**
+     * Decrypt message private data
+     *
+     * AD format must match Lumo WebClient (json-stable-stringify with alphabetically sorted keys):
+     * {"app":"lumo","conversationId":"...","id":"...","parentId":"...","role":"...","type":"message"}
+     */
+    private async decryptMessagePrivate(
+        encryptedBase64: string,
+        messageId: string,
+        conversationId: string,
+        role: string,
+        parentId?: string
+    ): Promise<MessagePrivate | null> {
+        if (!this.dataEncryptionKey) {
+            throw new Error('Data encryption key not initialized');
+        }
+
+        try {
+            const encrypted = Buffer.from(encryptedBase64, 'base64');
+            const adString = stableStringify({
+                app: 'lumo',
+                type: 'message',
+                id: messageId,
+                role: role,
+                parentId: parentId,
+                conversationId: conversationId,
+            });
+            logger.debug({ adString, messageId }, 'Decrypting message with AD');
+            const ad = new TextEncoder().encode(adString);
+
+            const decrypted = await decryptData(this.dataEncryptionKey, new Uint8Array(encrypted), ad);
+            const json = new TextDecoder().decode(decrypted);
+            return JSON.parse(json) as MessagePrivate;
+        } catch (error) {
+            logger.warn({ messageId, error }, 'Failed to decrypt message private data');
+            return null;
+        }
+    }
+
+    /**
+     * Load a single conversation from the server by local ID and add to the store.
+     *
+     * @param localId - The local conversation ID (UUID like f0654976-d628-4516-8e80-a0599b6593ac)
+     * @returns The local conversation ID if loaded, undefined if not found
+     */
+    async loadExistingConversation(localId: string): Promise<string | undefined> {
+        if (!this.keyManager.isInitialized()) {
+            throw new Error('KeyManager not initialized - cannot load without encryption keys');
+        }
+
+        // Ensure we have a space initialized (for the data encryption key)
+        await this.getOrCreateSpace();
+
+        if (!this.dataEncryptionKey || !this.spaceId) {
+            throw new Error('Space not initialized - cannot decrypt conversation');
+        }
+
+        // Ensure conversation IDs are loaded (lazy)
+        await this.ensureExistingConversationsLoaded();
+
+        try {
+            // Look up remote ID from idMap
+            const remoteId = this.idMap.conversations.get(localId);
+            if (!remoteId) {
+                logger.warn({ localId }, 'Conversation not found in project');
+                return undefined;
+            }
+
+            const convData = await this.lumoApi.getConversation(remoteId, this.spaceId);
+            if (!convData?.conversation) {
+                logger.warn({ localId, remoteId }, 'Conversation not found on server');
+                return undefined;
+            }
+
+            const conv = convData.conversation;
+            if ('deleted' in conv && conv.deleted) {
+                logger.warn({ localId }, 'Conversation is deleted');
+                return undefined;
+            }
+
+            // Decrypt conversation title
+            let title = 'Untitled';
+            if (conv.encrypted && typeof conv.encrypted === 'string') {
+                const decryptedPrivate = await this.decryptConversationPrivate(
+                    conv.encrypted,
+                    localId,
+                    this.spaceId
+                );
+                if (decryptedPrivate?.title) {
+                    title = decryptedPrivate.title;
+                }
+            }
+
+            // Create/update conversation in store (clear existing messages to allow reload)
+            const store = getConversationStore();
+            const state = store.getOrCreate(localId);
+            state.title = title;
+            state.metadata.starred = conv.starred ?? false;
+            state.metadata.createdAt = new Date(conv.createdAt).getTime();
+            state.metadata.spaceId = this.spaceId;
+            state.remoteId = remoteId;
+            state.dirty = false;
+            state.messages = [];
+
+            // Load and decrypt messages
+            // Note: getConversation returns shallow messages without encrypted content,
+            // so we need to fetch each message individually
+            for (const msg of convData.messages ?? []) {
+                this.idMap.messages.set(msg.id, msg.remoteId);
+
+                // Fetch full message with encrypted content
+                const fullMsg = await this.lumoApi.getMessage(
+                    msg.remoteId,
+                    localId,
+                    msg.parentId,
+                    remoteId
+                );
+
+                let messagePrivate: MessagePrivate | null = null;
+                if (fullMsg?.encrypted && typeof fullMsg.encrypted === 'string') {
+                    messagePrivate = await this.decryptMessagePrivate(
+                        fullMsg.encrypted,
+                        msg.id,
+                        localId,
+                        msg.role,  // Role from upstream is already a string ('user'/'assistant')
+                        msg.parentId
+                    );
+                }
+
+                state.messages.push({
+                    id: msg.id,
+                    conversationId: localId,
+                    createdAt: new Date(msg.createdAt).getTime(),
+                    role: msg.role as MessageRole,
+                    parentId: msg.parentId,
+                    status: msg.status as MessageStatus | undefined,
+                    content: messagePrivate?.content,
+                    context: messagePrivate?.context,
+                    toolCall: messagePrivate?.toolCall,
+                    toolResult: messagePrivate?.toolResult,
+                });
+            }
+
+            store.markSynced(localId);
+
+            logger.info({
+                localId,
+                remoteId,
+                title,
+                messageCount: state.messages.length,
+            }, 'Loaded conversation from server');
+
+            return localId;
+        } catch (error) {
+            logger.error({ localId, error }, 'Failed to load conversation');
+            throw error;
         }
     }
 

@@ -343,18 +343,7 @@ export class ConversationStore {
      * Convert conversation to Lumo Turn[] format for API call
      */
     toTurns(id: ConversationId): Turn[] {
-        const state = this.conversations.get(id);
-        if (!state) {
-            return [];
-        }
-
-        // Filter to user and assistant messages only
-        return state.messages
-            .filter(m => m.role === 'user' || m.role === 'assistant')
-            .map(m => ({
-                role: m.role as 'user' | 'assistant',
-                content: m.content,
-            }));
+        return this.getMessages(id).map(({role, content}) => ({role, content}));
     }
 
     /**
