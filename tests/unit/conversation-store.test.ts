@@ -106,7 +106,7 @@ describe('ConversationStore', () => {
 
       expect(msg.role).toBe('assistant');
       expect(msg.content).toBe('Hello there!');
-      expect(msg.status).toBe('completed');
+      expect(msg.status).toBe('succeeded');
 
       const state = store.get('conv-1')!;
       expect(state.status).toBe('completed');
@@ -152,7 +152,7 @@ describe('ConversationStore', () => {
         conversationId: 'conv-1',
         createdAt: Date.now(),
         role: 'system',
-        status: 'completed',
+        status: 'succeeded',
         content: 'You are helpful',
       });
       store.appendMessages('conv-1', [

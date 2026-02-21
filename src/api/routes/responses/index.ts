@@ -1,30 +1,16 @@
 import { Router, Request, Response } from 'express';
-import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIResponseRequest, FunctionCallOutput } from '../../types.js';
 import { logger } from '../../../app/logger.js';
 import { handleRequest } from './request-handlers.js';
-import { convertResponseInputToTurns, normalizeInputItem } from '../../message-converter.js';
-import { getConversationsConfig } from '../../../app/config.js';
+import { convertResponseInputToTurns } from '../../message-converter.js';
+import { buildInstructions } from '../../instructions.js';
+import { getConversationsConfig, getServerInstructionsConfig } from '../../../app/config.js';
 import { getMetrics } from '../../metrics/index.js';
 import { trackCustomToolCompletion } from '../../tools/call-id.js';
 import { sendInvalidRequest, sendServerError } from '../../error-handler.js';
+import { deterministicUUID } from '../../../app/id-generator.js';
 
 import type { ConversationId } from '../../../conversations/index.js';
-
-// Session ID generated once at module load - makes deterministic IDs unique per server session
-// This prevents 409 conflicts with deleted conversations from previous sessions
-const SESSION_ID = randomUUID();
-
-/**
- * Generate a deterministic UUID from a seed string, scoped to the current session.
- * The same seed within the same session always produces the same UUID,
- * but different sessions produce different UUIDs (prevents sync conflicts).
- */
-function deterministicUUID(seed: string): ConversationId {
-  const hash = createHash('sha256').update(`lumo-tamer:${SESSION_ID}:${seed}`).digest('hex');
-  // Format as UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
-}
 
 /**
  * Generate a deterministic conversation ID from the `user` field in the request.
@@ -112,8 +98,11 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
 
       // ===== STEP 3: Convert input to turns =====
       // Handles normal messages, function_call, and function_call_output items.
-      // Injects instructions into the first user turn.
-      const turns = convertResponseInputToTurns(request.input, request.instructions, request.tools);
+      const turns = convertResponseInputToTurns(request.input, request.instructions);
+
+      // ===== Build instructions (injected in LumoClient, not persisted) =====
+      const instructions = buildInstructions(request.tools, request.instructions);
+      const { injectInto } = getServerInstructionsConfig();
 
       // ===== STEP 4: Track tool completions =====
       // Track completion for all function_call_outputs (Set-based dedup prevents double-counting)
@@ -126,36 +115,16 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       }
 
       // ===== STEP 5: Persist incoming messages (stateful only) =====
-      if (conversationId && deps.conversationStore && Array.isArray(request.input)) {
-        const allMessages: Array<{ role: string; content: string }> = [];
-        for (const item of request.input) {
-          // Use normalizeInputItem for tool-related items (function_call, function_call_output)
-          const normalized = normalizeInputItem(item);
-          if (normalized) {
-            const normalizedArray = Array.isArray(normalized) ? normalized : [normalized];
-            allMessages.push(...normalizedArray);
-          } else if (typeof item === 'object' && 'role' in item && 'content' in item) {
-            const msg = item as { role: string; content: string };
-            allMessages.push({ role: msg.role, content: msg.content });
-          }
-        }
-
-        if (allMessages.length > 0) {
-          deps.conversationStore.appendMessages(conversationId, allMessages);
-          logger.debug({ conversationId, messageCount: allMessages.length }, 'Persisted conversation messages');
-        }
-      } else if (conversationId && deps.conversationStore && typeof request.input === 'string') {
-        deps.conversationStore.appendMessages(conversationId, [
-          { role: 'user', content: request.input }
-        ]);
-        logger.debug({ conversationId }, 'Persisted user message');
+      if (conversationId && deps.conversationStore && turns.length > 0) {
+        deps.conversationStore.appendMessages(conversationId, turns);
+        logger.debug({ conversationId, messageCount: turns.length }, 'Persisted conversation messages');
       } else if (!conversationId) {
         // Stateless request - track +1 user message (not deduplicated)
         getMetrics()?.messagesTotal.inc({ role: 'user' });
       }
 
-      // Add to queue and process
-      await handleRequest(res, deps, request, turns, conversationId, request.stream ?? false);
+      // ===== STEP 6: Add to queue and process =====
+      await handleRequest(res, deps, request, turns, conversationId, request.stream ?? false, instructions, injectInto);
     } catch (error) {
       logger.error('Error processing response:');
       logger.error(error);

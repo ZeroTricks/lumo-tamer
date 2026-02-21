@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { randomUUID, createHash } from 'crypto';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse } from '../../types.js';
-import { getServerConfig, getConversationsConfig, getLogConfig } from '../../../app/config.js';
+import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig } from '../../../app/config.js';
 import { logger } from '../../../app/logger.js';
-import { convertMessagesToTurns, normalizeInputItem } from '../../message-converter.js';
+import { convertMessagesToTurns, extractSystemMessage } from '../../message-converter.js';
+import { buildInstructions } from '../../instructions.js';
 import { getMetrics } from '../../metrics/index.js';
 import { ChatCompletionEventEmitter } from './events.js';
 import type { Turn } from '../../../lumo-client/index.js';
@@ -16,11 +16,11 @@ import {
   persistAssistantTurn,
   generateChatCompletionId,
   mapToolCallsForPersistence,
+  tryExecuteCommand,
+  setSSEHeaders,
 } from '../shared.js';
 import { sendInvalidRequest, sendServerError } from '../../error-handler.js';
-
-// Session ID generated once at module load - makes deterministic IDs unique per server session
-const SESSION_ID = randomUUID();
+import { deterministicUUID } from '../../../app/id-generator.js';
 
 /** Extract tool_call_id from a role: 'tool' message. */
 function extractToolCallId(msg: unknown): string | undefined {
@@ -35,8 +35,7 @@ function extractToolCallId(msg: unknown): string | undefined {
  * Used for clients like Home Assistant that set `user` to their internal conversation_id.
  */
 function generateConversationIdFromUser(user: string): ConversationId {
-  const hash = createHash('sha256').update(`lumo-tamer:${SESSION_ID}:user:${user}`).digest('hex');
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+  return deterministicUUID(`user:${user}`);
 }
 
 export function createChatCompletionsRouter(deps: EndpointDependencies): Router {
@@ -100,36 +99,25 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
         }
       }
 
-      // ===== Convert messages to Lumo turns (includes system message injection) =====
-      // Pass tools to enable legacy tool instruction injection
-      const turns = convertMessagesToTurns(request.messages, request.tools);
+      // ===== Convert messages to Lumo turns =====
+      const turns = convertMessagesToTurns(request.messages);
+
+      // ===== Build instructions (injected in LumoClient, not persisted) =====
+      const systemContent = extractSystemMessage(request.messages);
+      const instructions = buildInstructions(request.tools, systemContent);
+      const { injectInto } = getServerInstructionsConfig();
 
       // ===== Persist incoming messages (stateful only) =====
-      if (conversationId && deps.conversationStore) {
-        const allMessages: Array<{ role: string; content: string }> = [];
-        for (const msg of request.messages) {
-          // Use normalizeInputItem for tool-related messages (role: 'tool', tool_calls)
-          const normalized = normalizeInputItem(msg);
-          if (normalized) {
-            const normalizedArray = Array.isArray(normalized) ? normalized : [normalized];
-            allMessages.push(...normalizedArray);
-          } else {
-            // Regular message - ensure content is a string
-            allMessages.push({
-              role: msg.role,
-              content: typeof msg.content === 'string' ? msg.content : '',
-            });
-          }
-        }
-        deps.conversationStore.appendMessages(conversationId, allMessages);
-        logger.debug({ conversationId, messageCount: allMessages.length }, 'Persisted conversation messages');
-      } else {
+      if (conversationId && deps.conversationStore && turns.length > 0) {
+        deps.conversationStore.appendMessages(conversationId, turns);
+        logger.debug({ conversationId, messageCount: turns.length }, 'Persisted conversation messages');
+      } else if (!conversationId) {
         // Stateless request - track +1 user message (not deduplicated)
         getMetrics()?.messagesTotal.inc({ role: 'user' });
       }
 
       // Add to queue and process
-      await handleChatRequest(res, deps, request, turns, conversationId, request.stream ?? false);
+      await handleChatRequest(res, deps, request, turns, conversationId, request.stream ?? false, instructions, injectInto);
     } catch (error) {
       logger.error('Error processing chat completion:');
       logger.error(error);
@@ -146,7 +134,9 @@ async function handleChatRequest(
   request: OpenAIChatRequest,
   turns: Turn[],
   conversationId: ConversationId | undefined,
-  streaming: boolean
+  streaming: boolean,
+  instructions: string | undefined,
+  injectInstructionsInto: 'first' | 'last'
 ): Promise<void> {
   const id = generateChatCompletionId();
   const created = Math.floor(Date.now() / 1000);
@@ -156,12 +146,11 @@ async function handleChatRequest(
   // Streaming setup
   const emitter = streaming ? new ChatCompletionEventEmitter(res, id, created, model) : null;
   if (emitter) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+    setSSEHeaders(res);
   }
 
   let accumulatedText = '';
+  let toolCalls: typeof processor.toolCallsEmitted | undefined;
 
   const processor = createStreamingToolProcessor(ctx.hasCustomTools, {
     emitTextDelta(text) {
@@ -173,21 +162,40 @@ async function handleChatRequest(
     },
   });
 
+  // Check for command before calling Lumo
+  const commandResult = await tryExecuteCommand(turns, ctx.commandContext);
+  if (commandResult) {
+    accumulatedText = commandResult.response;
+    emitter?.emitContentDelta(accumulatedText);
+  } else {
+    // Normal flow: call Lumo
+    try {
+      const result = await deps.queue.add(async () =>
+        deps.lumoClient.chatWithHistory(turns, processor.onChunk, {
+          requestTitle: ctx.requestTitle,
+          instructions,
+          injectInstructionsInto,
+        })
+      );
+
+      logger.debug('[Server] Stream completed');
+      processor.finalize();
+      persistTitle(result, deps, conversationId);
+      toolCalls = processor.toolCallsEmitted.length > 0 ? processor.toolCallsEmitted : undefined;
+      persistAssistantTurn(deps, conversationId, accumulatedText, mapToolCallsForPersistence(processor.toolCallsEmitted));
+    } catch (error) {
+      logger.error({ error: String(error) }, 'Chat completion error');
+      if (emitter) {
+        emitter.emitError(error as Error);
+      } else {
+        sendServerError(res);
+      }
+      return;
+    }
+  }
+
+  // Build and send response (shared for both command and normal flow)
   try {
-    const result = await deps.queue.add(async () =>
-      deps.lumoClient.chatWithHistory(turns, processor.onChunk, {
-        commandContext: ctx.commandContext,
-        requestTitle: ctx.requestTitle,
-      })
-    );
-
-    logger.debug('[Server] Stream completed');
-    processor.finalize();
-    persistTitle(result, deps, conversationId);
-
-    const toolCalls = processor.toolCallsEmitted.length > 0 ? processor.toolCallsEmitted : undefined;
-    persistAssistantTurn(deps, conversationId, accumulatedText, mapToolCallsForPersistence(processor.toolCallsEmitted));
-
     if (emitter) {
       emitter.emitDone(toolCalls);
     } else {
@@ -209,7 +217,7 @@ async function handleChatRequest(
       res.json(response);
     }
   } catch (error) {
-    logger.error({ error: String(error) }, 'Chat completion error');
+    logger.error({ error: String(error) }, 'Error sending chat completion response');
     if (emitter) {
       emitter.emitError(error as Error);
     } else {

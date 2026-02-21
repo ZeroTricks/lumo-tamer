@@ -99,11 +99,9 @@ const RoleToInt: Record<MessageRole, number> = {
 };
 
 // Status mapping: our internal status to API integer values
-const StatusToInt: Record<MessageStatus, number | undefined> = {
+const StatusToInt: Record<MessageStatus, number> = {
     failed: StatusInt.Failed,
-    completed: StatusInt.Succeeded,
-    pending: undefined,
-    streaming: undefined,
+    succeeded: StatusInt.Succeeded,
 };
 
 export class SyncService {
@@ -397,6 +395,50 @@ export class SyncService {
     }
 
     /**
+     * Sync a single conversation by ID
+     *
+     * @param conversationId - The conversation ID to sync
+     * @returns true if synced, false if not found or not dirty
+     */
+    async syncById(conversationId: string): Promise<boolean> {
+        if (!this.keyManager.isInitialized()) {
+            throw new Error('KeyManager not initialized - cannot sync without encryption keys');
+        }
+
+        const store = getConversationStore();
+        const conversation = store.get(conversationId);
+
+        if (!conversation) {
+            logger.warn({ conversationId }, 'Conversation not found for sync');
+            return false;
+        }
+
+        if (!conversation.dirty) {
+            logger.info({ conversationId }, 'Conversation already synced');
+            return true;
+        }
+
+        // Ensure we have a space
+        const { remoteId: spaceRemoteId } = await this.getOrCreateSpace();
+
+        // Mark as synced early to prevent auto-sync from picking it up concurrently
+        store.markSynced(conversationId);
+
+        logger.info({ conversationId }, 'Syncing single conversation');
+
+        try {
+            await this.syncConversation(conversation, spaceRemoteId);
+            logger.info({ conversationId }, 'Conversation synced successfully');
+            return true;
+        } catch (error) {
+            // Re-mark as dirty so it can be retried
+            store.markDirtyById(conversationId);
+            logger.error({ conversationId, error }, 'Failed to sync conversation');
+            throw error;
+        }
+    }
+
+    /**
      * Sync a single conversation to the server
      */
     private async syncConversation(
@@ -509,7 +551,7 @@ export class SyncService {
             Role: RoleToInt[message.role] ?? RoleInt.User,
             ParentID: parentRemoteId,
             ParentId: parentRemoteId,  // Duplicate for buggy backend (lowercase 'd')
-            Status: StatusToInt[message.status],
+            Status: StatusToInt[message.status ?? 'succeeded'],
             MessageTag: message.id,
             Encrypted: encryptedPrivate,
         }, 'background');

@@ -11,13 +11,13 @@
 import * as readline from 'readline';
 import { randomUUID } from 'crypto';
 import { logger } from '../app/logger.js';
-import { getLocalActionsConfig, getCommandsConfig } from '../app/config.js';
+import { getLocalActionsConfig, getCommandsConfig, getCliInstructionsConfig } from '../app/config.js';
 import { isCommand, executeCommand, type CommandContext } from '../app/commands.js';
 import type { AppContext } from '../app/index.js';
 import { CodeBlockDetector, type CodeBlock } from './code-block-detector.js';
 import { blockHandlers, type BlockResult } from './block-handlers.js';
 import { confirmAndApply } from './confirm.js';
-import { injectInstructions } from './message-converter.js';
+import { buildCliInstructions } from './message-converter.js';
 import { print, clearBusyIndicator, BUSY_INDICATOR } from '../app/terminal.js';
 
 interface LumoResponse {
@@ -66,7 +66,9 @@ export class CLIClient {
 
     print('Lumo: ' + BUSY_INDICATOR, false);
 
-    const turns = injectInstructions(this.store.toTurns(this.conversationId));
+    const turns = this.store.toTurns(this.conversationId);
+    const instructions = buildCliInstructions();
+    const { injectInto } = getCliInstructionsConfig();
     const result = await this.app.getLumoClient().chatWithHistory(
       turns,
       (chunk) => {
@@ -80,7 +82,7 @@ export class CLIClient {
         }
         chunkCount++;
       },
-      { enableEncryption: true, requestTitle: options.requestTitle }
+      { enableEncryption: true, requestTitle: options.requestTitle, instructions, injectInstructionsInto: injectInto }
     );
 
     // Finalize detection

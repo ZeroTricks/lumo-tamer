@@ -1,11 +1,9 @@
 /**
  * Unit tests for message-converter
  *
- * Tests conversion from OpenAI message formats to Lumo Turn format,
- * including instruction injection and system message handling.
- *
- * Note: These tests use the default config from config.defaults.yaml.
- * The default instructions and prepend behavior affect the output.
+ * Tests conversion from OpenAI message formats to Lumo Turn format.
+ * Note: Instruction injection is now handled by LumoClient, not message-converter.
+ * These tests verify that message-converter returns clean turns without instructions.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -20,35 +18,35 @@ describe('convertMessagesToTurns', () => {
 
     expect(turns).toHaveLength(2);
     expect(turns[0].role).toBe('user');
+    expect(turns[0].content).toBe('Hello');
     expect(turns[1].role).toBe('assistant');
     expect(turns[1].content).toBe('Hi!');
   });
 
-  it('skips system messages from output (used as instructions)', () => {
+  it('skips system messages from output', () => {
     const turns = convertMessagesToTurns([
       { role: 'system', content: 'Be helpful' },
       { role: 'user', content: 'Hello' },
     ]);
 
-    // System message is extracted and injected as [Project instructions: ...]
+    // System message is skipped, not injected (injection happens in LumoClient)
     expect(turns).toHaveLength(1);
     expect(turns[0].role).toBe('user');
+    expect(turns[0].content).toBe('Hello');
   });
 
-  it('injects instructions into last user message (prepended)', () => {
+  it('returns clean turns without instruction injection', () => {
     const turns = convertMessagesToTurns([
       { role: 'system', content: 'Be concise' },
       { role: 'user', content: 'Hello' },
     ]);
 
-    // Instructions should be prepended as [Project instructions: ...]
-    expect(turns[0].content).toContain('[Project instructions:');
-    expect(turns[0].content).toContain('Be concise');
-    // Verify prepend format: instructions come BEFORE user content
-    expect(turns[0].content).toMatch(/^\[Project instructions:.*\]\n\nHello$/s);
+    // No instruction injection - that happens in LumoClient
+    expect(turns[0].content).toBe('Hello');
+    expect(turns[0].content).not.toContain('[Project instructions:');
   });
 
-  it('injects instructions into first user message in multi-turn (default)', () => {
+  it('handles multi-turn conversations', () => {
     const turns = convertMessagesToTurns([
       { role: 'system', content: 'Be concise' },
       { role: 'user', content: 'First message' },
@@ -56,34 +54,19 @@ describe('convertMessagesToTurns', () => {
       { role: 'user', content: 'Second message' },
     ]);
 
-    // First user message should have instructions (default injectInto: "first")
-    expect(turns[0].content).toContain('[Project instructions:');
-    expect(turns[0].content).toMatch(/^\[Project instructions:.*\]\n\nFirst message$/s);
-    // Last user message should NOT have instructions
+    expect(turns).toHaveLength(3);
+    expect(turns[0].content).toBe('First message');
+    expect(turns[1].content).toBe('Response');
     expect(turns[2].content).toBe('Second message');
   });
 
-  it('does not inject instructions into command messages', () => {
+  it('preserves command messages unchanged', () => {
     const turns = convertMessagesToTurns([
       { role: 'system', content: 'Instructions' },
       { role: 'user', content: '/help' },
     ]);
 
-    // Commands (starting with /) should not get instructions injected
     expect(turns[0].content).toBe('/help');
-  });
-
-  it('skips command messages when finding first user message', () => {
-    const turns = convertMessagesToTurns([
-      { role: 'system', content: 'Be concise' },
-      { role: 'user', content: '/help' },
-      { role: 'user', content: 'Hello' },
-    ]);
-
-    // Command message should be unchanged
-    expect(turns[0].content).toBe('/help');
-    // First non-command user message should get instructions
-    expect(turns[1].content).toContain('[Project instructions:');
   });
 
   it('handles empty messages array', () => {
@@ -98,17 +81,15 @@ describe('convertResponseInputToTurns', () => {
 
     expect(turns).toHaveLength(1);
     expect(turns[0].role).toBe('user');
-    expect(turns[0].content).toContain('Hello');
+    expect(turns[0].content).toBe('Hello');
   });
 
-  it('handles string input with request instructions (prepended)', () => {
+  it('returns clean turns for string input (no instruction injection)', () => {
     const turns = convertResponseInputToTurns('Hello', 'Be concise');
 
     expect(turns).toHaveLength(1);
-    expect(turns[0].content).toContain('Hello');
-    expect(turns[0].content).toContain('Be concise');
-    // Verify prepend format: instructions come BEFORE user content
-    expect(turns[0].content).toMatch(/^\[Project instructions:.*Be concise.*\]\n\nHello$/s);
+    expect(turns[0].content).toBe('Hello');
+    expect(turns[0].content).not.toContain('[Project instructions:');
   });
 
   it('handles message array input', () => {
@@ -119,37 +100,42 @@ describe('convertResponseInputToTurns', () => {
 
     expect(turns).toHaveLength(2);
     expect(turns[0].role).toBe('user');
+    expect(turns[0].content).toBe('Hello');
     expect(turns[1].role).toBe('assistant');
+    expect(turns[1].content).toBe('Hi!');
   });
 
-  it('handles message array with system message', () => {
+  it('skips system messages from output', () => {
     const turns = convertResponseInputToTurns([
       { role: 'system', content: 'Custom system instructions here' },
       { role: 'user', content: 'Hello' },
     ]);
 
-    // System message extracted and used as clientInstructions in template
+    // System message is skipped
     expect(turns).toHaveLength(1);
-    expect(turns[0].content).toContain('Custom system instructions here');
+    expect(turns[0].content).toBe('Hello');
   });
 
-  it('filters out function_call_output items', () => {
+  it('handles function_call_output items', () => {
     const turns = convertResponseInputToTurns([
       { role: 'user', content: 'Call a tool' },
       { type: 'function_call_output', call_id: 'call_1', output: 'result' } as any,
       { role: 'user', content: 'Follow up' },
     ]);
 
-    // function_call_output should be filtered
-    const contents = turns.map(t => t.content);
-    expect(contents).not.toContain('result');
+    // function_call_output should be converted to user turn with fenced JSON
+    expect(turns).toHaveLength(3);
+    expect(turns[0].content).toBe('Call a tool');
+    expect(turns[1].role).toBe('user');
+    expect(turns[1].content).toContain('```json');
+    expect(turns[2].content).toBe('Follow up');
   });
 
   it('returns empty array for undefined input', () => {
     expect(convertResponseInputToTurns(undefined)).toEqual([]);
   });
 
-  it('does not inject instructions into command strings', () => {
+  it('preserves command strings unchanged', () => {
     const turns = convertResponseInputToTurns('/save');
 
     expect(turns).toHaveLength(1);
@@ -289,10 +275,8 @@ describe('convertMessagesToTurns with tool messages', () => {
     ]);
 
     expect(turns).toHaveLength(2);
-    // First user message gets instructions (default injectInto: "first")
     expect(turns[0].role).toBe('user');
-    expect(turns[0].content).toContain('[Project instructions:');
-    expect(turns[0].content).toContain('Call a tool');
+    expect(turns[0].content).toBe('Call a tool');
     // Tool message is converted to user turn with fenced JSON
     expect(turns[1].role).toBe('user');
     expect(turns[1].content).toContain('```json\n');
@@ -314,6 +298,7 @@ describe('convertMessagesToTurns with tool messages', () => {
 
     expect(turns).toHaveLength(2);
     expect(turns[0].role).toBe('user');
+    expect(turns[0].content).toBe('Get the weather');
     expect(turns[1].role).toBe('assistant');
     const parsed = JSON.parse(turns[1].content);
     expect(parsed.type).toBe('function_call');
@@ -337,6 +322,7 @@ describe('convertMessagesToTurns with tool messages', () => {
 
     expect(turns).toHaveLength(4);
     expect(turns[0].role).toBe('user');
+    expect(turns[0].content).toBe('What is the weather in NYC?');
     expect(turns[1].role).toBe('assistant'); // tool_calls
     expect(turns[2].role).toBe('user'); // tool result
     expect(turns[3].role).toBe('assistant'); // final response

@@ -12,8 +12,8 @@ export type RemoteId = string;         // Server-assigned ID
 // Message roles matching Lumo format
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool_call' | 'tool_result';
 
-// Message status
-export type MessageStatus = 'pending' | 'streaming' | 'completed' | 'failed';
+// Message status (matches Proton's Status type)
+export type MessageStatus = 'succeeded' | 'failed';
 
 // Conversation status
 export type ConversationStatus = 'generating' | 'completed';
@@ -25,8 +25,8 @@ export type ConversationStatus = 'generating' | 'completed';
 export interface ConversationMetadata {
     id: ConversationId;
     spaceId: SpaceId;
-    createdAt: number;          // Unix timestamp
-    updatedAt: number;          // Unix timestamp
+    createdAt: number;          // Unix timestamp (local tracking, server generates its own)
+    updatedAt: number;          // Unix timestamp (local tracking, server generates its own)
     starred: boolean;
 }
 
@@ -47,21 +47,31 @@ export interface Conversation extends ConversationMetadata {
 
 /**
  * Message public fields
+ *
+ * WebClient also has: placeholder?: boolean (we don't use it)
  */
 export interface MessagePublic {
     id: MessageId;
     conversationId: ConversationId;
-    createdAt: number;          // Unix timestamp
+    createdAt: number;          // Unix timestamp (local tracking, server generates its own)
     role: MessageRole;
     parentId?: MessageId;       // For branching conversations
-    status: MessageStatus;
+    status?: MessageStatus;     // Optional to match WebClient
 }
 
 /**
  * Message private data (encrypted)
+ *
+ * Content is optional to match Proton's model where tool_call/tool_result
+ * messages may have no content (just toolCall/toolResult fields).
+ * Currently we serialize everything to content, but this allows future
+ * parity with WebClient's native tool storage.
+ *
+ * WebClient also has: attachments?: ShallowAttachment[], contextFiles?: AttachmentId[]
+ * We don't handle attachments yet.
  */
 export interface MessagePrivate {
-    content: string;
+    content?: string;
     context?: string;
     toolCall?: string;          // JSON string of tool call
     toolResult?: string;        // JSON string of tool result

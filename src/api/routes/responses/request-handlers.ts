@@ -22,6 +22,8 @@ import {
   generateItemId,
   generateFunctionCallId,
   mapToolCallsForPersistence,
+  tryExecuteCommand,
+  setSSEHeaders,
   type ToolCallForPersistence,
 } from '../shared.js';
 import { sendServerError } from '../../error-handler.js';
@@ -132,7 +134,9 @@ export async function handleRequest(
   request: OpenAIResponseRequest,
   turns: Turn[],
   conversationId: ConversationId | undefined,
-  streaming: boolean
+  streaming: boolean,
+  instructions: string | undefined,
+  injectInstructionsInto: 'first' | 'last'
 ): Promise<void> {
   const id = generateResponseId();
   const itemId = generateItemId();
@@ -143,9 +147,7 @@ export async function handleRequest(
   // Streaming setup
   const emitter = streaming ? new ResponseEventEmitter(res) : null;
   if (emitter) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+    setSSEHeaders(res);
     emitter.emitResponseCreated(id, createdAt, model);
     emitter.emitResponseInProgress(id, createdAt, model);
     emitter.emitOutputItemAdded(
@@ -158,33 +160,54 @@ export async function handleRequest(
   logger.debug({ hasCustomTools: ctx.hasCustomTools, toolCount: request.tools?.length }, '[Server] Tool detector state');
 
   let accumulatedText = '';
-  let nextOutputIndex = 1;
+  let toolCallsForPersist: ToolCallForPersistence[] | undefined;
 
-  const processor = createStreamingToolProcessor(ctx.hasCustomTools, {
-    emitTextDelta(text) {
-      accumulatedText += text;
-      emitter?.emitOutputTextDelta(itemId, 0, 0, text);
-    },
-    emitToolCall(callId, tc) {
-      emitter?.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
-    },
-  });
+  // Check for command before calling Lumo
+  const commandResult = await tryExecuteCommand(turns, ctx.commandContext);
+  if (commandResult) {
+    accumulatedText = commandResult.response;
+    emitter?.emitOutputTextDelta(itemId, 0, 0, accumulatedText);
+  } else {
+    // Normal flow: call Lumo
+    let nextOutputIndex = 1;
+    const processor = createStreamingToolProcessor(ctx.hasCustomTools, {
+      emitTextDelta(text) {
+        accumulatedText += text;
+        emitter?.emitOutputTextDelta(itemId, 0, 0, text);
+      },
+      emitToolCall(callId, tc) {
+        emitter?.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
+      },
+    });
 
+    try {
+      const result = await deps.queue.add(async () =>
+        deps.lumoClient.chatWithHistory(turns, processor.onChunk, {
+          requestTitle: ctx.requestTitle,
+          instructions,
+          injectInstructionsInto,
+        })
+      );
+
+      logger.debug('[Server] Stream completed');
+      processor.finalize();
+      persistTitle(result, deps, conversationId);
+      toolCallsForPersist = mapToolCallsForPersistence(processor.toolCallsEmitted);
+      persistAssistantTurn(deps, conversationId, accumulatedText, toolCallsForPersist);
+    } catch (error) {
+      logger.error({ error: String(error) }, 'Response error');
+      if (emitter) {
+        emitter.emitError(error as Error);
+        res.end();
+      } else {
+        sendServerError(res);
+      }
+      return;
+    }
+  }
+
+  // Build and send response (shared for both command and normal flow)
   try {
-    const result = await deps.queue.add(async () =>
-      deps.lumoClient.chatWithHistory(turns, processor.onChunk, {
-        commandContext: ctx.commandContext,
-        requestTitle: ctx.requestTitle,
-      })
-    );
-
-    logger.debug('[Server] Stream completed');
-    processor.finalize();
-    persistTitle(result, deps, conversationId);
-
-    const toolCallsForPersist = mapToolCallsForPersistence(processor.toolCallsEmitted);
-    persistAssistantTurn(deps, conversationId, accumulatedText, toolCallsForPersist);
-
     const output = buildOutputItems({ text: accumulatedText, itemId, toolCalls: toolCallsForPersist });
     const response = createCompletedResponse(id, createdAt, request, output);
 
@@ -207,7 +230,7 @@ export async function handleRequest(
       res.json(response);
     }
   } catch (error) {
-    logger.error({ error: String(error) }, 'Response error');
+    logger.error({ error: String(error) }, 'Error sending response');
     if (emitter) {
       emitter.emitError(error as Error);
       res.end();

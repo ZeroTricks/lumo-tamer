@@ -1,23 +1,17 @@
 /**
- * Converts CLI conversation turns with instruction injection.
+ * Builds CLI instructions for LumoClient.
  *
- * CLI equivalent of src/api/message-converter.ts.
- * Builds effective instructions from config and injects them
- * into the first or last user message as [Project instructions: ...].
+ * Instructions are injected by LumoClient at the last moment,
+ * not persisted in the conversation store.
  */
 
-import type { Turn } from '../lumo-client/index.js';
 import { getCliInstructionsConfig, getLocalActionsConfig } from '../app/config.js';
-import {
-  interpolateTemplate,
-  sanitizeInstructions,
-  injectInstructionsIntoTurns,
-} from '../app/instructions.js';
+import { interpolateTemplate, sanitizeInstructions } from '../app/instructions.js';
 
 /**
  * Build effective instructions for CLI using template system.
  */
-function buildEffectiveInstructions(): string | undefined {
+export function buildCliInstructions(): string | undefined {
   const instructionsConfig = getCliInstructionsConfig();
   const localActionsConfig = getLocalActionsConfig();
 
@@ -37,16 +31,4 @@ function buildEffectiveInstructions(): string | undefined {
 
   // Sanitize to avoid breaking the [Project instructions: ...] wrapper
   return result ? sanitizeInstructions(result) : undefined;
-}
-
-/**
- * Inject instructions into a user message of turns.
- *
- * Reads config for injectInto setting, builds CLI instructions,
- * and delegates to shared injectInstructionsIntoTurns.
- */
-export function injectInstructions(turns: Turn[]): Turn[] {
-  const { injectInto } = getCliInstructionsConfig();
-  const instructions = buildEffectiveInstructions();
-  return injectInstructionsIntoTurns(turns, instructions, injectInto);
 }

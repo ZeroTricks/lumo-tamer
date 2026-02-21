@@ -22,8 +22,8 @@ import type {
     ToolName,
     Turn,
 } from './types.js';
-import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
-import { getCommandsConfig, getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
+import { getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
+import { injectInstructionsIntoTurns } from '../app/instructions.js';
 import { NativeToolCallProcessor } from '../api/tools/native-tool-call-processor.js';
 import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
 import type { ParsedToolCall } from '../api/tools/types.js';
@@ -31,8 +31,11 @@ import type { ParsedToolCall } from '../api/tools/types.js';
 export interface LumoClientOptions {
     enableEncryption?: boolean;
     endpoint?: string;
-    commandContext?: CommandContext;
     requestTitle?: boolean;
+    /** Instructions to inject into user turn before sending to Lumo. */
+    instructions?: string;
+    /** Where to inject instructions: 'first' or 'last' user turn. Default: 'first'. */
+    injectInstructionsInto?: 'first' | 'last';
 }
 
 /**
@@ -228,8 +231,9 @@ export class LumoClient {
         const {
             enableEncryption = this.defaultOptions?.enableEncryption ?? true,
             endpoint = DEFAULT_ENDPOINT,
-            commandContext,
             requestTitle = false,
+            instructions,
+            injectInstructionsInto = 'first',
         } = options;
 
         const turn = turns[turns.length - 1];
@@ -242,37 +246,27 @@ export class LumoClient {
                 } `);
         }
 
-        // NOTE: commands and command results will be present in turns
-        if (turn.content && isCommand(turn.content)) {
-            const commandsConfig = getCommandsConfig();
-            if (commandsConfig.enabled) {
-                const result = await executeCommand(turn.content, commandContext);
-                logger.info(`Command received: ${turn.content}, response: ${result}`);
-
-                if (onChunk)
-                    onChunk(result);
-                return { response: result };
-            } else {
-                logger.debug({ command: turn.content }, 'Command ignored (commands.enabled=false)');
-                // Fall through - treat as regular message, send to Lumo
-            }
-        }
-
         // Read from config - applies to both server and CLI modes
         const tools: ToolName[] = getEnableWebSearch()
             ? [...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]
             : DEFAULT_INTERNAL_TOOLS;
 
+        // Inject instructions into turns at the last moment (before encryption/API call)
+        // This keeps stored conversations clean - instructions are transient, not persisted
+        const turnsWithInstructions = instructions
+            ? injectInstructionsIntoTurns(turns, instructions, injectInstructionsInto)
+            : turns;
+
         let requestKey: AesGcmCryptoKey | undefined;
         let requestId: RequestId | undefined;
-        let processedTurns: Turn[] = turns;
+        let processedTurns: Turn[] = turnsWithInstructions;
         let requestKeyEncB64: string | undefined;
 
         if (enableEncryption) {
             requestKey = await generateRequestKey();
             requestId = generateRequestId();
             requestKeyEncB64 = await prepareEncryptedRequestKey(requestKey, DEFAULT_LUMO_PUB_KEY);
-            processedTurns = await encryptTurns(turns, requestKey, requestId);
+            processedTurns = await encryptTurns(turnsWithInstructions, requestKey, requestId);
         }
 
         // Request title alongside message for new conversations
