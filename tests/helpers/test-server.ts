@@ -17,7 +17,8 @@ import { LumoClient } from '../../src/lumo-client/index.js';
 import { createMockProtonApi } from '../../src/mock/mock-api.js';
 import { ConversationStore } from '../../src/conversations/store.js';
 import { MetricsService, setMetrics } from '../../src/app/metrics.js';
-import { createMetricsRouter, createMetricsMiddleware } from '../../src/api/metrics/index.js';
+import { setupMetricsMiddleware } from '../../src/api/middleware.js';
+import { createMetricsRouter } from '../../src/api/routes/metrics.js';
 import type { EndpointDependencies } from '../../src/api/types.js';
 import type { MockConfig } from '../../src/app/config.js';
 
@@ -72,7 +73,7 @@ export async function createTestServer(
   app.use(express.json());
   // No auth middleware - tests focus on route logic
   if (metrics) {
-    app.use(createMetricsMiddleware(metrics));
+    app.use(setupMetricsMiddleware(metrics));
     app.use(createMetricsRouter(metrics));
   }
   app.use(createHealthRouter(deps));

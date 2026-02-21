@@ -2,7 +2,7 @@ import express from 'express';
 import { getServerConfig, getMetricsConfig, authConfig } from '../app/config.js';
 import { resolveProjectPath } from '../app/paths.js';
 import { logger } from '../app/logger.js';
-import { setupAuthMiddleware, setupLoggingMiddleware } from './middleware.js';
+import { setupAuthMiddleware, setupLoggingMiddleware, setupMetricsMiddleware } from './middleware.js';
 import { setupApiErrorHandler } from './error-handler.js';
 import { createHealthRouter } from './routes/health.js';
 import { createModelsRouter } from './routes/models.js';
@@ -12,7 +12,7 @@ import { createAuthRouter } from './routes/auth.js';
 import { EndpointDependencies } from './types.js';
 import { RequestQueue } from './queue.js';
 import { initMetrics, type MetricsService } from '../app/metrics.js';
-import { createMetricsMiddleware, createMetricsRouter } from './metrics/index.js';
+import { createMetricsRouter } from './routes/metrics.js';
 import type { AppContext } from '../app/index.js';
 
 export class APIServer {
@@ -36,7 +36,7 @@ export class APIServer {
     this.expressApp.use(setupAuthMiddleware(this.serverConfig.apiKey));
     this.expressApp.use(setupLoggingMiddleware());
     if (this.metrics) {
-      this.expressApp.use(createMetricsMiddleware(this.metrics));
+      this.expressApp.use(setupMetricsMiddleware(this.metrics));
     }
   }
 
