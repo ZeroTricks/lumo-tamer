@@ -8,9 +8,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { applyReadBlock, isBinaryFile, getFileSize } from '../../src/cli/file-reader.js';
+import { applyReadBlock, isBinaryFile, getFileSize } from '../../src/cli/local-actions/file-reader.js';
 import { initConfig, getLocalActionsConfig } from '../../src/app/config.js';
-import type { CodeBlock } from '../../src/cli/block-handlers.js';
+import type { CodeBlock } from '../../src/cli/local-actions/types.js';
 
 // CLI tests need CLI mode config
 beforeAll(() => {

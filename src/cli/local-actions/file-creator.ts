@@ -14,9 +14,7 @@
 
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
-import type { BlockHandler } from './types.js';
-import type { CodeBlock } from './types.js';
-import { FILE_PREFIX } from './types.js';
+import { FILE_PREFIX, type BlockHandler, type CodeBlock } from './types.js';
 
 export interface CreateResult {
   type: 'create';

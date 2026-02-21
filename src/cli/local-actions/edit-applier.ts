@@ -15,9 +15,7 @@
  */
 
 import { readFileSync, writeFileSync } from 'fs';
-import { DIVIDER, FILE_PREFIX, REPLACE_MARKER, SEARCH_MARKER, type BlockHandler } from './types.js';
-import type { CodeBlock } from './types.js';
-
+import { DIVIDER, FILE_PREFIX, REPLACE_MARKER, SEARCH_MARKER, type BlockHandler, type CodeBlock } from './types.js';
 
 export interface EditResult {
   type: 'edit';

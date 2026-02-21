@@ -5,7 +5,7 @@
  */
 
 import type { Interface as ReadlineInterface } from 'readline';
-import { print } from '../app/terminal.js';
+import { print } from '../../app/terminal.js';
 
 export type ConfirmResult = 'yes' | 'no' | 'skip_all';
 

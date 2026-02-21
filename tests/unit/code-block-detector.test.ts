@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { initConfig } from '../../src/app/config.js';
-import { CodeBlockDetector, type CodeBlock } from '../../src/cli/code-block-detector.js';
+import { CodeBlockDetector, type CodeBlock } from '../../src/cli/local-actions/code-block-detector.js';
 
 // CLI tests need CLI mode config
 beforeAll(() => {
