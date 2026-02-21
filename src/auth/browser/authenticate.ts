@@ -15,7 +15,7 @@ import { authConfig, getConversationsConfig } from '../../app/config.js';
 import { APP_VERSION_HEADER } from '../../proton-upstream/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { logger } from '../../app/logger.js';
-import { decryptPersistedSession } from '../../conversations/session-keys.js';
+import { decryptPersistedSession } from '../session-keys.js';
 import { writeVault, type VaultKeyConfig } from '../vault/index.js';
 import { resolveProjectPath } from '../../app/paths.js';
 

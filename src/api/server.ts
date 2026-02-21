@@ -2,7 +2,7 @@ import express from 'express';
 import { getServerConfig, getMetricsConfig, authConfig } from '../app/config.js';
 import { resolveProjectPath } from '../app/paths.js';
 import { logger } from '../app/logger.js';
-import { setupAuthMiddleware, setupLoggingMiddleware } from './middleware.js';
+import { setupAuthMiddleware, setupLoggingMiddleware, setupMetricsMiddleware } from './middleware.js';
 import { setupApiErrorHandler } from './error-handler.js';
 import { createHealthRouter } from './routes/health.js';
 import { createModelsRouter } from './routes/models.js';
@@ -11,7 +11,8 @@ import { createResponsesRouter } from './routes/responses/index.js';
 import { createAuthRouter } from './routes/auth.js';
 import { EndpointDependencies } from './types.js';
 import { RequestQueue } from './queue.js';
-import { initMetrics, createMetricsMiddleware, createMetricsRouter, type MetricsService } from './metrics/index.js';
+import { initMetrics, type MetricsService } from '../app/metrics.js';
+import { createMetricsRouter } from './routes/metrics.js';
 import type { AppContext } from '../app/index.js';
 
 export class APIServer {
@@ -35,7 +36,7 @@ export class APIServer {
     this.expressApp.use(setupAuthMiddleware(this.serverConfig.apiKey));
     this.expressApp.use(setupLoggingMiddleware());
     if (this.metrics) {
-      this.expressApp.use(createMetricsMiddleware(this.metrics));
+      this.expressApp.use(setupMetricsMiddleware(this.metrics));
     }
   }
 
@@ -71,6 +72,9 @@ export class APIServer {
   }
 
   async start(): Promise<void> {
+    const { validateTemplateOnce } = await import('./instructions.js');
+    validateTemplateOnce(this.serverConfig.instructions.template);
+
     return new Promise((resolve) => {
       this.expressApp.listen(this.serverConfig.port, () => {
         logger.info('========================================');

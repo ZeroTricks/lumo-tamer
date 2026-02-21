@@ -8,12 +8,9 @@
 
 import { logger } from '../app/logger.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
-import { interpolateTemplate, sanitizeInstructions } from '../app/instructions.js';
+import { interpolateTemplate } from 'app/template.js';
 import { applyToolPrefix, applyToolNamePrefix } from './tools/prefix.js';
 import type { OpenAITool } from './types.js';
-
-// Re-export shared utilities for backwards compatibility
-export { interpolateTemplate, sanitizeInstructions } from '../app/instructions.js';
 
 // ── Template validation ───────────────────────────────────────────────
 
@@ -38,8 +35,8 @@ export function validateTemplateOnce(template: string): void {
   templateValidated = true;
 
   for (const [varName, warning] of Object.entries(TEMPLATE_VARIABLE_WARNINGS)) {
-    // Check for {{varName}} or {{#if varName}}
-    const pattern = new RegExp(`\\{\\{#?(?:if\\s+)?${varName}\\}\\}`);
+    // Check for {{varName}}
+    const pattern = new RegExp(`\\{\\{${varName}\\}\\}`);
     if (!pattern.test(template)) {
       logger.warn(`Template missing {{${varName}}}. ${warning}`);
     }
@@ -157,6 +154,5 @@ export function buildInstructions(tools?: OpenAITool[], clientInstructions?: str
     fallback: instructionsConfig.fallback,
   });
 
-  // Sanitize to avoid breaking the [Project instructions: ...] wrapper
-  return sanitizeInstructions(result);
+  return result;
 }

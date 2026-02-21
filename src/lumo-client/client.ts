@@ -23,7 +23,7 @@ import type {
     Turn,
 } from './types.js';
 import { getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
-import { injectInstructionsIntoTurns } from '../app/instructions.js';
+import { injectInstructionsIntoTurns } from './instructions.js';
 import { NativeToolCallProcessor } from '../api/tools/native-tool-call-processor.js';
 import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
 import type { ParsedToolCall } from '../api/tools/types.js';

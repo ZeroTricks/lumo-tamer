@@ -1,17 +1,3 @@
-/**
- * Block handler interface and registry for CLI
- *
- * Each block type (edit, read, create, execute) implements BlockHandler.
- * The registry collects them so client.ts and code-block-detector.ts
- * can dispatch generically. Order matters: first match wins.
- * Add new block types here (no changes needed in client.ts).
- */
-
-import { editHandler } from './edit-applier.js';
-import { readHandler } from './file-reader.js';
-import { createHandler } from './file-creator.js';
-import { executeHandler } from './code-executor.js';
-
 export interface CodeBlock {
   language: string | null; // "bash", "python", null for untagged
   content: string;
@@ -51,9 +37,9 @@ export interface BlockHandler {
   formatResult(block: CodeBlock, result: BlockResult): string;
 }
 
-export const blockHandlers: BlockHandler[] = [
-  readHandler,
-  editHandler,
-  createHandler,
-  executeHandler, // last, matches dynamically via config
-];
+// Edit block delimiters. If changed, update cli.instructions.forTools in config.defaults.yaml.
+export const FILE_PREFIX = '=== FILE:';
+export const SEARCH_MARKER = '<<<<<<< SEARCH';
+export const DIVIDER = '=======';
+export const REPLACE_MARKER = '>>>>>>> REPLACE';
+

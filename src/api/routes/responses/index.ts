@@ -5,7 +5,7 @@ import { handleRequest } from './request-handlers.js';
 import { convertResponseInputToTurns } from '../../message-converter.js';
 import { buildInstructions } from '../../instructions.js';
 import { getConversationsConfig, getServerInstructionsConfig } from '../../../app/config.js';
-import { getMetrics } from '../../metrics/index.js';
+import { getMetrics } from '../../../app/metrics.js';
 import { trackCustomToolCompletion } from '../../tools/call-id.js';
 import { sendInvalidRequest, sendServerError } from '../../error-handler.js';
 import { deterministicUUID } from '../../../app/id-generator.js';

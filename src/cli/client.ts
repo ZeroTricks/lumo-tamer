@@ -8,17 +8,17 @@
  *        Interactive mode: no argv
  */
 
-import * as readline from 'readline';
+import { executeCommand, isCommand, type CommandContext } from 'app/commands.js';
+import { getCliInstructionsConfig, getCommandsConfig, getLocalActionsConfig } from 'app/config.js';
+import logger from 'app/logger.js';
+import { BUSY_INDICATOR, clearBusyIndicator, print } from 'app/terminal.js';
+import type { AppContext } from 'app/types.js';
 import { randomUUID } from 'crypto';
-import { logger } from '../app/logger.js';
-import { getLocalActionsConfig, getCommandsConfig, getCliInstructionsConfig } from '../app/config.js';
-import { isCommand, executeCommand, type CommandContext } from '../app/commands.js';
-import type { AppContext } from '../app/index.js';
-import { CodeBlockDetector, type CodeBlock } from './code-block-detector.js';
-import { blockHandlers, type BlockResult } from './block-handlers.js';
-import { confirmAndApply } from './confirm.js';
+import * as readline from 'readline';
+import { blockHandlers, executeBlocks, formatResultsMessage } from './local-actions/block-handlers.js';
+import { CodeBlockDetector, type CodeBlock } from './local-actions/code-block-detector.js';
+import { type BlockResult } from './local-actions/types.js';
 import { buildCliInstructions } from './message-converter.js';
-import { print, clearBusyIndicator, BUSY_INDICATOR } from '../app/terminal.js';
 
 interface LumoResponse {
   response: string;
@@ -26,7 +26,7 @@ interface LumoResponse {
   title?: string;
 }
 
-interface HandledBlock {
+export interface HandledBlock {
   block: CodeBlock;
   result: BlockResult;
 }
@@ -58,8 +58,8 @@ export class CLIClient {
     const localActionsConfig = getLocalActionsConfig();
     const detector = localActionsConfig.enabled
       ? new CodeBlockDetector((lang) =>
-          blockHandlers.some(h => h.matches({ language: lang, content: '' }))
-        )
+        blockHandlers.some(h => h.matches({ language: lang, content: '' }))
+      )
       : null;
     const blocks: CodeBlock[] = [];
     let chunkCount = 0;
@@ -104,65 +104,6 @@ export class CLIClient {
     return { response: result.response, blocks, title: result.title };
   }
 
-  /**
-   * Execute code blocks with user confirmation.
-   * Returns results for blocks that were executed (not skipped).
-   */
-  private async executeBlocks(rl: readline.Interface, blocks: CodeBlock[]): Promise<HandledBlock[]> {
-    const results: HandledBlock[] = [];
-
-    // Count actionable blocks for skip-all message (silent blocks don't count)
-    const actionableCount = blocks.filter(b => {
-      const h = blockHandlers.find(h => h.matches(b));
-      return h?.requiresConfirmation;
-    }).length;
-    let processed = 0;
-
-    for (const block of blocks) {
-      const handler = blockHandlers.find(h => h.matches(block));
-      if (!handler) continue;
-
-      if (!handler.requiresConfirmation) {
-        const result = await handler.apply(block);
-        if (!result.success && handler.formatApplyOutput) {
-          print(handler.formatApplyOutput(result));
-        }
-        results.push({ block, result });
-        continue;
-      }
-
-      processed++;
-      const opts = handler.confirmOptions(block);
-      const outcome = await confirmAndApply(rl, {
-        ...opts,
-        content: block.content,
-        apply: () => handler.apply(block),
-        formatOutput: handler.formatApplyOutput,
-      });
-
-      if (outcome === 'skip_all') {
-        const remaining = actionableCount - processed;
-        print(`[Skipped this and ${remaining} remaining block${remaining === 1 ? '' : 's'}]\n`);
-        break;
-      }
-      if (outcome !== 'skipped') {
-        results.push({ block, result: outcome });
-      }
-    }
-
-    return results;
-  }
-
-  /**
-   * Format execution results as a message to send back to Lumo.
-   */
-  private formatResultsMessage(results: HandledBlock[]): string {
-    return results.map(({ block, result }) => {
-      const handler = blockHandlers.find(h => h.matches(block));
-      return handler ? handler.formatResult(block, result) : result.output;
-    }).join('\n\n');
-  }
-
   private async singleQuery(query: string): Promise<void> {
     logger.info({ query }, 'Sending query');
     print('');
@@ -179,7 +120,7 @@ export class CLIClient {
           print(chunk, false);
           chunkCount++;
         },
-      { enableEncryption: true }
+        { enableEncryption: true }
       );
 
       if (chunkCount === 0) clearBusyIndicator();
@@ -218,65 +159,10 @@ export class CLIClient {
     if (commandsConfig.enabled)
       print('Type /help for commands, /quit to exit.');
     print('');
+    let goOn = true;
 
-    while (true) {
-      const input = await prompt();
-
-      if (input === null || input === '/quit') {
-        break;
-      }
-
-      // Handle commands (e.g., /save, /sync, /deleteallspaces, /title)
-      if (isCommand(input)) {
-        if (commandsConfig.enabled) {
-          const commandContext: CommandContext = {
-            syncInitialized: this.app.isSyncInitialized(),
-            conversationId: this.conversationId,
-            authManager: this.app.getAuthManager(),
-          };
-          const result = await executeCommand(input, commandContext);
-          print(result + '\n');
-          continue;
-        } else {
-          logger.debug({ input }, 'Command ignored (commands.enabled=false)');
-          // Fall through to treat as regular message
-        }
-      }
-
-      if (!input.trim()) {
-        continue;
-      }
-
-      try {
-        // Append user message and get response
-        this.store.appendUserMessage(this.conversationId, input);
-
-        // Request title for new conversations (first message)
-        const existingConv = this.store.get(this.conversationId);
-        const requestTitle = existingConv?.title === 'New Conversation';
-
-        let { response, blocks } = await this.sendToLumo({ requestTitle });
-        this.store.appendAssistantResponse(this.conversationId, response);
-
-        // Execute blocks until none remain (or user skips all)
-        while (blocks.length > 0) {
-          const results = await this.executeBlocks(rl, blocks);
-          if (results.length === 0) break; // user skipped all
-
-          // Send batch results back to Lumo
-          print('─── Sending results to Lumo ───\n');
-          const batchMessage = this.formatResultsMessage(results);
-          this.store.appendUserMessage(this.conversationId, batchMessage);
-
-          ({ response, blocks } = await this.sendToLumo());
-          this.store.appendAssistantResponse(this.conversationId, response);
-        }
-      } catch (error) {
-        clearBusyIndicator();
-        print('');
-        logger.error({ error }, 'Request failed');
-        this.handleError(error);
-      }
+    while (goOn) {
+      goOn = await this.handleUserInput(prompt, rl, commandsConfig.enabled);
     }
 
     rl.close();
@@ -296,6 +182,72 @@ export class CLIClient {
     print('Goodbye!');
   }
 
+  private async handleUserInput(
+    prompt: () => Promise<string | null>,
+    rl: readline.Interface,
+    commandsEnabled: boolean
+  ) {
+    const input = await prompt();
+
+    if (input === null || input === '/quit') {
+      return false;
+    }
+
+    // Handle commands (e.g., /save, /sync, /deleteallspaces, /title)
+    if (isCommand(input)) {
+      if (commandsEnabled) {
+        const commandContext: CommandContext = {
+          syncInitialized: this.app.isSyncInitialized(),
+          conversationId: this.conversationId,
+          authManager: this.app.getAuthManager(),
+        };
+        const result = await executeCommand(input, commandContext);
+        print(result + '\n');
+        return true;
+      } else {
+        logger.debug({ input }, 'Command ignored (commands.enabled=false)');
+        // Fall through to treat as regular message
+      }
+    }
+
+    if (!input.trim()) {
+      return true;
+    }
+
+    try {
+      // Append user message and get response
+      this.store.appendUserMessage(this.conversationId, input);
+
+      // Request title for new conversations (first message)
+      const existingConv = this.store.get(this.conversationId);
+      const requestTitle = existingConv?.title === 'New Conversation';
+
+      let { response, blocks } = await this.sendToLumo({ requestTitle });
+      this.store.appendAssistantResponse(this.conversationId, response);
+
+      // Execute blocks until none remain (or user skips all)
+      while (blocks.length > 0) {
+        const results = await executeBlocks(rl, blocks);
+        if (results.length === 0) break; // user skipped all
+
+
+        // Send batch results back to Lumo
+        print('─── Sending results to Lumo ───\n');
+        const batchMessage = formatResultsMessage(results);
+        this.store.appendUserMessage(this.conversationId, batchMessage);
+
+        ({ response, blocks } = await this.sendToLumo());
+        this.store.appendAssistantResponse(this.conversationId, response);
+      }
+    } catch (error) {
+      clearBusyIndicator();
+      print('');
+      logger.error({ error }, 'Request failed');
+      this.handleError(error);
+    }
+    return true;
+  }
+
   private handleError(error: unknown): void {
     if (error instanceof Error) {
       if (error.message.includes('401')) {
@@ -308,3 +260,4 @@ export class CLIClient {
     }
   }
 }
+

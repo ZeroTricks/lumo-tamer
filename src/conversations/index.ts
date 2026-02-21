@@ -47,13 +47,6 @@ export {
     type IncomingMessage,
 } from './deduplication.js';
 
-// Session key utilities
-export {
-    decryptPersistedSession,
-    canDecryptSession,
-    getMailboxPassword,
-} from './session-keys.js';
-
 // Encryption / Key management
 export {
     KeyManager,

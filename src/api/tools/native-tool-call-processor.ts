@@ -15,7 +15,7 @@
 import { JsonBraceTracker } from './json-brace-tracker.js';
 import { stripToolPrefix } from './prefix.js';
 import { getCustomToolsConfig } from '../../app/config.js';
-import { getMetrics } from '../metrics/index.js';
+import { getMetrics } from '../../app/metrics.js';
 import { logger } from '../../app/logger.js';
 import type { ParsedToolCall } from './types.js';
 

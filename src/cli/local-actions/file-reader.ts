@@ -10,11 +10,10 @@
  *   path/to/file2.txt
  */
 
-import { readFileSync, statSync, openSync, readSync, closeSync } from 'fs';
 import bytes from 'bytes';
-import type { CodeBlock, BlockHandler } from './block-handlers.js';
-import { FILE_PREFIX } from './edit-applier.js';
-import { getLocalActionsConfig } from '../app/config.js';
+import { closeSync, openSync, readFileSync, readSync, statSync } from 'fs';
+import { getLocalActionsConfig } from '../../app/config.js';
+import { FILE_PREFIX, type BlockHandler, type CodeBlock } from './types.js';
 
 export interface ReadResult {
   type: 'read';

@@ -6,7 +6,7 @@
  */
 
 import { getCliInstructionsConfig, getLocalActionsConfig } from '../app/config.js';
-import { interpolateTemplate, sanitizeInstructions } from '../app/instructions.js';
+import { interpolateTemplate } from 'app/template.js';
 
 /**
  * Build effective instructions for CLI using template system.
@@ -29,6 +29,5 @@ export function buildCliInstructions(): string | undefined {
     executors,
   });
 
-  // Sanitize to avoid breaking the [Project instructions: ...] wrapper
-  return result ? sanitizeInstructions(result) : undefined;
+  return result;
 }

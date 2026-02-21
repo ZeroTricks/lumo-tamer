@@ -9,7 +9,7 @@
 import { randomUUID } from 'crypto';
 import { getCustomToolsConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
-import { getMetrics } from '../metrics/index.js';
+import { getMetrics } from '../../app/metrics.js';
 
 // ── Call ID generation ────────────────────────────────────────────────
 

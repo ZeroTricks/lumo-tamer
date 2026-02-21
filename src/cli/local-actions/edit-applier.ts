@@ -15,13 +15,7 @@
  */
 
 import { readFileSync, writeFileSync } from 'fs';
-import type { CodeBlock, BlockHandler } from './block-handlers.js';
-
-// Edit block delimiters. If changed, update cli.instructions.forTools in config.defaults.yaml.
-export const FILE_PREFIX = '=== FILE:';
-const SEARCH_MARKER = '<<<<<<< SEARCH';
-const DIVIDER = '=======';
-const REPLACE_MARKER = '>>>>>>> REPLACE';
+import { DIVIDER, FILE_PREFIX, REPLACE_MARKER, SEARCH_MARKER, type BlockHandler, type CodeBlock } from './types.js';
 
 export interface EditResult {
   type: 'edit';
