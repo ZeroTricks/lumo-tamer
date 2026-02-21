@@ -31,6 +31,17 @@ export interface ConversationMetadata {
 }
 
 /**
+ * Space private data (encrypted)
+ * Matches Lumo WebClient's ProjectSpace type
+ */
+export interface SpacePrivate {
+    isProject: true;
+    projectName?: string;
+    projectInstructions?: string;
+    projectIcon?: string;
+}
+
+/**
  * Conversation private data (encrypted)
  */
 export interface ConversationPrivate {

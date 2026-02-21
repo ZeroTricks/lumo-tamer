@@ -13,6 +13,16 @@ export {
     type SyncServiceConfig,
 } from './sync-service.js';
 
+// Encryption codec
+export { EncryptionCodec } from './encryption-codec.js';
+
+// Space manager (for external use if needed)
+export {
+    SpaceManager,
+    type SpaceManagerConfig,
+    type SpaceContext,
+} from './space-manager.js';
+
 // Auto-sync
 export {
     AutoSyncService,

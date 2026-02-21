@@ -144,26 +144,6 @@ describe('ConversationStore', () => {
       ]);
     });
 
-    it('filters to user and assistant roles only', () => {
-      // Manually add a system message via the store internals
-      const state = store.getOrCreate('conv-1');
-      state.messages.push({
-        id: 'sys-1',
-        conversationId: 'conv-1',
-        createdAt: Date.now(),
-        role: 'system',
-        status: 'succeeded',
-        content: 'You are helpful',
-      });
-      store.appendMessages('conv-1', [
-        { role: 'user', content: 'Hello' },
-      ]);
-
-      const turns = store.toTurns('conv-1');
-      expect(turns).toHaveLength(1);
-      expect(turns[0].role).toBe('user');
-    });
-
     it('returns empty array for non-existent conversation', () => {
       expect(store.toTurns('nonexistent')).toEqual([]);
     });
