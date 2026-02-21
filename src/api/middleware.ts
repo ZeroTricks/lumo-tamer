@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { logger } from '../app/logger.js';
-import { getMetrics } from './metrics/index.js';
+import { getMetrics } from '../app/metrics.js';
 
 export function setupAuthMiddleware(apiKey: string): express.RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {

@@ -28,7 +28,7 @@ import type {
     SpaceId,
 } from './types.js';
 import { getLogConfig } from 'app/config.js';
-import { getMetrics } from '../api/metrics/index.js';
+import { getMetrics } from '../app/metrics.js';
 
 /**
  * In-memory conversation store

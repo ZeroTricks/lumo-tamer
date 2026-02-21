@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { MetricsService } from '../../src/api/metrics/service.js';
+import { MetricsService } from '../../src/app/metrics.js';
 
 describe('MetricsService', () => {
   let metrics: MetricsService;

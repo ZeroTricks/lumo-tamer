@@ -4,7 +4,7 @@ import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstruc
 import { logger } from '../../../app/logger.js';
 import { convertMessagesToTurns, extractSystemMessage } from '../../message-converter.js';
 import { buildInstructions } from '../../instructions.js';
-import { getMetrics } from '../../metrics/index.js';
+import { getMetrics } from '../../../app/metrics.js';
 import { ChatCompletionEventEmitter } from './events.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/types.js';

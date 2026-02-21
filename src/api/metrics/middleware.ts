@@ -1,6 +1,6 @@
 // Metrics middleware for request tracking
 import { Request, Response, NextFunction } from 'express';
-import type { MetricsService } from './service.js';
+import type { MetricsService } from '../../app/metrics.js';
 
 // Normalize paths to base endpoints for consistent labeling
 function normalizeEndpoint(path: string): string {

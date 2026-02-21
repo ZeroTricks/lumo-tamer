@@ -11,7 +11,8 @@ import { createResponsesRouter } from './routes/responses/index.js';
 import { createAuthRouter } from './routes/auth.js';
 import { EndpointDependencies } from './types.js';
 import { RequestQueue } from './queue.js';
-import { initMetrics, createMetricsMiddleware, createMetricsRouter, type MetricsService } from './metrics/index.js';
+import { initMetrics, type MetricsService } from '../app/metrics.js';
+import { createMetricsMiddleware, createMetricsRouter } from './metrics/index.js';
 import type { AppContext } from '../app/index.js';
 
 export class APIServer {

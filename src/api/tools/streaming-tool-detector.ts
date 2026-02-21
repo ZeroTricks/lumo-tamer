@@ -15,7 +15,7 @@ import { isToolCallJson, parseToolCallJson, type ParsedToolCall } from './types.
 import { logger } from '../../app/logger.js';
 import { getCustomToolsConfig } from '../../app/config.js';
 import { stripToolPrefix } from './prefix.js';
-import { getMetrics } from '../metrics/index.js';
+import { getMetrics } from '../../app/metrics.js';
 
 type DetectorState = 'normal' | 'in_code_fence' | 'in_raw_json';
 

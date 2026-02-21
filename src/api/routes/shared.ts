@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { Response } from 'express';
 import { getCustomToolsConfig } from '../../app/config.js';
-import { getMetrics } from '../metrics/index.js';
+import { getMetrics } from '../../app/metrics';
 import type { CommandContext } from '../../app/commands.js';
 import type { EndpointDependencies, OpenAITool, OpenAIToolCall } from '../types.js';
 import type { ConversationId } from '../../conversations/types.js';

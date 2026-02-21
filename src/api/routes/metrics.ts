@@ -1,6 +1,6 @@
 // Metrics router - exposes /metrics endpoint for Prometheus
 import { Router } from 'express';
-import type { MetricsService } from '../metrics/service.js';
+import type { MetricsService } from '../../app/metrics.js';
 
 export function createMetricsRouter(metrics: MetricsService): Router {
   const router = Router();

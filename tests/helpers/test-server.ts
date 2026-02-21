@@ -16,7 +16,8 @@ import { RequestQueue } from '../../src/api/queue.js';
 import { LumoClient } from '../../src/lumo-client/index.js';
 import { createMockProtonApi } from '../../src/mock/mock-api.js';
 import { ConversationStore } from '../../src/conversations/store.js';
-import { MetricsService, createMetricsRouter, createMetricsMiddleware, setMetrics } from '../../src/api/metrics/index.js';
+import { MetricsService, setMetrics } from '../../src/app/metrics.js';
+import { createMetricsRouter, createMetricsMiddleware } from '../../src/api/metrics/index.js';
 import type { EndpointDependencies } from '../../src/api/types.js';
 import type { MockConfig } from '../../src/app/config.js';
 
