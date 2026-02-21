@@ -17,18 +17,12 @@ import { randomUUID } from 'crypto';
 import * as readline from 'readline';
 import { blockHandlers, executeBlocks, formatResultsMessage } from './local-actions/block-handlers.js';
 import { CodeBlockDetector, type CodeBlock } from './local-actions/code-block-detector.js';
-import { type BlockResult } from './local-actions/types.js';
 import { buildCliInstructions } from './message-converter.js';
 
 interface LumoResponse {
   response: string;
   blocks: CodeBlock[];
   title?: string;
-}
-
-export interface HandledBlock {
-  block: CodeBlock;
-  result: BlockResult;
 }
 
 export class CLIClient {

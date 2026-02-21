@@ -7,15 +7,15 @@
  * Add new block types here (no changes needed in client.ts).
  */
 
-import { editHandler } from './edit-applier.js';
-import { readHandler } from './file-reader.js';
-import { createHandler } from './file-creator.js';
-import { executeHandler } from './code-executor.js';
-import { BlockHandler, type CodeBlock } from './types.js';
 import { print } from 'app/terminal.js';
-import { HandledBlock } from 'cli/client.js';
 import * as readline from 'readline';
+import { BlockHandler, HandledBlock, type CodeBlock } from './types.js';
 import { confirmAndApply } from './confirm.js';
+
+import { executeHandler } from './code-executor.js';
+import { editHandler } from './edit-applier.js';
+import { createHandler } from './file-creator.js';
+import { readHandler } from './file-reader.js';
 
 export const blockHandlers: BlockHandler[] = [
   readHandler,

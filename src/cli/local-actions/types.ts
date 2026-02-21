@@ -9,6 +9,12 @@ export interface BlockResult {
   output: string;
 }
 
+export interface HandledBlock {
+  block: CodeBlock;
+  result: BlockResult;
+}
+
+
 export interface BlockHandler {
   /** Does this handler own this block? */
   matches(block: CodeBlock): boolean;
