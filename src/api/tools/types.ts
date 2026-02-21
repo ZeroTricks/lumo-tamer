@@ -2,10 +2,10 @@
  * Tool call types and validation.
  */
 
-export interface ParsedToolCall {
-  name: string;
-  arguments: Record<string, unknown>;
-}
+import type { ParsedToolCall } from '../../lumo-client/types.js';
+
+// Re-export from lumo-client (canonical source)
+export type { ParsedToolCall };
 
 function asObject(value: unknown): Record<string, unknown> {
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) return value as Record<string, unknown>;

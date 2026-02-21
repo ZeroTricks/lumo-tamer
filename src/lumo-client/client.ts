@@ -21,39 +21,18 @@ import type {
     RequestId,
     ToolName,
     Turn,
+    ParsedToolCall,
+    AssistantMessageData,
+    LumoClientOptions,
+    ChatResult,
 } from './types.js';
 import { getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
 import { injectInstructionsIntoTurns } from './instructions.js';
 import { NativeToolCallProcessor } from '../api/tools/native-tool-call-processor.js';
 import { postProcessTitle } from '../proton-shims/lumo-api-client-utils.js';
-import type { ParsedToolCall } from '../api/tools/types.js';
 
-export interface LumoClientOptions {
-    enableEncryption?: boolean;
-    endpoint?: string;
-    requestTitle?: boolean;
-    /** Instructions to inject into user turn before sending to Lumo. */
-    instructions?: string;
-    /** Where to inject instructions: 'first' or 'last' user turn. Default: 'first'. */
-    injectInstructionsInto?: 'first' | 'last';
-}
-
-/**
- * Result from a chat request, including optional generated title
- */
-export interface ChatResult {
-    response: string;
-    title?: string;
-    /** First valid native tool call from SSE tool_call target, if any.
-     *  "Native" here means Lumo-native SSE pipeline - this includes both legitimate
-     *  native calls (e.g. web_search) and "misrouted" calls (custom tools Lumo
-     *  mistakenly routed through the native pipeline). */
-    nativeToolCall?: ParsedToolCall;
-    /** Whether the native tool call failed server-side (tool_result contained error). */
-    nativeToolCallFailed?: boolean;
-    /** Whether a misrouted custom tool was detected (routed through native SSE pipeline). */
-    misrouted?: boolean;
-}
+// Re-export types for external consumers
+export type { LumoClientOptions, ChatResult };
 
 const DEFAULT_INTERNAL_TOOLS: ToolName[] = ['proton_info'];
 const DEFAULT_EXTERNAL_TOOLS: ToolName[] = ['web_search', 'weather', 'stock', 'cryptocurrency'];
@@ -202,14 +181,28 @@ export class LumoClient {
 
             // Finalize tracking and get result
             nativeToolProcessor.finalize();
-            const result = nativeToolProcessor.getResult();
+            const nativeResult = nativeToolProcessor.getResult();
+
+            // Build message data for persistence
+            // Only include native tool data if not misrouted (misrouted calls are bounced)
+            const message: AssistantMessageData = { content: fullResponse };
+            if (nativeResult.toolCall && !nativeResult.misrouted) {
+                message.toolCall = JSON.stringify({
+                    name: nativeResult.toolCall.name,
+                    arguments: nativeResult.toolCall.arguments,
+                });
+                if (nativeResult.toolResult) {
+                    message.toolResult = nativeResult.toolResult;
+                }
+            }
 
             return {
-                response: fullResponse,
+                message,
                 title: fullTitle || undefined,
-                nativeToolCall: result.toolCall,
-                nativeToolCallFailed: result.toolCall ? result.failed : undefined,
-                misrouted: result.misrouted,
+                nativeToolCallFailed: nativeResult.toolCall ? nativeResult.failed : undefined,
+                misrouted: nativeResult.misrouted,
+                // Keep parsed tool call for bounce handling (internal use only)
+                _nativeToolCallForBounce: nativeResult.misrouted ? nativeResult.toolCall : undefined,
             };
         } finally {
             reader.releaseLock();
@@ -302,11 +295,10 @@ export class LumoClient {
         }, isBounce);
 
         // Log response
-        const responsePreview = result.response.length > 200
-            ? result.response.substring(0, 200) + '...'
-            : result.response;
-
         if (logConfig.messageContent) {
+            const responsePreview = result.message.content.length > 200
+                ? result.message.content.substring(0, 200) + '...'
+                : result.message.content;
             logger.info(`[Lumo] ${responsePreview}`);
             if (result.title) {
                 logger.debug({ title: result.title }, 'Generated title');
@@ -314,13 +306,13 @@ export class LumoClient {
         }
 
         // Bounce misrouted tool calls: ask Lumo to re-output as JSON text
-        if (!isBounce && result.misrouted && result.nativeToolCall) {
-            const bounceInstruction = buildBounceInstruction(result.nativeToolCall);
-            logger.info({ tool: result.nativeToolCall.name }, 'Bouncing misrouted tool call');
+        if (!isBounce && result.misrouted && result._nativeToolCallForBounce) {
+            const bounceInstruction = buildBounceInstruction(result._nativeToolCallForBounce);
+            logger.info({ tool: result._nativeToolCallForBounce.name }, 'Bouncing misrouted tool call');
 
             const bounceTurns: Turn[] = [
                 ...turns,
-                { role: 'assistant', content: result.response },
+                { role: 'assistant', content: result.message.content },
                 { role: 'user', content: bounceInstruction },
             ];
 
@@ -331,6 +323,8 @@ export class LumoClient {
         return {
             ...result,
             title: result.title ? postProcessTitle(result.title) : undefined,
+            // Clear internal field from final result
+            _nativeToolCallForBounce: undefined,
         };
     }
 }

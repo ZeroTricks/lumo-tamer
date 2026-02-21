@@ -29,6 +29,9 @@ const KNOWN_NATIVE_TOOLS = new Set([
  * Parse a single complete JSON string as a native tool call.
  * Normalizes Lumo's `parameters` key to `arguments` for consistency with ParsedToolCall.
  * Returns null if JSON is invalid or doesn't contain a tool name.
+ *
+ * Handles Lumo's internal format quirk where `arguments` may be an object containing
+ * `{arguments, name, parameters}` - in that case, extract `parameters` from the nested structure.
  */
 function parseToolCallJson(json: string): ParsedToolCall | null {
   try {
@@ -38,7 +41,13 @@ function parseToolCallJson(json: string): ParsedToolCall | null {
     }
 
     // Lumo uses 'parameters', our ParsedToolCall uses 'arguments'
-    const args = parsed.arguments ?? parsed.parameters ?? {};
+    let args = parsed.arguments ?? parsed.parameters ?? {};
+
+    // Handle Lumo's internal format quirk: if arguments contains nested {arguments, name, parameters},
+    // extract the actual parameters from that nested structure
+    if (typeof args === 'object' && args !== null && 'parameters' in args && typeof args.parameters === 'object') {
+      args = args.parameters ?? {};
+    }
 
     return {
       name: parsed.name,
@@ -66,6 +75,8 @@ function isErrorResult(json: string): boolean {
 
 export interface NativeToolCallResult {
   toolCall: ParsedToolCall | undefined;
+  /** Raw tool_result JSON string from SSE (if any) */
+  toolResult: string | undefined;
   failed: boolean;
   /** True if a misrouted custom tool was detected */
   misrouted: boolean;
@@ -79,6 +90,7 @@ export class NativeToolCallProcessor {
   private toolCallTracker = new JsonBraceTracker();
   private toolResultTracker = new JsonBraceTracker();
   private firstToolCall: ParsedToolCall | null = null;
+  private firstToolResult: string | null = null;
   private failed = false;
   private _misrouted = false;
 
@@ -127,6 +139,10 @@ export class NativeToolCallProcessor {
   feedToolResult(content: string): void {
     for (const json of this.toolResultTracker.feed(content)) {
       logger.debug({ raw: json }, 'Native SSE tool_result');
+      // Store first tool result for persistence
+      if (!this.firstToolResult) {
+        this.firstToolResult = json;
+      }
       if (this.firstToolCall && !this.failed && isErrorResult(json)) {
         this.failed = true;
       }
@@ -142,6 +158,7 @@ export class NativeToolCallProcessor {
   getResult(): NativeToolCallResult {
     return {
       toolCall: this.firstToolCall ?? undefined,
+      toolResult: this.firstToolResult ?? undefined,
       failed: this.failed,
       misrouted: this._misrouted,
     };

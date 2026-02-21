@@ -5,7 +5,7 @@ import { getMetrics } from '../../app/metrics';
 import type { CommandContext } from '../../app/commands.js';
 import type { EndpointDependencies, OpenAITool, OpenAIToolCall } from '../types.js';
 import type { ConversationId } from '../../conversations/types.js';
-import type { ChatResult } from '../../lumo-client/index.js';
+import type { ChatResult, AssistantMessageData } from '../../lumo-client/index.js';
 
 // Re-export for convenience
 export { tryExecuteCommand, type CommandResult } from '../../app/commands.js';
@@ -75,27 +75,31 @@ export function persistTitle(result: ChatResult, deps: EndpointDependencies, con
 }
 
 /**
- * Persist an assistant turn (response text only, no tool calls).
+ * Persist an assistant turn.
  *
- * When tool calls are present, we skip persistence entirely. The client (e.g. Home Assistant)
+ * When custom tool calls are present, we skip persistence entirely. The client (e.g. Home Assistant)
  * will send the assistant message back with the tool output in the next request, and
  * appendMessages() will handle it via ID-based deduplication. This avoids order mismatches
  * between what we persist and what the client sends back.
+ *
+ * Native tool calls (web_search, weather, etc.) are handled differently - they are executed
+ * server-side by Lumo, so we persist them immediately with the tool call/result data.
+ * The message data (including JSON-serialized tool call) comes from ChatResult.message.
  */
 export function persistAssistantTurn(
   deps: EndpointDependencies,
   conversationId: ConversationId | undefined,
-  content: string,
-  toolCalls?: Array<{ name: string; arguments: string; call_id: string }>
+  message: AssistantMessageData,
+  customToolCalls?: Array<{ name: string; arguments: string; call_id: string }>
 ): void {
   if (conversationId && deps.conversationStore) {
-    // Stateful: persist to store (only when no tool calls)
-    if (toolCalls && toolCalls.length > 0) {
-      // Skip persistence - client will send assistant message back with tool output,
-      // and appendMessages() will persist it with proper ID-based deduplication
+    // Custom tool calls: skip persistence (client will send back)
+    if (customToolCalls && customToolCalls.length > 0) {
       return;
     }
-    deps.conversationStore.appendAssistantResponse(conversationId, content);
+
+    // Persist message (with or without native tool data)
+    deps.conversationStore.appendAssistantResponse(conversationId, message);
   } else {
     // Stateless: track metric only (no persistence)
     getMetrics()?.messagesTotal.inc({ role: 'assistant' });

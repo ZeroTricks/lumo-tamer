@@ -193,7 +193,8 @@ export async function handleRequest(
       processor.finalize();
       persistTitle(result, deps, conversationId);
       toolCallsForPersist = mapToolCallsForPersistence(processor.toolCallsEmitted);
-      persistAssistantTurn(deps, conversationId, accumulatedText, toolCallsForPersist);
+
+      persistAssistantTurn(deps, conversationId, result.message, toolCallsForPersist);
     } catch (error) {
       logger.error({ error: String(error) }, 'Response error');
       if (emitter) {
