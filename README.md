@@ -243,7 +243,7 @@ conversations:
 ```
 > **Note:** Only supported with the `browser` authentication method. Enabling conversation sync requires additional user secrets; if you enable this after initial setup, re-run `tamer auth browser`.
 
-> **Warning:** Projects in Lumo have a limit on the number of conversations per project. When hit, sync will fail. Deleting conversations won't help. Use a new `projectName` to work around this. See [#16](https://github.com/ZeroTricks/lumo-tamer/issues/16).
+> **Warning:** Projects in Lumo have a limit on the number of conversations per project. When hit, sync will fail. Deleting conversations won't help. Use a new `projectName` as a workaround. See [#16](https://github.com/ZeroTricks/lumo-tamer/issues/16).
 
 
 ## API clients
@@ -297,9 +297,9 @@ curl http://localhost:3003/v1/chat/completions \
   }'
 ```
 
-### Untested API clients
+### Other API clients
 
-Many clients are untested with lumo-tamer but should work if they only use the `/v1/responses` or `/v1/chat/completions` endpoints. As a rule of thumb: basic chatting will probably work, but the more a client relies on custom tools, the more the experience is degraded.  
+Many clients are untested with lumo-tamer but should work if they only use the `/v1/responses` or `/v1/chat/completions` endpoints. As a rule of thumb: basic chatting will most likely work, but the more a client relies on custom tools, the more the experience is degraded.  
 To test an API client, increase log levels on both the client and lumo-tamer: `server.log.level: debug` and check for errors.
 
 Please share your experiences with new API clients (both issues and successes) in [the project discussions](https://github.com/ZeroTricks/lumo-tamer/discussions/new?category=general)!
@@ -307,7 +307,7 @@ Please share your experiences with new API clients (both issues and successes) i
 
 ### Docker
 
-It is recommended to run lumo-tamer's server in a Docker container for a more service-like experience.
+It is recommended to run lumo-tamer's server in a Docker container.
 
 #### Install
 
@@ -323,7 +323,14 @@ chmod 600 secrets/lumo-vault-key
 
 #### Configure
 
-Create `config.yaml` with your settings. See [Configuration](#configuration) for all options.
+Create `config.yaml`:
+
+```yaml
+server:
+  apiKey: "your-secret-api-key-here"
+```
+
+> **Security:** Keep your API key private and make sure lumo-tamer is only accessible from your local network, not the internet. Disable docker port forwarding if API clients belong to the same docker network.
 
 #### Authenticate
 
@@ -368,6 +375,7 @@ See [docs/](docs/) for detailed documentation:
 - [Authentication](docs/authentication.md): Auth methods, setup and troubleshooting
 - [Conversations](docs/conversations.md): Conversation persistence and sync
 - [Custom Tools](docs/custom-tools.md): Tool support for API clients
+- [Home Assistant Guide](docs/howto-home-assistant.md): Use Lumo as your Voice Assistant
 - [Local Actions](docs/local-actions.md): CLI file operations and code execution
 - [Development](docs/development.md): Development setup and workflow
 - [Upstream Files](docs/upstream.md): Proton WebClients files, shims and path aliases
