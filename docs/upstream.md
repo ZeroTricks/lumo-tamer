@@ -95,6 +95,8 @@ Local implementations that replace upstream Lumo app files. The sync script warn
 | File | Purpose |
 |------|---------|
 | `config.ts` | APP_NAME, APP_VERSION, API_URL |
+| `lib/lumo-api-client/index.ts` | Minimal barrel (upstream imports too many modules) |
+| `mocks/handlers.ts` | Scenario generators (upstream uses MSW) |
 | `redux/slices/index.ts` | Core slices only (no UI slices) |
 | `redux/slices/lumoUserSettings.ts` | Stub for Node.js |
 | `redux/slices/attachmentLoadingState.ts` | Stub for saga compat |
@@ -113,14 +115,6 @@ Local implementations for `@proton/*` packages. The sync script warns when upstr
 | `crypto/lib/utils.ts` | Partial (utf8/Uint8Array utils only) |
 | `shared/lib/apps/helper.ts` | APP_NAME stub |
 | `shared/lib/fetch/headers.ts` | UID/Authorization headers |
-
-### Adapted Files (ADAPTED_SOURCE_FILES)
-
-Partially reused with different structure:
-
-| File | Purpose |
-|------|---------|
-| `mocks/handlers.ts` | SSE scenarios (no MSW dependency) |
 
 ## Path Aliases
 

@@ -102,6 +102,7 @@ LUMO_FILES=(
 LUMO_SHIMS=(
     config.ts
     lib/lumo-api-client/index.ts
+    mocks/handlers.ts
     crypto/index.ts
     redux/slices/index.ts
     redux/slices/lumoUserSettings.ts
@@ -110,11 +111,6 @@ LUMO_SHIMS=(
     redux/rootReducer.ts
     util/safeLogger.ts
     services/search/searchService.ts
-)
-
-# Adapted files: partial reuse with different structure
-ADAPTED_SOURCE_FILES=(
-    mocks/handlers.ts
 )
 
 # Proton-shims: files synced from packages/ (mirroring packages/ structure)
@@ -326,7 +322,6 @@ check_source_changes() {
 
 declare -a CHANGED_SOURCE_FILES=()
 check_source_changes "shim" "${LUMO_SHIMS[@]}"
-check_source_changes "adapted" "${ADAPTED_SOURCE_FILES[@]}"
 
 # Check proton-shims source files for upstream changes (from packages/)
 check_proton_shims_source_changes() {

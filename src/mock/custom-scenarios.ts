@@ -1,17 +1,14 @@
 /**
  * Custom mock scenarios for lumo-tamer testing
  *
- * Unlike the upstream-adapted scenarios in mock-api.ts (from Proton WebClients handlers.ts),
+ * Unlike the upstream scenarios in proton-upstream/mocks/handlers.ts,
  * these are lumo-tamer-specific scenarios for features we built on top.
  */
 
 import { Role, type Turn } from '../lumo-client/types.js';
 import type { ProtonApiOptions } from '../lumo-client/types.js';
-import type { ScenarioGenerator } from './mock-api.js';
+import { formatSSEMessage, delay, type ScenarioGenerator } from './mock-api.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
-
-const formatSSEMessage = (data: unknown) => `data: ${JSON.stringify(data)}\n\n`;
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Extract turns from the mock request payload (unencrypted only). */
 function getTurns(options: ProtonApiOptions): Turn[] {
