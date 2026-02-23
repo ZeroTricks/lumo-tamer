@@ -59,7 +59,7 @@ export async function initializeUpstreamStore(
 
     // 1. Import indexeddb polyfill (must happen before DbApi)
     // This is done at module level in the polyfill file
-    await import('../../proton-upstream/indexeddb-polyfill.js');
+    await import('../../proton-shims/indexeddb-polyfill.js');
 
     // 2. Create DbApi for IndexedDB operations
     const dbApi = new DbApi(uid);
