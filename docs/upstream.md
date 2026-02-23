@@ -77,7 +77,7 @@ Review changes with `git diff`, then `npm run build`.
 
 ## File Categories
 
-### Synced Files (UPSTREAM_FILES)
+### Synced Files (LUMO_FILES)
 
 Pulled unchanged and optionally patched. See `sync-upstream.sh` for full list.
 
@@ -88,7 +88,7 @@ Pulled unchanged and optionally patched. See `sync-upstream.sh` for full list.
 | `keys.ts` | `keys.patch` | Export for Node.js (no webpack DefinePlugin) |
 | `redux/selectors.ts` | `selectors.patch` | Remove react-redux, @proton/account |
 
-### Shims in proton-upstream/ (SHIM_SOURCE_FILES)
+### Shims in proton-upstream/ (LUMO_SHIMS)
 
 Local implementations that replace upstream Lumo app files. The sync script warns when upstream changes.
 
@@ -103,7 +103,7 @@ Local implementations that replace upstream Lumo app files. The sync script warn
 | `util/safeLogger.ts` | Console logging |
 | `services/search/searchService.ts` | Stub |
 
-### Shims in proton-shims/ (PROTON_SHIMS_SHIM_SOURCE_FILES)
+### Shims in proton-shims/ (PROTON_SHIMS)
 
 Local implementations for `@proton/*` packages. The sync script warns when upstream changes.
 

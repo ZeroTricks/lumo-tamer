@@ -36,7 +36,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Files to sync (paths match upstream structure exactly)
-UPSTREAM_FILES=(
+LUMO_FILES=(
     # Core API client
     lib/lumo-api-client/core/encryption.ts
     lib/lumo-api-client/core/encryptionParams.ts
@@ -99,7 +99,7 @@ UPSTREAM_FILES=(
 )
 
 # Shim files: local implementations, check upstream changes between syncs
-SHIM_SOURCE_FILES=(
+LUMO_SHIMS=(
     config.ts
     lib/lumo-api-client/index.ts
     crypto/index.ts
@@ -119,7 +119,7 @@ ADAPTED_SOURCE_FILES=(
 
 # Proton-shims: files synced from packages/ (mirroring packages/ structure)
 # These files work unchanged with our polyfills and tsconfig aliases
-PROTON_SHIMS_UPSTREAM_FILES=(
+PROTON_FILES=(
     crypto/lib/subtle/aesGcm.ts
     crypto/lib/subtle/hash.ts
     utils/mergeUint8Arrays.ts
@@ -127,7 +127,7 @@ PROTON_SHIMS_UPSTREAM_FILES=(
 
 # Proton-shims source files: local implementations, track upstream changes
 # These are partial reimplementations - we don't sync them but warn on changes
-PROTON_SHIMS_SHIM_SOURCE_FILES=(
+PROTON_SHIMS=(
     crypto/lib/proxy/proxy.ts
     crypto/lib/utils.ts
     shared/lib/apps/helper.ts
@@ -172,7 +172,7 @@ echo -e "\n${BLUE}Checking upstream files...${NC}"
 declare -a CHANGED_FILES=()
 declare -a FAILED_FILES=()
 
-for file_path in "${UPSTREAM_FILES[@]}"; do
+for file_path in "${LUMO_FILES[@]}"; do
     local_file="${UPSTREAM_DIR}/${file_path}"
     temp_file="${TEMP_DIR}/${file_path}"
     mkdir -p "$(dirname "$temp_file")"
@@ -195,7 +195,7 @@ for file_path in "${UPSTREAM_FILES[@]}"; do
 done
 
 if [ ${#CHANGED_FILES[@]} -eq 0 ] && [ ${#FAILED_FILES[@]} -eq 0 ]; then
-    echo -e "  ${GREEN}All ${#UPSTREAM_FILES[@]} files up to date${NC}"
+    echo -e "  ${GREEN}All ${#LUMO_FILES[@]} files up to date${NC}"
 fi
 
 # Download and compare proton-shims files (from packages/)
@@ -203,7 +203,7 @@ echo -e "\n${BLUE}Checking proton-shims files (packages/)...${NC}"
 declare -a CHANGED_SHIMS_FILES=()
 declare -a FAILED_SHIMS_FILES=()
 
-for file_path in "${PROTON_SHIMS_UPSTREAM_FILES[@]}"; do
+for file_path in "${PROTON_FILES[@]}"; do
     local_file="${PROTON_SHIMS_DIR}/${file_path}"
     temp_file="${TEMP_DIR}/packages_${file_path}"
     mkdir -p "$(dirname "$temp_file")"
@@ -226,7 +226,7 @@ for file_path in "${PROTON_SHIMS_UPSTREAM_FILES[@]}"; do
 done
 
 if [ ${#CHANGED_SHIMS_FILES[@]} -eq 0 ] && [ ${#FAILED_SHIMS_FILES[@]} -eq 0 ]; then
-    echo -e "  ${GREEN}All ${#PROTON_SHIMS_UPSTREAM_FILES[@]} files up to date${NC}"
+    echo -e "  ${GREEN}All ${#PROTON_FILES[@]} files up to date${NC}"
 fi
 
 # Check APP_VERSION specifically (important for x-pm-appversion header)
@@ -325,7 +325,7 @@ check_source_changes() {
 }
 
 declare -a CHANGED_SOURCE_FILES=()
-check_source_changes "shim" "${SHIM_SOURCE_FILES[@]}"
+check_source_changes "shim" "${LUMO_SHIMS[@]}"
 check_source_changes "adapted" "${ADAPTED_SOURCE_FILES[@]}"
 
 # Check proton-shims source files for upstream changes (from packages/)
@@ -343,7 +343,7 @@ check_proton_shims_source_changes() {
     fi
 
     local changes=0
-    for file_path in "${PROTON_SHIMS_SHIM_SOURCE_FILES[@]}"; do
+    for file_path in "${PROTON_SHIMS[@]}"; do
         local old_file="${TEMP_DIR}/_old_pkg_${file_path//\//_}"
         local new_file="${TEMP_DIR}/_new_pkg_${file_path//\//_}"
 
@@ -448,8 +448,8 @@ apply_patches() {
 
 
 sync_files() {
-    echo -e "\n${BLUE}Syncing ${#UPSTREAM_FILES[@]} upstream files...${NC}"
-    for file_path in "${UPSTREAM_FILES[@]}"; do
+    echo -e "\n${BLUE}Syncing ${#LUMO_FILES[@]} upstream files...${NC}"
+    for file_path in "${LUMO_FILES[@]}"; do
         local local_file="${UPSTREAM_DIR}/${file_path}"
         local temp_file="${TEMP_DIR}/${file_path}"
 
@@ -460,8 +460,8 @@ sync_files() {
     done
 
     # Sync proton-shims files from packages/
-    echo -e "\n${BLUE}Syncing ${#PROTON_SHIMS_UPSTREAM_FILES[@]} proton-shims files...${NC}"
-    for file_path in "${PROTON_SHIMS_UPSTREAM_FILES[@]}"; do
+    echo -e "\n${BLUE}Syncing ${#PROTON_FILES[@]} proton-shims files...${NC}"
+    for file_path in "${PROTON_FILES[@]}"; do
         local local_file="${PROTON_SHIMS_DIR}/${file_path}"
         local temp_file="${TEMP_DIR}/packages_${file_path}"
 
