@@ -5,8 +5,8 @@
  */
 
 import type { LocalId, RemoteId, ResourceType } from '../remote/types';
-import type { Attachment, AttachmentId, Conversation, Message, Space } from '../types/types';
-import { type ConversationId, type MessageId, Role, type SpaceId } from '../types/types';
+import type { Attachment, AttachmentId, Conversation, Message, Space } from '../types';
+import { type ConversationId, type MessageId, Role, type SpaceId } from '../types';
 import { listify, mapIds, setify } from '../util/collections';
 import { sortByDate } from '../util/date';
 import { objectFilterV } from '../util/objects';

@@ -1,0 +1,8 @@
+# lumo-tamer patches for upstream files
+# Applied automatically after sync
+#
+# Format: one patch per line, comments start with #
+# See DEP-3 for patch header format: https://dep-team.pages.debian.net/deps/dep3/
+
+keys.patch
+selectors.patch

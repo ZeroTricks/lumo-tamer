@@ -61,8 +61,8 @@ import type {
     Conversation as UpstreamConversation,
     Message as UpstreamMessage,
     ConversationStatus as UpstreamConversationStatus,
-} from '../../proton-upstream/types/types.js';
-import { ConversationStatus, Role } from '../../proton-upstream/types/types.js';
+} from '../../proton-upstream/types.js';
+import { ConversationStatus, Role } from '../../proton-upstream/types.js';
 
 /**
  * Convert lumo-tamer MessageRole to upstream Role

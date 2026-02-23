@@ -1,0 +1,121 @@
+Description: Adapt selectors for Node.js
+ Removes react-redux Selector type, @proton/account UserState,
+ personalization selectors, and uses .sort() instead of .toSorted().
+Origin: other
+---
+ redux/selectors.ts | 54 ++++++++++++++---------------------------------
+ 1 file changed, 16 insertions(+), 38 deletions(-)
+
+diff --git a/redux/selectors.ts b/redux/selectors.ts
+--- a/redux/selectors.ts
++++ b/redux/selectors.ts
+@@ -1,6 +1,8 @@
+-import type { Selector } from 'react-redux';
+-
+-import type { UserState } from '@proton/account';
++/**
++ * Node.js-adapted Redux selectors for lumo-tamer
++ *
++ * Removes dependency on react-redux Selector type and UI-related selectors.
++ */
+
+ import type { LocalId, RemoteId, ResourceType } from '../remote/types';
+ import type { Attachment, AttachmentId, Conversation, Message, Space } from '../types';
+@@ -8,12 +10,10 @@ import { type ConversationId, type MessageId, Role, type SpaceId } from '../type
+ import { listify, mapIds, setify } from '../util/collections';
+ import { sortByDate } from '../util/date';
+ import { objectFilterV } from '../util/objects';
+-import { getInitials } from '../util/username';
+ import { EMPTY_ATTACHMENT_MAP } from './slices/core/attachments';
+ import { EMPTY_CONVERSATION_MAP } from './slices/core/conversations';
+ import { EMPTY_MESSAGE_MAP } from './slices/core/messages';
+-import { isNonEmptyPersonalization } from './slices/personalization';
+-import type { LumoState, LumoState as RootState } from './store';
++import type { LumoState } from './store';
+
+-export type LumoSelector<T> = Selector<LumoState, T>;
++export type LumoSelector<T> = (state: LumoState) => T;
+
+ /*
+@@ -24,43 +24,36 @@ export type LumoSelector<T> = Selector<LumoState, T>;
+ export const makeOptional =
+     <TArg, TResult>(selector: (arg: TArg) => LumoSelector<TResult>, fallback: TResult) =>
+     (arg: TArg | null | undefined): LumoSelector<TResult> =>
+-    (state: RootState) =>
++    (state: LumoState) =>
+         arg !== null && arg !== undefined ? selector(arg)(state) : fallback;
+
+ /*
+- * Selectors from the shared Proton state.
+- */
+-
+-export const selectDisplayName = (state: UserState) => state.user.value?.DisplayName;
+-export const selectDisplayNameInitials = (state: UserState) => getInitials(selectDisplayName(state));
+-
+-/*
+  * Selectors specific to Lumo.
+  */
+
+-export const selectMessages = (state: RootState) => state.messages;
+-export const selectMasterKey = (state: RootState) => state.credentials.masterKey;
+-export const selectConversations = (state: RootState) => state.conversations;
+-export const selectAttachments = (state: RootState) => state.attachments;
++export const selectMessages = (state: LumoState) => state.messages;
++export const selectMasterKey = (state: LumoState) => state.credentials.masterKey;
++export const selectConversations = (state: LumoState) => state.conversations;
++export const selectAttachments = (state: LumoState) => state.attachments;
+
+ export const selectMessageById =
+     (id: MessageId): LumoSelector<Message | undefined> =>
+-    (state: RootState): Message | undefined =>
++    (state: LumoState): Message | undefined =>
+         state.messages[id];
+
+ export const selectConversationById =
+     (id: ConversationId): LumoSelector<Conversation | undefined> =>
+-    (state: RootState) =>
++    (state: LumoState) =>
+         state.conversations[id];
+
+ export const selectSpaceById =
+     (id: SpaceId): LumoSelector<Space | undefined> =>
+-    (state: RootState) =>
++    (state: LumoState) =>
+         state.spaces[id];
+
+ export const selectAttachmentById =
+     (id: SpaceId): LumoSelector<Attachment | undefined> =>
+-    (state: RootState) =>
++    (state: LumoState) =>
+         state.attachments[id];
+
+ export const selectAttachmentByIdOptional = makeOptional(selectAttachmentById, undefined);
+@@ -103,7 +96,8 @@ export const selectSpaceByConversationId =
+ export const selectProvisionalAttachments = (state: LumoState) =>
+     listify(state.attachments)
+         .filter((a: Attachment) => !a.spaceId)
+-        .toSorted(sortByDate('asc', 'uploadedAt'));
++        .slice()
++        .sort(sortByDate('asc', 'uploadedAt'));
+
+ export const selectLocalIdFromRemote =
+     (type: ResourceType, remoteId: RemoteId) =>
+@@ -114,18 +108,3 @@ export const selectRemoteIdFromLocal =
+     (type: ResourceType, localId: LocalId) =>
+     (state: LumoState): RemoteId | undefined =>
+         state.idmap.local2remote[type][localId];
+-
+-export const selectPersonalizationSettings = (state: LumoState) => state.personalization;
+-export const selectHasModifiedPersonalization = (state: LumoState) =>
+-    isNonEmptyPersonalization(selectPersonalizationSettings(state));
+-
+-export const selectContextFilters = (state: any) => state.contextFilters.filters;
+-
+-export const selectContextFiltersForMessage = (messageId: string) => (state: any) => {
+-    return state.contextFilters.filters.find((filter: any) => filter.messageId === messageId);
+-};
+-
+-export const selectIsFileExcluded = (messageId: string, filename: string) => (state: any) => {
+-    const filter = state.contextFilters.filters.find((filter: any) => filter.messageId === messageId);
+-    return filter ? filter.excludedFiles.includes(filename) : false;
+-};

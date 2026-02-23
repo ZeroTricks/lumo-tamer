@@ -32,78 +32,82 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# File mappings: local_path -> upstream_path (relative to applications/lumo/src/app/)
-declare -A UPSTREAM_FILES=(
+# Files to sync (paths match upstream structure exactly)
+UPSTREAM_FILES=(
     # Core API client
-    ["lib/lumo-api-client/core/encryption.ts"]="lib/lumo-api-client/core/encryption.ts"
-    ["lib/lumo-api-client/core/streaming.ts"]="lib/lumo-api-client/core/streaming.ts"
-    ["lib/lumo-api-client/core/types.ts"]="lib/lumo-api-client/core/types.ts"
-    ["keys.ts"]="keys.ts"
-    ["crypto/types.ts"]="crypto/types.ts"
+    lib/lumo-api-client/core/encryption.ts
+    lib/lumo-api-client/core/streaming.ts
+    lib/lumo-api-client/core/types.ts
+    keys.ts
+    crypto/types.ts
 
     # Remote API
-    ["remote/api.ts"]="remote/api.ts"
-    ["remote/types.ts"]="remote/types.ts"
-    ["remote/conversion.ts"]="remote/conversion.ts"
-    ["remote/scheduler.ts"]="remote/scheduler.ts"
-    ["remote/util.ts"]="remote/util.ts"
+    remote/api.ts
+    remote/types.ts
+    remote/conversion.ts
+    remote/scheduler.ts
+    remote/util.ts
 
     # Utilities
-    ["util/collections.ts"]="util/collections.ts"
-    ["util/date.ts"]="util/date.ts"
-    ["util/objects.ts"]="util/objects.ts"
-    ["util/sorting.ts"]="util/sorting.ts"
-    ["util/nullable.ts"]="util/nullable.ts"
+    util/collections.ts
+    util/date.ts
+    util/objects.ts
+    util/sorting.ts
+    util/nullable.ts
+    util/base64.ts
+    util/safeLogger.ts
 
     # Types
-    ["types/types.ts"]="types.ts"
-    ["types/types-api.ts"]="types-api.ts"
+    types.ts
+    types-api.ts
 
     # Serialization
-    ["serialization.ts"]="serialization.ts"
-    ["messageHelpers.ts"]="messageHelpers.ts"
+    serialization.ts
+    messageHelpers.ts
 
     # IndexedDB
-    ["indexedDb/db.ts"]="indexedDb/db.ts"
-    ["indexedDb/util.ts"]="indexedDb/util.ts"
-    ["helpers/indexedDBVersionHandler.ts"]="helpers/indexedDBVersionHandler.ts"
+    indexedDb/db.ts
+    indexedDb/util.ts
+    helpers/indexedDBVersionHandler.ts
 
-    # Redux slices (core)
-    ["redux/slices/core/spaces.ts"]="redux/slices/core/spaces.ts"
-    ["redux/slices/core/conversations.ts"]="redux/slices/core/conversations.ts"
-    ["redux/slices/core/messages.ts"]="redux/slices/core/messages.ts"
-    ["redux/slices/core/attachments.ts"]="redux/slices/core/attachments.ts"
-    ["redux/slices/core/idmap.ts"]="redux/slices/core/idmap.ts"
-    ["redux/slices/core/credentials.ts"]="redux/slices/core/credentials.ts"
-    ["redux/slices/meta/initialization.ts"]="redux/slices/meta/initialization.ts"
+    # Redux slices
+    redux/slices/core/index.ts
+    redux/slices/core/spaces.ts
+    redux/slices/core/conversations.ts
+    redux/slices/core/messages.ts
+    redux/slices/core/attachments.ts
+    redux/slices/core/idmap.ts
+    redux/slices/core/credentials.ts
+    redux/slices/meta/initialization.ts
+    redux/slices/attachmentLoadingState.ts
+    redux/slices/lumoUserSettings.ts
 
-    # Redux sagas (excluded from TS build but tracked)
-    ["redux/sagas/index.ts"]="redux/sagas/index.ts"
-    ["redux/sagas/conversations.ts"]="redux/sagas/conversations.ts"
-    ["redux/sagas/messages.ts"]="redux/sagas/messages.ts"
-    ["redux/sagas/spaces.ts"]="redux/sagas/spaces.ts"
-    ["redux/sagas/idmap.ts"]="redux/sagas/idmap.ts"
-    ["redux/sagas/attachments.ts"]="redux/sagas/attachments.ts"
+    # Redux core (patched)
+    redux/rootReducer.ts
+    redux/store.ts
 
-    # Redux (adapted locally, track upstream for reference)
-    ["redux/selectors.ts"]="redux/selectors.ts"
+    # Redux sagas
+    redux/sagas/index.ts
+    redux/sagas/conversations.ts
+    redux/sagas/messages.ts
+    redux/sagas/spaces.ts
+    redux/sagas/idmap.ts
+    redux/sagas/attachments.ts
 
-    # Crypto
-    ["crypto/index.ts"]="crypto/index.ts"
+    # Redux (patched)
+    redux/selectors.ts
 
     # Services
-    ["services/attachmentDataCache.ts"]="services/attachmentDataCache.ts"
-    ["services/search/searchService.ts"]="services/search/searchService.ts"
-
-    # Utilities (additional)
-    ["util/base64.ts"]="util/base64.ts"
-
-    # Types (additional)
-    ["types/redux/slices/core/attachments.ts"]="types/redux/slices/core/attachments.ts"
-    ["types/redux/slices/core/conversations.ts"]="types/redux/slices/core/conversations.ts"
-    ["types/redux/slices/core/messages.ts"]="types/redux/slices/core/messages.ts"
-    ["types/redux/slices/core/spaces.ts"]="types/redux/slices/core/spaces.ts"
+    services/attachmentDataCache.ts
+    services/search/searchService.ts
 )
+
+# Local shim files (not in UPSTREAM_FILES, never overwritten):
+#   config.ts             - APP_NAME, APP_VERSION constants
+#   crypto/index.ts       - Crypto using @proton/* shims
+#   redux/sagas.ts        - ClientError, ConflictClientError
+#   redux/slices/index.ts - Removes UI slices (ghostChat, contextFilters, etc.)
+#   indexeddb-polyfill.ts - Node.js IndexedDB polyfill
 
 echo -e "${BLUE}=== Proton WebClients Upstream Sync ===${NC}\n"
 
@@ -136,15 +140,14 @@ download_file() {
 
 # Download all upstream files to temp
 echo -e "\n${BLUE}Downloading upstream files...${NC}"
-for local_path in "${!UPSTREAM_FILES[@]}"; do
-    upstream_path="${UPSTREAM_FILES[$local_path]}"
-    temp_file="${TEMP_DIR}/${local_path}"
+for file_path in "${UPSTREAM_FILES[@]}"; do
+    temp_file="${TEMP_DIR}/${file_path}"
     mkdir -p "$(dirname "$temp_file")"
 
-    if download_file "$upstream_path" "$temp_file"; then
-        echo -e "  ${GREEN}✓${NC} $local_path"
+    if download_file "$file_path" "$temp_file"; then
+        echo -e "  ${GREEN}✓${NC} $file_path"
     else
-        echo -e "  ${RED}✗${NC} $local_path (download failed)"
+        echo -e "  ${RED}✗${NC} $file_path (download failed)"
     fi
 done
 
@@ -153,9 +156,9 @@ echo -e "\n${BLUE}Comparing with local files...${NC}"
 declare -a CHANGED_FILES=()
 declare -a MISSING_FILES=()
 
-for local_path in "${!UPSTREAM_FILES[@]}"; do
-    local_file="${UPSTREAM_DIR}/${local_path}"
-    temp_file="${TEMP_DIR}/${local_path}"
+for file_path in "${UPSTREAM_FILES[@]}"; do
+    local_file="${UPSTREAM_DIR}/${file_path}"
+    temp_file="${TEMP_DIR}/${file_path}"
 
     if [ ! -f "$temp_file" ]; then
         continue
@@ -163,14 +166,14 @@ for local_path in "${!UPSTREAM_FILES[@]}"; do
 
     if [ -f "$local_file" ]; then
         if diff -q "$temp_file" "$local_file" >/dev/null 2>&1; then
-            echo -e "  ${GREEN}=${NC} $local_path (up to date)"
+            echo -e "  ${GREEN}=${NC} $file_path (up to date)"
         else
-            echo -e "  ${YELLOW}~${NC} $local_path (changes available)"
-            CHANGED_FILES+=("$local_path")
+            echo -e "  ${YELLOW}~${NC} $file_path (changes available)"
+            CHANGED_FILES+=("$file_path")
         fi
     else
-        echo -e "  ${RED}!${NC} $local_path (missing locally)"
-        MISSING_FILES+=("$local_path")
+        echo -e "  ${RED}!${NC} $file_path (missing locally)"
+        MISSING_FILES+=("$file_path")
     fi
 done
 
@@ -186,32 +189,150 @@ if curl -sfL -o "$UPSTREAM_CONFIG_TEMP" "${UPSTREAM_BASE_URL}/config.ts" 2>/dev/
     fi
 fi
 
+# Check shim source files for upstream changes
+# Shims replace upstream files with local implementations - warn if upstream changes
+echo -e "\n${BLUE}Checking shim source files...${NC}"
+SHIM_HASH_FILE="${UPSTREAM_DIR}/.shim-hashes"
+
+# Shim files and their upstream paths
+declare -A SHIM_SOURCES=(
+    ["config.ts"]="config.ts"
+    ["crypto/index.ts"]="crypto/index.ts"
+    ["redux/sagas.ts"]="redux/sagas.ts"
+    ["redux/slices/index.ts"]="redux/slices/index.ts"
+)
+
+for shim_path in "${!SHIM_SOURCES[@]}"; do
+    upstream_path="${SHIM_SOURCES[$shim_path]}"
+    temp_file="${TEMP_DIR}/_shim_${shim_path//\//_}"
+
+    if curl -sfL -o "$temp_file" "${UPSTREAM_BASE_URL}/${upstream_path}" 2>/dev/null; then
+        NEW_HASH=$(sha256sum "$temp_file" | cut -d' ' -f1)
+        OLD_HASH=$(grep "^${shim_path} " "$SHIM_HASH_FILE" 2>/dev/null | cut -d' ' -f2)
+
+        if [ -z "$OLD_HASH" ]; then
+            echo -e "  ${YELLOW}!${NC} $shim_path (no stored hash)"
+            echo "$shim_path $NEW_HASH" >> "$SHIM_HASH_FILE"
+        elif [ "$NEW_HASH" != "$OLD_HASH" ]; then
+            echo -e "  ${YELLOW}⚠${NC} $shim_path changed upstream - review shim"
+        else
+            echo -e "  ${GREEN}=${NC} $shim_path (no changes)"
+        fi
+    else
+        echo -e "  ${RED}✗${NC} $shim_path (download failed)"
+    fi
+done
+
 # Check adapted (not 1:1) upstream files for changes
-# These are files we adapted into our own code; warn if the upstream source changed.
 echo -e "\n${BLUE}Checking adapted upstream sources...${NC}"
+ADAPTED_HASH_FILE="${UPSTREAM_DIR}/.adapted-hashes"
 ADAPTED_MOCK_URL="${UPSTREAM_BASE_URL}/mocks/handlers.ts"
 ADAPTED_MOCK_TEMP="${TEMP_DIR}/_adapted_handlers.ts"
 if curl -sfL -o "$ADAPTED_MOCK_TEMP" "$ADAPTED_MOCK_URL" 2>/dev/null; then
-    # Compare against a stored hash to detect changes
-    ADAPTED_HASH_FILE="${UPSTREAM_DIR}/.adapted-hashes"
     NEW_HASH=$(sha256sum "$ADAPTED_MOCK_TEMP" | cut -d' ' -f1)
     OLD_HASH=$(grep "^mocks/handlers.ts " "$ADAPTED_HASH_FILE" 2>/dev/null | cut -d' ' -f2)
 
     if [ -z "$OLD_HASH" ]; then
-        echo -e "  ${YELLOW}!${NC} mocks/handlers.ts (no stored hash - run sync to initialize)"
+        echo -e "  ${YELLOW}!${NC} mocks/handlers.ts (no stored hash)"
         echo "mocks/handlers.ts $NEW_HASH" >> "$ADAPTED_HASH_FILE"
     elif [ "$NEW_HASH" != "$OLD_HASH" ]; then
         echo -e "  ${YELLOW}⚠${NC} mocks/handlers.ts changed upstream"
         echo -e "    Review changes and update src/mock/mock-api.ts if needed."
-        if [ -n "${DIFF_TOOL:-}" ]; then
-            echo -e "    Run: curl -sL '$ADAPTED_MOCK_URL' | ${DIFF_TOOL} - src/mock/mock-api.ts"
-        fi
     else
         echo -e "  ${GREEN}=${NC} mocks/handlers.ts (no changes)"
     fi
 else
     echo -e "  ${RED}✗${NC} mocks/handlers.ts (download failed)"
 fi
+
+# Apply patches from patches/series
+apply_patches() {
+    local patches_dir="${UPSTREAM_DIR}/patches"
+    local series_file="${patches_dir}/series"
+
+    if [ ! -f "$series_file" ]; then
+        echo -e "  ${YELLOW}!${NC} No patches/series file found"
+        return 0
+    fi
+
+    echo -e "\n${BLUE}Applying patches...${NC}"
+    local applied=0
+    local failed=0
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+        # Extract patch name (strip comments and whitespace)
+        local patch_name
+        patch_name=$(echo "$line" | sed 's/#.*$//' | xargs)
+        [[ -z "$patch_name" ]] && continue
+
+        local patch_file="${patches_dir}/${patch_name}"
+        if [ ! -f "$patch_file" ]; then
+            echo -e "  ${RED}!${NC} $patch_name (file not found)"
+            ((failed++))
+            continue
+        fi
+
+        # Apply patch (--forward skips already applied, -s is silent)
+        if patch -d "$UPSTREAM_DIR" -p1 --forward -s < "$patch_file" 2>/dev/null; then
+            echo -e "  ${GREEN}+${NC} $patch_name"
+            ((applied++))
+        elif patch -d "$UPSTREAM_DIR" -p1 --forward -s --dry-run < "$patch_file" 2>/dev/null; then
+            echo -e "  ${GREEN}=${NC} $patch_name (already applied)"
+        else
+            echo -e "  ${RED}!${NC} $patch_name (failed)"
+            ((failed++))
+        fi
+    done < "$series_file"
+
+    if [ $applied -gt 0 ] || [ $failed -gt 0 ]; then
+        echo -e "  Applied: $applied, Failed: $failed"
+    fi
+}
+
+# Show patch status
+show_patches() {
+    local patches_dir="${UPSTREAM_DIR}/patches"
+    local series_file="${patches_dir}/series"
+
+    if [ ! -f "$series_file" ]; then
+        echo -e "\n${YELLOW}No patches/series file found${NC}"
+        return
+    fi
+
+    echo -e "\n${BLUE}=== Patches ===${NC}"
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip empty lines
+        [[ -z "$line" ]] && continue
+
+        # Handle comments
+        if [[ "$line" =~ ^[[:space:]]*# ]]; then
+            echo -e "  ${YELLOW}#${NC} ${line#*#}"
+            continue
+        fi
+
+        local patch_name
+        patch_name=$(echo "$line" | sed 's/#.*$//' | xargs)
+        [[ -z "$patch_name" ]] && continue
+
+        local patch_file="${patches_dir}/${patch_name}"
+        if [ -f "$patch_file" ]; then
+            # Show DEP-3 Description if present
+            local desc
+            desc=$(grep -m1 "^Description:" "$patch_file" 2>/dev/null | sed 's/^Description:[[:space:]]*//')
+            if [ -n "$desc" ]; then
+                echo -e "  ${GREEN}✓${NC} $patch_name"
+                echo -e "      ${desc}"
+            else
+                echo -e "  ${GREEN}✓${NC} $patch_name"
+            fi
+        else
+            echo -e "  ${RED}!${NC} $patch_name (missing)"
+        fi
+    done < "$series_file"
+}
 
 # Interactive menu
 show_menu() {
@@ -221,6 +342,7 @@ show_menu() {
     echo "  3) Sync specific file"
     echo "  4) Show recent upstream commits"
     echo "  5) Test build"
+    echo "  6) Show patches"
     echo "  q) Quit"
     echo ""
 }
@@ -247,14 +369,14 @@ show_diffs() {
 
 sync_all_files() {
     echo -e "\n${BLUE}Syncing all upstream files...${NC}"
-    for local_path in "${!UPSTREAM_FILES[@]}"; do
-        local_file="${UPSTREAM_DIR}/${local_path}"
-        temp_file="${TEMP_DIR}/${local_path}"
+    for file_path in "${UPSTREAM_FILES[@]}"; do
+        local_file="${UPSTREAM_DIR}/${file_path}"
+        temp_file="${TEMP_DIR}/${file_path}"
 
         if [ -f "$temp_file" ]; then
             mkdir -p "$(dirname "$local_file")"
             cp "$temp_file" "$local_file"
-            echo -e "  ${GREEN}✓${NC} $local_path"
+            echo -e "  ${GREEN}✓${NC} $file_path"
         fi
     done
 
@@ -265,12 +387,26 @@ sync_all_files() {
         echo -e "  ${GREEN}✓${NC} Updated docs/upstream.md"
     fi
 
+    # Update shim source hashes
+    SHIM_HASH_FILE="${UPSTREAM_DIR}/.shim-hashes"
+    for shim_path in config.ts crypto/index.ts redux/sagas.ts redux/slices/index.ts; do
+        temp_file="${TEMP_DIR}/_shim_${shim_path//\//_}"
+        if [ -f "$temp_file" ]; then
+            NEW_HASH=$(sha256sum "$temp_file" | cut -d' ' -f1)
+            if grep -q "^${shim_path} " "$SHIM_HASH_FILE" 2>/dev/null; then
+                sed -i "s|^${shim_path} .*|${shim_path} $NEW_HASH|" "$SHIM_HASH_FILE"
+            else
+                echo "$shim_path $NEW_HASH" >> "$SHIM_HASH_FILE"
+            fi
+        fi
+    done
+    echo -e "  ${GREEN}✓${NC} Updated shim source hashes"
+
     # Update adapted file hashes
     ADAPTED_HASH_FILE="${UPSTREAM_DIR}/.adapted-hashes"
     ADAPTED_MOCK_TEMP="${TEMP_DIR}/_adapted_handlers.ts"
     if [ -f "$ADAPTED_MOCK_TEMP" ]; then
         NEW_HASH=$(sha256sum "$ADAPTED_MOCK_TEMP" | cut -d' ' -f1)
-        # Replace or add the hash line
         if grep -q "^mocks/handlers.ts " "$ADAPTED_HASH_FILE" 2>/dev/null; then
             sed -i "s|^mocks/handlers.ts .*|mocks/handlers.ts $NEW_HASH|" "$ADAPTED_HASH_FILE"
         else
@@ -279,13 +415,16 @@ sync_all_files() {
         echo -e "  ${GREEN}✓${NC} Updated adapted file hashes"
     fi
 
+    # Apply patches after syncing pristine files
+    apply_patches
+
     echo -e "\n${GREEN}Sync complete!${NC}"
     echo -e "Run ${YELLOW}npm run build${NC} to verify."
 }
 
 sync_specific_file() {
     echo -e "\nSelect file to sync:"
-    local all_files=("${!UPSTREAM_FILES[@]}")
+    local all_files=("${UPSTREAM_FILES[@]}")
     select local_path in "${all_files[@]}" "Cancel"; do
         if [ "$local_path" = "Cancel" ]; then
             break
@@ -335,6 +474,7 @@ while true; do
         3) sync_specific_file ;;
         4) show_commits ;;
         5) test_build ;;
+        6) show_patches ;;
         q|Q) echo "Bye!"; exit 0 ;;
         *) echo -e "${RED}Invalid choice${NC}" ;;
     esac
