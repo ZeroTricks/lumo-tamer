@@ -122,6 +122,7 @@ ADAPTED_SOURCE_FILES=(
 PROTON_SHIMS_UPSTREAM_FILES=(
     crypto/lib/subtle/aesGcm.ts
     crypto/lib/subtle/hash.ts
+    utils/mergeUint8Arrays.ts
 )
 
 # Proton-shims source files: local implementations, track upstream changes
