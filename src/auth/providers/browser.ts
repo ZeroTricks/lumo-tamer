@@ -7,7 +7,7 @@
 
 import { logger } from '../../app/logger.js';
 import { authConfig, getConversationsConfig } from '../../app/config.js';
-import { APP_VERSION_HEADER } from '../../proton-upstream/config.js';
+import { APP_VERSION_HEADER } from '@lumo/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { resolveProjectPath } from '../../app/paths.js';
 import { decryptPersistedSession } from '../session-keys.js';

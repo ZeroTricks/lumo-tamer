@@ -9,7 +9,7 @@
 set -e
 
 # Verify we're in project root
-if [ ! -f "package.json" ] || [ ! -d "src/proton-upstream" ]; then
+if [ ! -f "package.json" ] || [ ! -d "packages/lumo" ]; then
     echo "Error: Must be run from project root via 'npm run sync-upstream'"
     exit 1
 fi
@@ -17,8 +17,9 @@ fi
 # Configuration
 UPSTREAM_REPO="ProtonMail/WebClients"
 UPSTREAM_BRANCH="main"
-UPSTREAM_DIR="src/proton-upstream"
-PROTON_SHIMS_DIR="src/proton-shims"
+UPSTREAM_DIR="packages/lumo/src"
+PROTON_PACKAGES_DIR="packages/proton/src"
+PATCHES_DIR="packages/lumo/patches"
 SCRIPTS_DIR="scripts/upstream"
 UPSTREAM_BASE_URL="https://raw.githubusercontent.com/${UPSTREAM_REPO}/${UPSTREAM_BRANCH}/applications/lumo/src/app"
 PACKAGES_BASE_URL="https://raw.githubusercontent.com/${UPSTREAM_REPO}/${UPSTREAM_BRANCH}/packages"
@@ -113,7 +114,7 @@ LUMO_SHIMS=(
     services/search/searchService.ts
 )
 
-# Proton-shims: files synced from packages/ (mirroring packages/ structure)
+# Proton-packages: files synced from packages/ (mirroring packages/ structure)
 # These files work unchanged with our polyfills and tsconfig aliases
 PROTON_FILES=(
     crypto/lib/subtle/aesGcm.ts
@@ -121,7 +122,7 @@ PROTON_FILES=(
     utils/mergeUint8Arrays.ts
 )
 
-# Proton-shims source files: local implementations, track upstream changes
+# Proton-packages shim files: local implementations, track upstream changes
 # These are partial reimplementations - we don't sync them but warn on changes
 PROTON_SHIMS=(
     crypto/lib/proxy/proxy.ts
@@ -195,12 +196,12 @@ if [ ${#CHANGED_FILES[@]} -eq 0 ] && [ ${#FAILED_FILES[@]} -eq 0 ]; then
 fi
 
 # Download and compare proton-shims files (from packages/)
-echo -e "\n${BLUE}Checking proton-shims files (packages/)...${NC}"
+echo -e "\n${BLUE}Checking proton-packages files (packages/)...${NC}"
 declare -a CHANGED_SHIMS_FILES=()
 declare -a FAILED_SHIMS_FILES=()
 
 for file_path in "${PROTON_FILES[@]}"; do
-    local_file="${PROTON_SHIMS_DIR}/${file_path}"
+    local_file="${PROTON_PACKAGES_DIR}/${file_path}"
     temp_file="${TEMP_DIR}/packages_${file_path}"
     mkdir -p "$(dirname "$temp_file")"
 
@@ -233,7 +234,7 @@ if curl -sfL -o "$UPSTREAM_CONFIG_TEMP" "${UPSTREAM_BASE_URL}/config.ts" 2>/dev/
     LOCAL_VERSION=$(grep -oP "APP_VERSION\s*=\s*'\\K[^']+" "${UPSTREAM_DIR}/config.ts" 2>/dev/null || echo "")
     if [ -n "$UPSTREAM_VERSION" ] && [ "$UPSTREAM_VERSION" != "$LOCAL_VERSION" ]; then
         echo -e "\n${YELLOW}⚠ APP_VERSION changed upstream: ${LOCAL_VERSION} -> ${UPSTREAM_VERSION}${NC}"
-        echo -e "  Update src/proton-upstream/config.ts if needed."
+        echo -e "  Update packages/lumo/src/config.ts if needed."
     fi
 fi
 
@@ -325,7 +326,7 @@ check_source_changes "shim" "${LUMO_SHIMS[@]}"
 
 # Check proton-shims source files for upstream changes (from packages/)
 check_proton_shims_source_changes() {
-    echo -e "\n${BLUE}Checking proton-shims shim sources (packages/)...${NC}"
+    echo -e "\n${BLUE}Checking proton-packages shim sources (packages/)...${NC}"
 
     if [ -z "$PREV_COMMIT" ]; then
         echo -e "  ${YELLOW}!${NC} No previous commit in ${COMMIT_FILE}"
@@ -380,23 +381,21 @@ check_proton_shims_source_changes
 # Handler receives: patch_name patch_file
 for_each_patch() {
     local handler="$1"
-    local patches_dir="${SCRIPTS_DIR}/patches"
-    local series_file="${patches_dir}/series"
+    local series_file="${PATCHES_DIR}/series"
 
     while IFS= read -r line || [ -n "$line" ]; do
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
         local patch_name
         patch_name=$(echo "$line" | sed 's/#.*$//' | xargs)
         [[ -z "$patch_name" ]] && continue
-        "$handler" "$patch_name" "${patches_dir}/${patch_name}"
+        "$handler" "$patch_name" "${PATCHES_DIR}/${patch_name}"
     done < "$series_file"
 }
 
 # Apply patches from patches/series
 # Uses --merge to produce git-style conflict markers on failure
 apply_patches() {
-    local patches_dir="${SCRIPTS_DIR}/patches"
-    local series_file="${patches_dir}/series"
+    local series_file="${PATCHES_DIR}/series"
 
     if [ ! -f "$series_file" ]; then
         echo -e "  ${YELLOW}!${NC} No patches/series file found"
@@ -455,9 +454,9 @@ sync_files() {
     done
 
     # Sync proton-shims files from packages/
-    echo -e "\n${BLUE}Syncing ${#PROTON_FILES[@]} proton-shims files...${NC}"
+    echo -e "\n${BLUE}Syncing ${#PROTON_FILES[@]} proton-packages files...${NC}"
     for file_path in "${PROTON_FILES[@]}"; do
-        local local_file="${PROTON_SHIMS_DIR}/${file_path}"
+        local local_file="${PROTON_PACKAGES_DIR}/${file_path}"
         local temp_file="${TEMP_DIR}/packages_${file_path}"
 
         if [ -f "$temp_file" ]; then
@@ -491,9 +490,9 @@ fi
 
 echo -e "${YELLOW}Summary:${NC}"
 [ ${#CHANGED_FILES[@]} -gt 0 ] && echo -e "  ${#CHANGED_FILES[@]} upstream file(s) changed"
-[ ${#CHANGED_SHIMS_FILES[@]} -gt 0 ] && echo -e "  ${#CHANGED_SHIMS_FILES[@]} proton-shims file(s) changed"
+[ ${#CHANGED_SHIMS_FILES[@]} -gt 0 ] && echo -e "  ${#CHANGED_SHIMS_FILES[@]} proton-packages file(s) changed"
 [ ${#FAILED_FILES[@]} -gt 0 ] && echo -e "  ${#FAILED_FILES[@]} download failure(s)"
-[ ${#FAILED_SHIMS_FILES[@]} -gt 0 ] && echo -e "  ${#FAILED_SHIMS_FILES[@]} proton-shims download failure(s)"
+[ ${#FAILED_SHIMS_FILES[@]} -gt 0 ] && echo -e "  ${#FAILED_SHIMS_FILES[@]} proton-packages download failure(s)"
 [ ${#CHANGED_SOURCE_FILES[@]} -gt 0 ] && echo -e "  ${#CHANGED_SOURCE_FILES[@]} shim/adapted source(s) changed"
 
 if [ ${#FAILED_FILES[@]} -gt 0 ] || [ ${#FAILED_SHIMS_FILES[@]} -gt 0 ]; then

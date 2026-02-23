@@ -7,7 +7,7 @@
  * Browser auth uses a different cookie-based approach (see BrowserAuthProvider.refresh()).
  */
 
-import { APP_VERSION_HEADER } from '../proton-upstream/config.js';
+import { APP_VERSION_HEADER } from '@lumo/config.js';
 import { PROTON_URLS } from '../app/urls.js';
 import { logger } from '../app/logger.js';
 import type { StoredTokens } from './types.js';

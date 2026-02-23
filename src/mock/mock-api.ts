@@ -15,7 +15,7 @@ import {
     scenarios as upstreamScenarios,
     formatSSEMessage,
     delay,
-} from '../proton-upstream/mocks/handlers.js';
+} from '@lumo/mocks/handlers.js';
 
 // Import custom scenarios (lumo-tamer-specific)
 import { customScenarios } from './custom-scenarios.js';

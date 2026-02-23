@@ -3,17 +3,17 @@
  * Minimal implementation with U2L encryption support
  */
 
-import { decryptString } from '../proton-upstream/crypto/index.js';
+import { decryptString } from '@lumo/crypto/index.js';
 import {
     DEFAULT_LUMO_PUB_KEY,
     encryptTurns,
-} from '../proton-upstream/lib/lumo-api-client/core/encryption.js';
+} from '@lumo/lib/lumo-api-client/core/encryption.js';
 import {
     generateRequestId,
     generateRequestKey,
     RequestEncryptionParams,
-} from '../proton-upstream/lib/lumo-api-client/core/encryptionParams.js';
-import { StreamProcessor } from '../proton-upstream/lib/lumo-api-client/core/streaming.js';
+} from '@lumo/lib/lumo-api-client/core/encryptionParams.js';
+import { StreamProcessor } from '@lumo/lib/lumo-api-client/core/streaming.js';
 import { logger } from '../app/logger.js';
 import {
     Role,
@@ -32,7 +32,7 @@ import {
 import { getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
 import { injectInstructionsIntoTurns } from './instructions.js';
 import { NativeToolCallProcessor } from '../api/tools/native-tool-call-processor.js';
-import { postProcessTitle } from '../proton-upstream/lib/lumo-api-client/utils.js';
+import { postProcessTitle } from '@lumo/lib/lumo-api-client/utils.js';
 
 // Re-export types for external consumers
 export type { LumoClientOptions, ChatResult };

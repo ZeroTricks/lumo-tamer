@@ -11,10 +11,10 @@ export type {
     RequestId,
     ToolName,
     Turn,
-} from '../proton-upstream/lib/lumo-api-client/core/types.js';
+} from '@lumo/lib/lumo-api-client/core/types.js';
 
 // Re-export Role enum for use in client code
-export { Role } from '../proton-upstream/lib/lumo-api-client/core/types.js';
+export { Role } from '@lumo/lib/lumo-api-client/core/types.js';
 
 // Local-only types
 

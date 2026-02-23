@@ -18,10 +18,10 @@ import { logger } from '../../app/logger.js';
 import type { ProtonApi } from '../../lumo-client/types.js';
 import type { ConversationStoreConfig, SpaceId } from '../types.js';
 
-import { setupStore, type LumoStore, type LumoSagaContext } from '../../proton-upstream/redux/store.js';
-import { DbApi } from '../../proton-upstream/indexedDb/db.js';
-import { LumoApi } from '../../proton-upstream/remote/api.js';
-import { addMasterKey } from '../../proton-upstream/redux/slices/core/credentials.js';
+import { setupStore, type LumoStore, type LumoSagaContext } from '@lumo/redux/store.js';
+import { DbApi } from '@lumo/indexedDb/db.js';
+import { LumoApi } from '@lumo/remote/api.js';
+import { addMasterKey } from '@lumo/redux/slices/core/credentials.js';
 
 import { installFetchAdapter } from '../../shims/fetch-adapter.js';
 import { UpstreamConversationStore } from './adapter.js';
@@ -89,7 +89,7 @@ export async function initializeUpstreamStore(
     logger.debug('Redux store created');
 
     // 6. Start root saga (essential for sync functionality)
-    const { rootSaga } = await import('../../proton-upstream/redux/sagas/index.js');
+    const { rootSaga } = await import('@lumo/redux/sagas/index.js');
     sagaMiddleware.run(rootSaga);
     logger.debug('Root saga started');
 

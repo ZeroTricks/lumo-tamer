@@ -4,6 +4,9 @@
   "description": "Use Proton's Lumo AI through OpenAI-compatible API and CLI",
   "main": "dist/tamer.js",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "bin": {
     "tamer": "./dist/tamer.js"
   },

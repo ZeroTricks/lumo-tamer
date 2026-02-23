@@ -8,7 +8,7 @@
  *   await lumoApi.listSpaces();
  */
 
-import { LumoApi } from '../../proton-upstream/remote/api.js';
+import { LumoApi } from '@lumo/remote/api.js';
 import { installFetchAdapter } from '../../shims/fetch-adapter.js';
 import type { ProtonApi } from '../../lumo-client/types.js';
 import { logger } from '../../app/logger.js';
@@ -61,12 +61,12 @@ export function cleanupLumoApi(): void {
 }
 
 // Re-export useful types and values from upstream
-export { LumoApi } from '../../proton-upstream/remote/api.js';
-export type { Priority } from '../../proton-upstream/remote/scheduler.js';
+export { LumoApi } from '@lumo/remote/api.js';
+export type { Priority } from '@lumo/remote/scheduler.js';
 export {
     RoleInt,
     StatusInt,
-} from '../../proton-upstream/remote/types.js';
+} from '@lumo/remote/types.js';
 export type {
     ListSpacesRemote,
     GetSpaceRemote,
@@ -82,4 +82,4 @@ export type {
     SpaceToApi,
     ConversationToApi,
     MessageToApi,
-} from '../../proton-upstream/remote/types.js';
+} from '@lumo/remote/types.js';

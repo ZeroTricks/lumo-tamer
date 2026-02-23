@@ -16,20 +16,20 @@ import type { Store } from '@reduxjs/toolkit';
 import { logger } from '../../app/logger.js';
 import type { SpaceId, RemoteId } from '../types.js';
 
-import type { LumoState, LumoStore } from '../../proton-upstream/redux/store.js';
-import { DbApi } from '../../proton-upstream/indexedDb/db.js';
-import type { ResourceType } from '../../proton-upstream/remote/types.js';
+import type { LumoState, LumoStore } from '@lumo/redux/store.js';
+import { DbApi } from '@lumo/indexedDb/db.js';
+import type { ResourceType } from '@lumo/remote/types.js';
 import {
     pushSpaceRequest,
     pullSpacesRequest,
-} from '../../proton-upstream/redux/slices/core/spaces.js';
+} from '@lumo/redux/slices/core/spaces.js';
 import {
     pushConversationRequest,
     pullConversationRequest,
-} from '../../proton-upstream/redux/slices/core/conversations.js';
+} from '@lumo/redux/slices/core/conversations.js';
 import {
     pushMessageRequest,
-} from '../../proton-upstream/redux/slices/core/messages.js';
+} from '@lumo/redux/slices/core/messages.js';
 
 export interface UpstreamSyncServiceConfig {
     store: LumoStore;

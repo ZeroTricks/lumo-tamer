@@ -40,29 +40,29 @@ import type {
 import { getMetrics } from '../../app/metrics.js';
 
 // Upstream imports
-import type { LumoState, LumoStore, LumoSagaContext } from '../../proton-upstream/redux/store.js';
+import type { LumoState, LumoStore, LumoSagaContext } from '@lumo/redux/store.js';
 import {
     selectConversationById,
     selectMessagesByConversationId,
-} from '../../proton-upstream/redux/selectors.js';
+} from '@lumo/redux/selectors.js';
 import {
     addConversation,
     changeConversationTitle,
     updateConversationStatus,
     deleteConversation as deleteConversationAction,
-} from '../../proton-upstream/redux/slices/core/conversations.js';
+} from '@lumo/redux/slices/core/conversations.js';
 import {
     addMessage as addUpstreamMessage,
     appendChunk,
     finishMessage,
     pushMessageRequest,
-} from '../../proton-upstream/redux/slices/core/messages.js';
+} from '@lumo/redux/slices/core/messages.js';
 import type {
     Conversation as UpstreamConversation,
     Message as UpstreamMessage,
     ConversationStatus as UpstreamConversationStatus,
-} from '../../proton-upstream/types.js';
-import { ConversationStatus, Role } from '../../proton-upstream/types.js';
+} from '@lumo/types.js';
+import { ConversationStatus, Role } from '@lumo/types.js';
 
 /**
  * Convert lumo-tamer MessageRole to upstream Role
