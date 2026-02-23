@@ -125,7 +125,7 @@ export async function decryptUint8Array(
     encryptedBase64: EncryptedData,
     { encryptKey }: AesGcmCryptoKey,
     ad: AdString
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
     let encryptedBytes: Uint8Array;
     if (typeof encryptedBase64 === 'string') {
         encryptedBytes = new Uint8Array(Buffer.from(encryptedBase64, 'base64'));

@@ -7,24 +7,27 @@ import { decryptString } from '../proton-upstream/crypto/index.js';
 import {
     DEFAULT_LUMO_PUB_KEY,
     encryptTurns,
+} from '../proton-upstream/lib/lumo-api-client/core/encryption.js';
+import {
     generateRequestId,
     generateRequestKey,
-    prepareEncryptedRequestKey,
-} from '../proton-upstream/lib/lumo-api-client/core/encryption.js';
+    RequestEncryptionParams,
+} from '../proton-upstream/lib/lumo-api-client/core/encryptionParams.js';
 import { StreamProcessor } from '../proton-upstream/lib/lumo-api-client/core/streaming.js';
 import { logger } from '../app/logger.js';
-import type {
-    AesGcmCryptoKey,
-    ProtonApi,
-    GenerationToFrontendMessage,
-    LumoApiGenerationRequest,
-    RequestId,
-    ToolName,
-    Turn,
-    ParsedToolCall,
-    AssistantMessageData,
-    LumoClientOptions,
-    ChatResult,
+import {
+    Role,
+    type AesGcmCryptoKey,
+    type ProtonApi,
+    type GenerationResponseMessage,
+    type LumoApiGenerationRequest,
+    type RequestId,
+    type ToolName,
+    type Turn,
+    type ParsedToolCall,
+    type AssistantMessageData,
+    type LumoClientOptions,
+    type ChatResult,
 } from './types.js';
 import { getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
 import { injectInstructionsIntoTurns } from './instructions.js';
@@ -76,7 +79,7 @@ export class LumoClient {
         options: LumoClientOptions = {}
     ): Promise<ChatResult> {
 
-        const turns: Turn[] = [{ role: 'user', content: message }];
+        const turns: Turn[] = [{ role: Role.User, content: message }];
         return this.chatWithHistory(turns, onChunk, options);
 
     }
@@ -108,7 +111,7 @@ export class LumoClient {
         let suppressChunks = false;
         let abortEarly = false;
 
-        const processMessage = async (msg: GenerationToFrontendMessage) => {
+        const processMessage = async (msg: GenerationResponseMessage) => {
             if (msg.type === 'token_data') {
                 let content = msg.content;
 
@@ -250,16 +253,16 @@ export class LumoClient {
             ? injectInstructionsIntoTurns(turns, instructions, injectInstructionsInto)
             : turns;
 
-        let requestKey: AesGcmCryptoKey | undefined;
-        let requestId: RequestId | undefined;
+        let encryptionParams: RequestEncryptionParams | undefined;
         let processedTurns: Turn[] = turnsWithInstructions;
         let requestKeyEncB64: string | undefined;
 
         if (enableEncryption) {
-            requestKey = await generateRequestKey();
-            requestId = generateRequestId();
-            requestKeyEncB64 = await prepareEncryptedRequestKey(requestKey, DEFAULT_LUMO_PUB_KEY);
-            processedTurns = await encryptTurns(turnsWithInstructions, requestKey, requestId);
+            const requestKey = await generateRequestKey();
+            const requestId = generateRequestId();
+            encryptionParams = new RequestEncryptionParams(requestKey, requestId);
+            requestKeyEncB64 = await encryptionParams.encryptRequestKey(DEFAULT_LUMO_PUB_KEY);
+            processedTurns = await encryptTurns(turnsWithInstructions, encryptionParams);
         }
 
         // Request title alongside message for new conversations
@@ -271,10 +274,10 @@ export class LumoClient {
             turns: processedTurns,
             options: { tools },
             targets,
-            ...(enableEncryption && requestKeyEncB64 && requestId
+            ...(enableEncryption && requestKeyEncB64 && encryptionParams
                 ? {
                     request_key: requestKeyEncB64,
-                    request_id: requestId,
+                    request_id: encryptionParams.requestId,
                 }
                 : {}),
         };
@@ -290,8 +293,8 @@ export class LumoClient {
 
         const result = await this.processStream(stream, onChunk, {
             enableEncryption,
-            requestKey,
-            requestId,
+            requestKey: encryptionParams?.requestKey,
+            requestId: encryptionParams?.requestId,
         }, isBounce);
 
         // Log response
@@ -312,8 +315,8 @@ export class LumoClient {
 
             const bounceTurns: Turn[] = [
                 ...turns,
-                { role: 'assistant', content: result.message.content },
-                { role: 'user', content: bounceInstruction },
+                { role: Role.Assistant, content: result.message.content },
+                { role: Role.User, content: bounceInstruction },
             ];
 
             return this.chatWithHistory(bounceTurns, onChunk, options, true);

@@ -17,6 +17,7 @@
     "baseUrl": "./src",
     "paths": {
       "@proton/crypto": ["./proton-shims/crypto.ts"],
+      "@proton/crypto/lib": ["./proton-shims/crypto.ts"],
       "@proton/crypto/lib/subtle/aesGcm": ["./proton-shims/aesGcm.ts"],
       "@proton/crypto/lib/subtle/hash": ["./proton-shims/hash.ts"],
       "@proton/crypto/lib/utils": ["./proton-shims/crypto-lib-utils.ts"],

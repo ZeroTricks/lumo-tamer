@@ -151,7 +151,7 @@ export async function decryptData(
     data: Uint8Array,
     additionalData?: Uint8Array,
     with16ByteIV = false
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
     const ivLength = with16ByteIV ? IV_LENGTH_BYTES_LEGACY : IV_LENGTH_BYTES;
     const iv = data.slice(0, ivLength);
     const ciphertext = data.slice(ivLength);

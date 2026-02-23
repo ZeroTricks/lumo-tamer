@@ -36,6 +36,7 @@ NC='\033[0m'
 UPSTREAM_FILES=(
     # Core API client
     lib/lumo-api-client/core/encryption.ts
+    lib/lumo-api-client/core/encryptionParams.ts
     lib/lumo-api-client/core/streaming.ts
     lib/lumo-api-client/core/types.ts
     keys.ts

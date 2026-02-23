@@ -3,7 +3,7 @@
  */
 
 import type { ChatMessage, ResponseInputItem, OpenAIToolCall } from './types.js';
-import type { Turn } from '../lumo-client/index.js';
+import { Role, type Turn } from '../lumo-client/index.js';
 import { addToolNameToFunctionOutput } from './tools/call-id.js';
 
 // ── Input normalization ───────────────────────────────────────────────
@@ -186,14 +186,14 @@ function convertChatMessagesToTurns(messages: ChatMessage[]): Turn[] {
         const content = norm.role === 'user'
           ? addToolNameToFunctionOutput(norm.content)
           : norm.content;
-        turns.push({ role: norm.role, content });
+        turns.push({ role: norm.role === 'user' ? Role.User : Role.Assistant, content });
       }
       continue;
     }
 
     // Regular user/assistant message
     turns.push({
-      role: msg.role as 'user' | 'assistant',
+      role: msg.role === 'user' ? Role.User : Role.Assistant,
       content: extractTextContent(msg.content),
     });
   }
@@ -226,7 +226,7 @@ export function convertResponseInputToTurns(
 
   // Simple string input
   if (typeof input === 'string') {
-    return [{ role: 'user', content: input }];
+    return [{ role: Role.User, content: input }];
   }
 
   // Array of messages -> ChatMessage[]

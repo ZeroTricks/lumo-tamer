@@ -577,7 +577,10 @@ export class UpstreamConversationStore {
      * Convert conversation to Lumo Turn[] format
      */
     toTurns(id: ConversationId): Turn[] {
-        return this.getMessages(id).map(({ role, content }) => ({ role, content }));
+        return this.getMessages(id).map(({ role, content }) => ({
+            role: toUpstreamRole(role),
+            content,
+        }));
     }
 
     /**

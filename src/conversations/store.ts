@@ -11,7 +11,7 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../app/logger.js';
 import { deterministicUUID } from '../app/id-generator.js';
-import type { Turn, AssistantMessageData } from '../lumo-client/types.js';
+import { Role, type Turn, type AssistantMessageData } from '../lumo-client/types.js';
 import {
     findNewMessages,
     hashMessage,
@@ -344,7 +344,17 @@ export class ConversationStore {
      * Convert conversation to Lumo Turn[] format for API call
      */
     toTurns(id: ConversationId): Turn[] {
-        return this.getMessages(id).map(({role, content}) => ({role, content}));
+        const roleMap: Record<string, Role> = {
+            user: Role.User,
+            assistant: Role.Assistant,
+            system: Role.System,
+            tool_call: Role.ToolCall,
+            tool_result: Role.ToolResult,
+        };
+        return this.getMessages(id).map(({role, content}) => ({
+            role: roleMap[role] ?? Role.User,
+            content,
+        }));
     }
 
     /**
