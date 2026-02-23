@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// Polyfill Uint8Array.fromBase64/toBase64 for upstream Proton code compatibility
+// TODO: move down
+import './proton-shims/uint8array-base64-polyfill.js';
+
 import arg from 'arg';
 import { initConfig, getLogConfig } from './app/config.js';
 import { initLogger, logger } from './app/logger.js';

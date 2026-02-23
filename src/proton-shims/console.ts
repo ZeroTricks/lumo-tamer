@@ -14,7 +14,7 @@ export function installConsoleShim(): void {
         const msg = args[0]?.toString() ?? '';
         // Verbose API logs from proton-upstream/remote/api.ts go to trace
         if (msg.startsWith('lumo api:') || msg.startsWith('listSpaces:') || msg.startsWith('getAsset:')) {
-            logger.trace({ args }, 'console.log');
+            logger.debug({ args }, 'console.log');
         } else {
             logger.debug({ args }, 'console.log');
         }

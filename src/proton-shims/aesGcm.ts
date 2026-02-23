@@ -64,6 +64,14 @@ export function generateKey(): Uint8ArrayWithBase64 {
 }
 
 /**
+ * Generate random key bytes and immediately import as CryptoKey for AES-GCM
+ */
+export async function generateAndImportKey(options: { extractable?: boolean } = {}): Promise<CryptoKey> {
+    const keyBytes = generateKey();
+    return importKey(keyBytes, options);
+}
+
+/**
  * Generate random key bytes for AES-KW wrapping key
  */
 export function generateWrappingKey(): Uint8ArrayWithBase64 {

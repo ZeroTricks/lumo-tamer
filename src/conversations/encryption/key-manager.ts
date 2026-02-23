@@ -106,6 +106,7 @@ export class KeyManager {
     private cachedUserKeys?: CachedUserKey[];
     private cachedMasterKeys?: CachedMasterKey[];
     private masterKey?: CryptoKey;
+    private masterKeyBytes?: Uint8Array;
     private spaceKeys = new Map<SpaceId, CryptoKey>();
     private initialized = false;
 
@@ -216,7 +217,10 @@ export class KeyManager {
                 decryptedKeys
             );
 
-            // 5. Import as AES-KW key (for unwrapping space keys)
+            // 5. Store raw bytes for potential upstream integration
+            this.masterKeyBytes = decryptedMasterKeyBytes;
+
+            // 6. Import as AES-KW key (for unwrapping space keys)
             this.masterKey = await importWrappingKey(decryptedMasterKeyBytes);
             this.initialized = true;
 
@@ -234,6 +238,18 @@ export class KeyManager {
      */
     isInitialized(): boolean {
         return this.initialized;
+    }
+
+    /**
+     * Get the raw master key bytes as base64
+     *
+     * Used for upstream storage integration which handles its own crypto.
+     */
+    getMasterKeyBase64(): string {
+        if (!this.masterKeyBytes) {
+            throw new Error('KeyManager not initialized');
+        }
+        return bytesToBase64(this.masterKeyBytes);
     }
 
     /**

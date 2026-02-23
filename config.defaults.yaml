@@ -63,15 +63,27 @@ log:
 
 # Shared Conversations Configuration (can be overridden in server/cli sections)
 # Note: In-memory conversation storage is always active regardless of sync settings
+# TODO: check for all conversation options:
+# - do they still work/make sense with upstream store?
+# - can they still be overwritten for cli/server? (ie. overwriting dbpath doesn't make sense if sync enabled, does it otherwise?)
 conversations:
   # Max conversations to keep in memory (LRU eviction)
   maxInMemory: 100
+
+  # Path for IndexedDB SQLite files (used when useUpstreamStorage is true)
+  databasePath: "sesions/"
 
   # WORKAROUND for clients without conversation_id support (e.g., Home Assistant).
   # Derives conversation ID from the `user` field in the request.
   # Home Assistant sends its internal conversation_id as user, making it unique per chat session.
   # WARNING: May incorrectly merge unrelated conversations with same "user" field. Ignored if `user` is absent.
   deriveIdFromUser: false
+
+  # Use upstream Proton storage (Redux + IndexedDB + Sagas)
+  # When true, uses the upstream WebClient storage layer for persistence.
+  # When false, uses the existing lumo-tamer storage implementation.
+  # This is experimental and requires additional setup.
+  useUpstreamStorage: false
 
   # Sync: persist conversations to Proton servers (requires browser auth)
   sync:

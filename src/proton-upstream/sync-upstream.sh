@@ -34,22 +34,75 @@ NC='\033[0m'
 
 # File mappings: local_path -> upstream_path (relative to applications/lumo/src/app/)
 declare -A UPSTREAM_FILES=(
+    # Core API client
     ["lib/lumo-api-client/core/encryption.ts"]="lib/lumo-api-client/core/encryption.ts"
     ["lib/lumo-api-client/core/streaming.ts"]="lib/lumo-api-client/core/streaming.ts"
     ["lib/lumo-api-client/core/types.ts"]="lib/lumo-api-client/core/types.ts"
     ["keys.ts"]="keys.ts"
     ["crypto/types.ts"]="crypto/types.ts"
 
+    # Remote API
     ["remote/api.ts"]="remote/api.ts"
     ["remote/types.ts"]="remote/types.ts"
     ["remote/conversion.ts"]="remote/conversion.ts"
     ["remote/scheduler.ts"]="remote/scheduler.ts"
     ["remote/util.ts"]="remote/util.ts"
 
+    # Utilities
     ["util/collections.ts"]="util/collections.ts"
     ["util/date.ts"]="util/date.ts"
     ["util/objects.ts"]="util/objects.ts"
     ["util/sorting.ts"]="util/sorting.ts"
+    ["util/nullable.ts"]="util/nullable.ts"
+
+    # Types
+    ["types/types.ts"]="types.ts"
+    ["types/types-api.ts"]="types-api.ts"
+
+    # Serialization
+    ["serialization.ts"]="serialization.ts"
+    ["messageHelpers.ts"]="messageHelpers.ts"
+
+    # IndexedDB
+    ["indexedDb/db.ts"]="indexedDb/db.ts"
+    ["indexedDb/util.ts"]="indexedDb/util.ts"
+    ["helpers/indexedDBVersionHandler.ts"]="helpers/indexedDBVersionHandler.ts"
+
+    # Redux slices (core)
+    ["redux/slices/core/spaces.ts"]="redux/slices/core/spaces.ts"
+    ["redux/slices/core/conversations.ts"]="redux/slices/core/conversations.ts"
+    ["redux/slices/core/messages.ts"]="redux/slices/core/messages.ts"
+    ["redux/slices/core/attachments.ts"]="redux/slices/core/attachments.ts"
+    ["redux/slices/core/idmap.ts"]="redux/slices/core/idmap.ts"
+    ["redux/slices/core/credentials.ts"]="redux/slices/core/credentials.ts"
+    ["redux/slices/meta/initialization.ts"]="redux/slices/meta/initialization.ts"
+
+    # Redux sagas (excluded from TS build but tracked)
+    ["redux/sagas/index.ts"]="redux/sagas/index.ts"
+    ["redux/sagas/conversations.ts"]="redux/sagas/conversations.ts"
+    ["redux/sagas/messages.ts"]="redux/sagas/messages.ts"
+    ["redux/sagas/spaces.ts"]="redux/sagas/spaces.ts"
+    ["redux/sagas/idmap.ts"]="redux/sagas/idmap.ts"
+    ["redux/sagas/attachments.ts"]="redux/sagas/attachments.ts"
+
+    # Redux (adapted locally, track upstream for reference)
+    ["redux/selectors.ts"]="redux/selectors.ts"
+
+    # Crypto
+    ["crypto/index.ts"]="crypto/index.ts"
+
+    # Services
+    ["services/attachmentDataCache.ts"]="services/attachmentDataCache.ts"
+    ["services/search/searchService.ts"]="services/search/searchService.ts"
+
+    # Utilities (additional)
+    ["util/base64.ts"]="util/base64.ts"
+
+    # Types (additional)
+    ["types/redux/slices/core/attachments.ts"]="types/redux/slices/core/attachments.ts"
+    ["types/redux/slices/core/conversations.ts"]="types/redux/slices/core/conversations.ts"
+    ["types/redux/slices/core/messages.ts"]="types/redux/slices/core/messages.ts"
+    ["types/redux/slices/core/spaces.ts"]="types/redux/slices/core/spaces.ts"
 )
 
 echo -e "${BLUE}=== Proton WebClients Upstream Sync ===${NC}\n"

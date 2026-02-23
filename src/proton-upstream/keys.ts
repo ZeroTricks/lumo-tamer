@@ -32,3 +32,7 @@ UD6UrJkroc6exHIMSR5Vlk4d4L8OeFUWWAEA3ugyE/b/pSQ4WO+fiTkHN2ZeKlyj
 dZMbxO6yWPA5uQk=
 =h/mc
 -----END PGP PUBLIC KEY BLOCK-----`;
+
+// In upstream, LUMO_GPG_PUB_KEY can be overridden via webpack DefinePlugin at build time.
+// For Node.js we just use the production key directly.
+export const LUMO_GPG_PUB_KEY = LUMO_GPG_PUB_KEY_PROD_2;

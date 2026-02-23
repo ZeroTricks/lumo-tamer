@@ -90,6 +90,9 @@ import { getKeyManager } from './encryption/index.js';
 import { getSyncService, getAutoSyncService } from './sync/index.js';
 import { getConversationStore } from './store.js';
 
+// Upstream storage imports (dynamic import to avoid loading when not needed)
+import type { UpstreamStoreResult } from './upstream/index.js';
+
 export interface InitializeSyncOptions {
     protonApi: ProtonApi;
     uid: string;
@@ -99,6 +102,8 @@ export interface InitializeSyncOptions {
 
 export interface InitializeSyncResult {
     initialized: boolean;
+    /** Upstream store result, only set when useUpstreamStorage is enabled */
+    upstreamStore?: UpstreamStoreResult;
 }
 
 /**
@@ -109,6 +114,9 @@ export interface InitializeSyncResult {
  * - Initializing KeyManager with encryption keys
  * - Setting up SyncService for conversation sync
  * - Configuring AutoSyncService if enabled
+ *
+ * When useUpstreamStorage is enabled, uses the upstream Redux + IndexedDB
+ * storage layer instead of the lumo-tamer implementation.
  */
 export async function initializeSync(
     options: InitializeSyncOptions
@@ -122,19 +130,35 @@ export async function initializeSync(
     }
 
     if (!authProvider.supportsPersistence()) {
-        logger.warn(
-            { method: authProvider.method },
-            'Conversation sync requires browser auth method'
-        );
+        if (conversationsConfig.useUpstreamStorage) {
+            logger.warn(
+                { method: authProvider.method },
+                'Upstream storage requires browser auth (for master key decryption). ' +
+                'Falling back to in-memory storage only.'
+            );
+        } else {
+            logger.warn(
+                { method: authProvider.method },
+                'Conversation sync requires browser auth method'
+            );
+        }
         return { initialized: false };
     }
 
     const keyPassword = authProvider.getKeyPassword();
     if (!keyPassword) {
-        logger.info(
-            { method: authProvider.method },
-            'No keyPassword available - sync will not be initialized'
-        );
+        if (conversationsConfig.useUpstreamStorage) {
+            logger.warn(
+                { method: authProvider.method },
+                'Upstream storage requires keyPassword (for master key decryption). ' +
+                'Falling back to in-memory storage only.'
+            );
+        } else {
+            logger.info(
+                { method: authProvider.method },
+                'No keyPassword available - sync will not be initialized'
+            );
+        }
         return { initialized: false };
     }
 
@@ -148,11 +172,12 @@ export async function initializeSync(
                 method: authProvider.method,
                 hasCachedUserKeys: !!cachedUserKeys,
                 hasCachedMasterKeys: !!cachedMasterKeys,
+                useUpstreamStorage: conversationsConfig.useUpstreamStorage,
             },
             'Initializing KeyManager with keyPassword...'
         );
 
-        // Initialize KeyManager
+        // Initialize KeyManager (needed for both modes)
         const keyManager = getKeyManager({
             protonApi,
             cachedUserKeys,
@@ -161,7 +186,12 @@ export async function initializeSync(
 
         await keyManager.initialize(keyPassword);
 
-        // Initialize SyncService
+        // Branch: use upstream storage or lumo-tamer storage
+        if (conversationsConfig.useUpstreamStorage) {
+            return initializeUpstreamSync(options, keyManager);
+        }
+
+        // Standard lumo-tamer sync initialization
         const syncService = getSyncService({
             protonApi,
             uid,
@@ -199,6 +229,76 @@ export async function initializeSync(
         const errorMessage = error instanceof Error ? error.message : String(error);
         const errorStack = error instanceof Error ? error.stack : undefined;
         logger.error({ errorMessage, errorStack }, 'Failed to initialize sync service');
+        return { initialized: false };
+    }
+}
+
+/**
+ * Initialize upstream storage mode
+ *
+ * Uses the upstream WebClient storage layer (Redux + IndexedDB + Sagas)
+ * instead of the lumo-tamer implementation.
+ * TODO: move up
+ */
+async function initializeUpstreamSync(
+    options: InitializeSyncOptions,
+    keyManager: import('./encryption/index.js').KeyManager
+): Promise<InitializeSyncResult> {
+    const { protonApi, uid, authProvider, conversationsConfig } = options;
+    const syncConfig = conversationsConfig.sync;
+
+    logger.info('Initializing upstream storage mode');
+
+    try {
+        // Dynamic import to avoid loading upstream modules when not needed
+        const { initializeUpstreamStore, UpstreamSyncService } = await import('./upstream/index.js');
+
+        // Get master key as base64 for upstream crypto layer
+        const masterKeyBase64 = keyManager.getMasterKeyBase64();
+
+        // Generate or use configured space ID
+        const spaceId = syncConfig.projectId ?? crypto.randomUUID();
+
+        // Initialize upstream store
+        const upstreamResult = await initializeUpstreamStore({
+            uid,
+            protonApi,
+            masterKey: masterKeyBase64,
+            spaceId,
+            storeConfig: {
+                maxConversationsInMemory: conversationsConfig.maxInMemory,
+            },
+        });
+
+        // Create upstream sync service adapter
+        const upstreamSyncService = new UpstreamSyncService({
+            store: upstreamResult.store,
+            dbApi: upstreamResult.dbApi,
+            spaceId,
+        });
+
+        // Fetch/create space via upstream sagas
+        try {
+            await upstreamSyncService.getOrCreateSpace();
+            logger.info({ method: authProvider.method }, 'Upstream sync service initialized');
+        } catch (spaceError) {
+            const msg = spaceError instanceof Error ? spaceError.message : String(spaceError);
+            logger.warn({ error: msg }, 'Upstream getOrCreateSpace failed');
+        }
+
+        // Auto-sync is handled by sagas in upstream mode
+        if (syncConfig.autoSync) {
+            logger.info('Auto-sync enabled (handled by upstream sagas)');
+        }
+
+        return {
+            initialized: true,
+            upstreamStore: upstreamResult,
+        };
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        logger.error({ errorMessage, errorStack }, 'Failed to initialize upstream storage');
         return { initialized: false };
     }
 }
