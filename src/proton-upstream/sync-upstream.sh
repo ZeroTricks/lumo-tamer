@@ -90,7 +90,6 @@ UPSTREAM_FILES=(
 
     # Services
     services/attachmentDataCache.ts
-    services/search/searchService.ts
 )
 
 # Shim files: local implementations, check upstream changes between syncs
@@ -103,6 +102,7 @@ SHIM_SOURCE_FILES=(
     redux/store.ts
     redux/rootReducer.ts
     util/safeLogger.ts
+    services/search/searchService.ts
 )
 
 # Adapted files: partial reuse with different structure
