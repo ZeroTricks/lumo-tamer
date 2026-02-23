@@ -18,8 +18,8 @@ This project creates an OpenAI-compatible API on top of Proton's conversation ag
 - **Sync** (`src/conversations/sync/`, `encryption/`): Optional Proton-native storage. KeyManager for user keys, SyncService for push/pull.
 
 **Proton integration** (see `docs/upstream.md`):
-- `src/proton-upstream/`: From `applications/lumo/src/app/` - **do not edit manually**, use `npm run sync-upstream`
-- `src/proton-shims/`: From `packages/` - mirrors structure for tsconfig aliases
+- `packages/lumo/` (`@lumo/*`): From `WebClients/applications/lumo/src/app/` - **do not edit**, use `npm run sync-upstream`
+- `packages/proton/` (`@proton/*`): From `WebClients/packages` - **do not edit**
 - `src/shims/`: Non-Proton polyfills (IndexedDB, lodash, etc.)
 
 ## Coding guidelines:

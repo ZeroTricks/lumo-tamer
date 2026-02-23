@@ -36,6 +36,9 @@ cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
 ## Project Structure
 
 ```
+packages/
+├── lumo/                      # @lumo/* - synced from Proton WebClients/applications/lumo/src/app/ (do not edit)
+└── proton/                    # @proton/* - synced from Proton WebClients/packages (do not edit)
 src/
 ├── tamer.ts                   # Entry point (CLI, server, auth)
 ├── api/                       # OpenAI-compatible API
@@ -55,8 +58,7 @@ src/
 ├── conversations/             # Conversation store, encryption, sync
 │   ├── encryption/            # Key hierarchy (master key → space key → DEK)
 │   └── sync/                  # Remote sync via upstream LumoApi
-├── proton-upstream/           # Unchanged files from Proton WebClients
-└── proton-shims/              # Reimplements @proton/crypto for Node.js
+└── shims/                     # Non-Proton polyfills (IndexedDB, lodash, etc.)
 ```
 
 See [upstream.md](upstream.md) for details on upstream files and shims.
