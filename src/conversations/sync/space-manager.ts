@@ -9,7 +9,7 @@
 
 import { randomUUID } from 'crypto';
 import { logger } from '../../app/logger.js';
-import { exportKey, deriveKey } from '../../proton-shims/aesGcm.js';
+import { exportKey, deriveKey } from '@proton/crypto/lib/subtle/aesGcm';
 import type { LumoApi, RemoteSpace } from './lumo-api.js';
 import type { KeyManager } from '../encryption/key-manager.js';
 import type { SpaceId, RemoteId, SpacePrivate } from '../types.js';

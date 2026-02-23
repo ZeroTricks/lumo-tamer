@@ -15,8 +15,8 @@
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder('utf-8');
 
-export function utf8StringToUint8Array(str: string): Uint8Array {
-    return textEncoder.encode(str);
+export function utf8StringToUint8Array(str: string): Uint8Array<ArrayBuffer> {
+    return textEncoder.encode(str) as Uint8Array<ArrayBuffer>;
 }
 
 export function uint8ArrayToUtf8String(bytes: Uint8Array): string {

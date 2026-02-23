@@ -9,7 +9,7 @@
  */
 
 import { LumoApi } from '../../proton-upstream/remote/api.js';
-import { installFetchAdapter } from '../../proton-shims/fetch-adapter.js';
+import { installFetchAdapter } from '../../shims/fetch-adapter.js';
 import type { ProtonApi } from '../../lumo-client/types.js';
 import { logger } from '../../app/logger.js';
 

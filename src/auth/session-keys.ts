@@ -5,22 +5,22 @@
  * which is needed to decrypt PGP private keys for master key access.
  */
 
-import { importKey, decryptData } from '../proton-shims/aesGcm.js';
+import { importKey, decryptData } from '@proton/crypto/lib/subtle/aesGcm';
 import { logger } from '../app/logger.js';
 import type { PersistedSessionData, DecryptedSessionBlob } from '../lumo-client/types.js';
 
 /**
  * Decode base64 to Uint8Array
  */
-function base64ToBytes(b64: string): Uint8Array {
-    return Uint8Array.from(Buffer.from(b64, 'base64'));
+function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+    return new Uint8Array(Buffer.from(b64, 'base64')) as Uint8Array<ArrayBuffer>;
 }
 
 /**
  * Encode string to UTF-8 bytes
  */
-function stringToBytes(str: string): Uint8Array {
-    return new TextEncoder().encode(str);
+function stringToBytes(str: string): Uint8Array<ArrayBuffer> {
+    return new TextEncoder().encode(str) as Uint8Array<ArrayBuffer>;
 }
 
 /**
@@ -57,7 +57,7 @@ export async function decryptPersistedSession(
 
         // Prepare additional data based on payload version
         // Version 2 uses 'session' as additional data for AEAD
-        let additionalData: Uint8Array | undefined;
+        let additionalData: Uint8Array<ArrayBuffer> | undefined;
         if (session.payloadVersion === 2) {
             additionalData = stringToBytes('session');
         }

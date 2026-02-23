@@ -10,16 +10,16 @@
 
 declare global {
     interface Uint8ArrayConstructor {
-        fromBase64(base64: string): Uint8Array;
+        fromBase64(base64: string): Uint8Array<ArrayBuffer>;
     }
-    interface Uint8Array {
+    interface Uint8Array<TArrayBuffer extends ArrayBufferLike = ArrayBufferLike> {
         toBase64(): string;
     }
 }
 
 if (typeof Uint8Array.fromBase64 !== 'function') {
-    Uint8Array.fromBase64 = function (base64: string): Uint8Array {
-        return new Uint8Array(Buffer.from(base64, 'base64'));
+    Uint8Array.fromBase64 = function (base64: string): Uint8Array<ArrayBuffer> {
+        return new Uint8Array(Buffer.from(base64, 'base64')) as Uint8Array<ArrayBuffer>;
     };
 }
 

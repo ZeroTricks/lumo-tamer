@@ -18,8 +18,10 @@ fi
 UPSTREAM_REPO="ProtonMail/WebClients"
 UPSTREAM_BRANCH="main"
 UPSTREAM_DIR="src/proton-upstream"
+PROTON_SHIMS_DIR="src/proton-shims"
 SCRIPTS_DIR="scripts/upstream"
 UPSTREAM_BASE_URL="https://raw.githubusercontent.com/${UPSTREAM_REPO}/${UPSTREAM_BRANCH}/applications/lumo/src/app"
+PACKAGES_BASE_URL="https://raw.githubusercontent.com/${UPSTREAM_REPO}/${UPSTREAM_BRANCH}/packages"
 GITHUB_API="https://api.github.com/repos/${UPSTREAM_REPO}"
 
 # Temp directory for downloads
@@ -40,7 +42,9 @@ UPSTREAM_FILES=(
     lib/lumo-api-client/core/encryptionParams.ts
     lib/lumo-api-client/core/streaming.ts
     lib/lumo-api-client/core/types.ts
+    lib/lumo-api-client/utils.ts
     keys.ts
+    crypto/index.ts
     crypto/types.ts
 
     # Remote API
@@ -97,6 +101,7 @@ UPSTREAM_FILES=(
 # Shim files: local implementations, check upstream changes between syncs
 SHIM_SOURCE_FILES=(
     config.ts
+    lib/lumo-api-client/index.ts
     crypto/index.ts
     redux/slices/index.ts
     redux/slices/lumoUserSettings.ts
@@ -110,6 +115,22 @@ SHIM_SOURCE_FILES=(
 # Adapted files: partial reuse with different structure
 ADAPTED_SOURCE_FILES=(
     mocks/handlers.ts
+)
+
+# Proton-shims: files synced from packages/ (mirroring packages/ structure)
+# These files work unchanged with our polyfills and tsconfig aliases
+PROTON_SHIMS_UPSTREAM_FILES=(
+    crypto/lib/subtle/aesGcm.ts
+    crypto/lib/subtle/hash.ts
+)
+
+# Proton-shims source files: local implementations, track upstream changes
+# These are partial reimplementations - we don't sync them but warn on changes
+PROTON_SHIMS_SHIM_SOURCE_FILES=(
+    crypto/lib/proxy/proxy.ts
+    crypto/lib/utils.ts
+    shared/lib/apps/helper.ts
+    shared/lib/fetch/headers.ts
 )
 
 echo -e "${BLUE}=== Proton WebClients Upstream Sync ===${NC}\n"
@@ -126,13 +147,22 @@ fi
 
 echo -e "Latest commit: ${GREEN}${LATEST_COMMIT:0:12}${NC}"
 
-# Download a file from upstream
+# Download a file from upstream (applications/lumo/src/app/)
 download_file() {
     local upstream_path="$1"
     local output_file="$2"
     local url="${UPSTREAM_BASE_URL}/${upstream_path}"
 
     # curl -f fails on HTTP errors (404 etc), -s is silent, -L follows redirects
+    curl -sfL -o "$output_file" "$url"
+}
+
+# Download a file from packages/
+download_packages_file() {
+    local packages_path="$1"
+    local output_file="$2"
+    local url="${PACKAGES_BASE_URL}/${packages_path}"
+
     curl -sfL -o "$output_file" "$url"
 }
 
@@ -167,6 +197,37 @@ if [ ${#CHANGED_FILES[@]} -eq 0 ] && [ ${#FAILED_FILES[@]} -eq 0 ]; then
     echo -e "  ${GREEN}All ${#UPSTREAM_FILES[@]} files up to date${NC}"
 fi
 
+# Download and compare proton-shims files (from packages/)
+echo -e "\n${BLUE}Checking proton-shims files (packages/)...${NC}"
+declare -a CHANGED_SHIMS_FILES=()
+declare -a FAILED_SHIMS_FILES=()
+
+for file_path in "${PROTON_SHIMS_UPSTREAM_FILES[@]}"; do
+    local_file="${PROTON_SHIMS_DIR}/${file_path}"
+    temp_file="${TEMP_DIR}/packages_${file_path}"
+    mkdir -p "$(dirname "$temp_file")"
+
+    if ! download_packages_file "$file_path" "$temp_file"; then
+        echo -e "  ${RED}✗${NC} $file_path (download failed)"
+        FAILED_SHIMS_FILES+=("$file_path")
+        continue
+    fi
+
+    if [ -f "$local_file" ]; then
+        if ! diff -q "$temp_file" "$local_file" >/dev/null 2>&1; then
+            echo -e "  ${YELLOW}~${NC} $file_path"
+            CHANGED_SHIMS_FILES+=("$file_path")
+        fi
+    else
+        echo -e "  ${RED}+${NC} $file_path (missing locally)"
+        CHANGED_SHIMS_FILES+=("$file_path")
+    fi
+done
+
+if [ ${#CHANGED_SHIMS_FILES[@]} -eq 0 ] && [ ${#FAILED_SHIMS_FILES[@]} -eq 0 ]; then
+    echo -e "  ${GREEN}All ${#PROTON_SHIMS_UPSTREAM_FILES[@]} files up to date${NC}"
+fi
+
 # Check APP_VERSION specifically (important for x-pm-appversion header)
 # config.ts is a shim locally, so we download upstream version just for version comparison
 UPSTREAM_CONFIG_TEMP="${TEMP_DIR}/_upstream_config.ts"
@@ -186,11 +247,18 @@ if [ -f "$COMMIT_FILE" ]; then
     PREV_COMMIT=$(cat "$COMMIT_FILE" 2>/dev/null | tr -d '[:space:]')
 fi
 
-# Build URL for a specific commit
+# Build URL for a specific commit (applications/lumo/src/app/)
 commit_url() {
     local commit="$1"
     local path="$2"
     echo "https://raw.githubusercontent.com/${UPSTREAM_REPO}/${commit}/applications/lumo/src/app/${path}"
+}
+
+# Build URL for a specific commit (packages/)
+packages_commit_url() {
+    local commit="$1"
+    local path="$2"
+    echo "https://raw.githubusercontent.com/${UPSTREAM_REPO}/${commit}/packages/${path}"
 }
 
 # Build GitHub compare URL for a specific file
@@ -258,6 +326,58 @@ check_source_changes() {
 declare -a CHANGED_SOURCE_FILES=()
 check_source_changes "shim" "${SHIM_SOURCE_FILES[@]}"
 check_source_changes "adapted" "${ADAPTED_SOURCE_FILES[@]}"
+
+# Check proton-shims source files for upstream changes (from packages/)
+check_proton_shims_source_changes() {
+    echo -e "\n${BLUE}Checking proton-shims shim sources (packages/)...${NC}"
+
+    if [ -z "$PREV_COMMIT" ]; then
+        echo -e "  ${YELLOW}!${NC} No previous commit in ${COMMIT_FILE}"
+        return
+    fi
+
+    if [ "$PREV_COMMIT" = "$LATEST_COMMIT" ]; then
+        echo -e "  ${GREEN}=${NC} Same commit as last sync"
+        return
+    fi
+
+    local changes=0
+    for file_path in "${PROTON_SHIMS_SHIM_SOURCE_FILES[@]}"; do
+        local old_file="${TEMP_DIR}/_old_pkg_${file_path//\//_}"
+        local new_file="${TEMP_DIR}/_new_pkg_${file_path//\//_}"
+
+        local got_old=false got_new=false
+        if curl -sfL -o "$old_file" "$(packages_commit_url "$PREV_COMMIT" "$file_path")" 2>/dev/null; then
+            got_old=true
+        fi
+        if curl -sfL -o "$new_file" "$(packages_commit_url "$LATEST_COMMIT" "$file_path")" 2>/dev/null; then
+            got_new=true
+        fi
+
+        if $got_old && $got_new; then
+            if ! diff -q "$old_file" "$new_file" >/dev/null 2>&1; then
+                local lines
+                lines=$(diff "$old_file" "$new_file" 2>/dev/null | wc -l)
+                echo -e "  ${YELLOW}⚠${NC} packages/$file_path (~${lines} lines)"
+                echo -e "    https://github.com/${UPSTREAM_REPO}/compare/${PREV_COMMIT:0:12}..${LATEST_COMMIT:0:12}#diff-$(echo -n "packages/${file_path}" | sha256sum | cut -d' ' -f1)"
+                changes=$((changes + 1))
+            fi
+        elif $got_new && ! $got_old; then
+            echo -e "  ${YELLOW}+${NC} packages/$file_path (new upstream)"
+            changes=$((changes + 1))
+        elif $got_old && ! $got_new; then
+            echo -e "  ${RED}-${NC} packages/$file_path (removed upstream)"
+        else
+            echo -e "  ${RED}✗${NC} packages/$file_path (download failed)"
+        fi
+    done
+
+    if [ $changes -eq 0 ]; then
+        echo -e "  ${GREEN}No changes${NC}"
+    fi
+}
+
+check_proton_shims_source_changes
 
 # Parse series file and call handler for each patch
 # Usage: for_each_patch handler_func
@@ -338,6 +458,18 @@ sync_files() {
         fi
     done
 
+    # Sync proton-shims files from packages/
+    echo -e "\n${BLUE}Syncing ${#PROTON_SHIMS_UPSTREAM_FILES[@]} proton-shims files...${NC}"
+    for file_path in "${PROTON_SHIMS_UPSTREAM_FILES[@]}"; do
+        local local_file="${PROTON_SHIMS_DIR}/${file_path}"
+        local temp_file="${TEMP_DIR}/packages_${file_path}"
+
+        if [ -f "$temp_file" ]; then
+            mkdir -p "$(dirname "$local_file")"
+            cp "$temp_file" "$local_file"
+        fi
+    done
+
     # Update commit tracking
     echo "$LATEST_COMMIT" > "$COMMIT_FILE"
     echo -e "  Updated .last-sync-commit (${LATEST_COMMIT:0:12})"
@@ -354,7 +486,7 @@ sync_files() {
 
 # Summary and prompt
 echo ""
-total_changes=$((${#CHANGED_FILES[@]} + ${#FAILED_FILES[@]} + ${#CHANGED_SOURCE_FILES[@]}))
+total_changes=$((${#CHANGED_FILES[@]} + ${#FAILED_FILES[@]} + ${#CHANGED_SOURCE_FILES[@]} + ${#CHANGED_SHIMS_FILES[@]} + ${#FAILED_SHIMS_FILES[@]}))
 
 if [ $total_changes -eq 0 ]; then
     echo -e "${GREEN}Everything up to date.${NC}"
@@ -363,12 +495,14 @@ fi
 
 echo -e "${YELLOW}Summary:${NC}"
 [ ${#CHANGED_FILES[@]} -gt 0 ] && echo -e "  ${#CHANGED_FILES[@]} upstream file(s) changed"
+[ ${#CHANGED_SHIMS_FILES[@]} -gt 0 ] && echo -e "  ${#CHANGED_SHIMS_FILES[@]} proton-shims file(s) changed"
 [ ${#FAILED_FILES[@]} -gt 0 ] && echo -e "  ${#FAILED_FILES[@]} download failure(s)"
+[ ${#FAILED_SHIMS_FILES[@]} -gt 0 ] && echo -e "  ${#FAILED_SHIMS_FILES[@]} proton-shims download failure(s)"
 [ ${#CHANGED_SOURCE_FILES[@]} -gt 0 ] && echo -e "  ${#CHANGED_SOURCE_FILES[@]} shim/adapted source(s) changed"
 
-if [ ${#FAILED_FILES[@]} -gt 0 ]; then
-    echo -e "\n${RED}Cannot sync: ${#FAILED_FILES[@]} file(s) failed to download.${NC}"
-    echo "Fix the issue (check network, remove stale entries from UPSTREAM_FILES) and retry."
+if [ ${#FAILED_FILES[@]} -gt 0 ] || [ ${#FAILED_SHIMS_FILES[@]} -gt 0 ]; then
+    echo -e "\n${RED}Cannot sync: file(s) failed to download.${NC}"
+    echo "Fix the issue (check network, remove stale entries) and retry."
     exit 1
 fi
 

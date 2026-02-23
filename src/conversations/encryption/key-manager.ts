@@ -10,7 +10,7 @@
  * User PGP Key -> Master Key -> Space Key -> Data Encryption Key -> Content
  */
 
-import { CryptoProxy, type PrivateKey } from '../../proton-shims/crypto.js';
+import { CryptoProxy, type PrivateKey } from '@proton/crypto';
 import {
     importKey,
     importWrappingKey,
@@ -18,7 +18,7 @@ import {
     generateKey,
     exportKey,
     deriveKey,
-} from '../../proton-shims/aesGcm.js';
+} from '@proton/crypto/lib/subtle/aesGcm';
 import { logger } from '../../app/logger.js';
 import type { SpaceId } from '../types.js';
 import type { ProtonApi } from '../../lumo-client/types.js';
@@ -30,8 +30,8 @@ const SPACE_KEY_INFO = new Uint8Array([0x64, 0x61, 0x74, 0x61, 0x2d, 0x65, 0x6e,
 /**
  * Decode base64 to Uint8Array
  */
-function base64ToBytes(b64: string): Uint8Array {
-    return Uint8Array.from(Buffer.from(b64, 'base64'));
+function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+    return new Uint8Array(Buffer.from(b64, 'base64')) as Uint8Array<ArrayBuffer>;
 }
 
 /**
@@ -325,7 +325,7 @@ export class KeyManager {
     private async decryptMasterKey(
         encryptedMasterKey: string,
         decryptionKeys: PrivateKey[]
-    ): Promise<Uint8Array> {
+    ): Promise<Uint8Array<ArrayBuffer>> {
         // The master key is base64-encoded binary PGP message (not armored text)
         // See lumoBootstrap.ts:39
         // We need to decrypt it using the user's private keys
@@ -342,7 +342,7 @@ export class KeyManager {
             format: 'binary',
         });
 
-        return decrypted.data as Uint8Array;
+        return decrypted.data as Uint8Array<ArrayBuffer>;
     }
 }
 

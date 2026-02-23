@@ -23,7 +23,7 @@ import { DbApi } from '../../proton-upstream/indexedDb/db.js';
 import { LumoApi } from '../../proton-upstream/remote/api.js';
 import { addMasterKey } from '../../proton-upstream/redux/slices/core/credentials.js';
 
-import { installFetchAdapter } from '../../proton-shims/fetch-adapter.js';
+import { installFetchAdapter } from '../../shims/fetch-adapter.js';
 import { UpstreamConversationStore } from './adapter.js';
 
 export interface UpstreamStoreConfig {
@@ -59,7 +59,7 @@ export async function initializeUpstreamStore(
 
     // 1. Import indexeddb polyfill (must happen before DbApi)
     // This is done at module level in the polyfill file
-    await import('../../proton-shims/indexeddb-polyfill.js');
+    await import('../../shims/indexeddb-polyfill.js');
 
     // 2. Create DbApi for IndexedDB operations
     const dbApi = new DbApi(uid);

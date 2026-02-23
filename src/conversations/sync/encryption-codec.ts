@@ -9,7 +9,7 @@
 
 import stableStringify from 'json-stable-stringify';
 import { logger } from '../../app/logger.js';
-import { encryptData, decryptData } from '../../proton-shims/aesGcm.js';
+import { encryptData, decryptData } from '@proton/crypto/lib/subtle/aesGcm';
 import type {
     Message,
     MessageRole,
