@@ -21,7 +21,7 @@ diff --git a/redux/selectors.ts b/redux/selectors.ts
 
  import type { LocalId, RemoteId, ResourceType } from '../remote/types';
  import type { Attachment, AttachmentId, Conversation, Message, Space } from '../types';
-@@ -8,12 +10,10 @@ import { type ConversationId, type MessageId, Role, type SpaceId } from '../type
+@@ -8,14 +10,12 @@
  import { listify, mapIds, setify } from '../util/collections';
  import { sortByDate } from '../util/date';
  import { objectFilterV } from '../util/objects';
@@ -37,7 +37,8 @@ diff --git a/redux/selectors.ts b/redux/selectors.ts
 +export type LumoSelector<T> = (state: LumoState) => T;
 
  /*
-@@ -24,43 +24,36 @@ export type LumoSelector<T> = Selector<LumoState, T>;
+  * Helper that wraps any selector to accept optional input, returning
+@@ -24,43 +24,36 @@
  export const makeOptional =
      <TArg, TResult>(selector: (arg: TArg) => LumoSelector<TResult>, fallback: TResult) =>
      (arg: TArg | null | undefined): LumoSelector<TResult> =>
@@ -90,7 +91,7 @@ diff --git a/redux/selectors.ts b/redux/selectors.ts
          state.attachments[id];
 
  export const selectAttachmentByIdOptional = makeOptional(selectAttachmentById, undefined);
-@@ -103,7 +96,8 @@ export const selectSpaceByConversationId =
+@@ -103,7 +96,8 @@
  export const selectProvisionalAttachments = (state: LumoState) =>
      listify(state.attachments)
          .filter((a: Attachment) => !a.spaceId)
@@ -100,7 +101,7 @@ diff --git a/redux/selectors.ts b/redux/selectors.ts
 
  export const selectLocalIdFromRemote =
      (type: ResourceType, remoteId: RemoteId) =>
-@@ -114,18 +108,3 @@ export const selectRemoteIdFromLocal =
+@@ -114,18 +108,3 @@
      (type: ResourceType, localId: LocalId) =>
      (state: LumoState): RemoteId | undefined =>
          state.idmap.local2remote[type][localId];
