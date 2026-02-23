@@ -33,6 +33,15 @@ dZMbxO6yWPA5uQk=
 =h/mc
 -----END PGP PUBLIC KEY BLOCK-----`;
 
-// In upstream, LUMO_GPG_PUB_KEY can be overridden via webpack DefinePlugin at build time.
-// For Node.js we just use the production key directly.
+/**
+ * Lumo public key - defaults to production key, but can be overridden at build time
+ *
+ * To use a custom key (e.g., for local dev backend):
+ * 1. Save your dev public key to a file: ~/.proton/lumo-dev.pub
+ * 2. Set environment variable: export LUMO_PUB_KEY_PATH=~/.proton/lumo-dev.pub
+ * 3. Start the app: yarn workspace proton-lumo start
+ *
+ * The custom key is loaded by webpack at build time and injected as a compile-time constant.
+ * No key material needs to be committed to the repository.
+ */
 export const LUMO_GPG_PUB_KEY = LUMO_GPG_PUB_KEY_PROD_2;
