@@ -12,7 +12,7 @@
     "dev:cli": "tsx src/tamer.ts",
     "dev:server:debug": "tsx watch --inspect=0.0.0.0:9229 src/tamer.ts server",
     "dev:cli:debug": "tsx --inspect=0.0.0.0:9229 src/tamer.ts",
-    "sync-upstream": "./src/proton-upstream/sync-upstream.sh",
+    "sync-upstream": "./scripts/upstream/sync.sh",
     "build": "tsc && tsc-alias",
     "build:login": "cd src/auth/login/go && go build -o ../../../../dist/proton-auth  && echo 'All done!' || echo 'Warning: Go binary not built (Is Go installed?)'",
     "build:all": "npm run build && npm run build:login",

@@ -18,6 +18,7 @@ fi
 UPSTREAM_REPO="ProtonMail/WebClients"
 UPSTREAM_BRANCH="main"
 UPSTREAM_DIR="src/proton-upstream"
+SCRIPTS_DIR="scripts/upstream"
 UPSTREAM_BASE_URL="https://raw.githubusercontent.com/${UPSTREAM_REPO}/${UPSTREAM_BRANCH}/applications/lumo/src/app"
 GITHUB_API="https://api.github.com/repos/${UPSTREAM_REPO}"
 
@@ -180,7 +181,7 @@ fi
 
 # Get previous commit for diffing shim/adapted sources
 PREV_COMMIT=""
-COMMIT_FILE="${UPSTREAM_DIR}/.last-sync-commit"
+COMMIT_FILE="${SCRIPTS_DIR}/last-sync-commit"
 if [ -f "$COMMIT_FILE" ]; then
     PREV_COMMIT=$(cat "$COMMIT_FILE" 2>/dev/null | tr -d '[:space:]')
 fi
@@ -263,7 +264,7 @@ check_source_changes "adapted" "${ADAPTED_SOURCE_FILES[@]}"
 # Handler receives: patch_name patch_file
 for_each_patch() {
     local handler="$1"
-    local patches_dir="${UPSTREAM_DIR}/patches"
+    local patches_dir="${SCRIPTS_DIR}/patches"
     local series_file="${patches_dir}/series"
 
     while IFS= read -r line || [ -n "$line" ]; do
@@ -278,7 +279,7 @@ for_each_patch() {
 # Apply patches from patches/series
 # Uses --merge to produce git-style conflict markers on failure
 apply_patches() {
-    local patches_dir="${UPSTREAM_DIR}/patches"
+    local patches_dir="${SCRIPTS_DIR}/patches"
     local series_file="${patches_dir}/series"
 
     if [ ! -f "$series_file" ]; then
