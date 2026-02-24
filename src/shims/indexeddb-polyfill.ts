@@ -44,6 +44,19 @@ try {
 indexeddbshim(globalThis as Parameters<typeof indexeddbshim>[0], {
     checkOrigin: false,
     databaseBasePath,
+    escapeDatabaseName: (dbName: string) => {
+        // Produce readable filenames instead of default ^-escapes
+        // Lowercase is safe, Lumo db names are `${DB_BASE_NAME}_${userHash}`
+        // See packages/lumo/src/indexedDb/db.ts#L1170
+        // Replace base64 URL-unsafe chars: + -> -, / -> _, = -> (remove)
+return (
+            dbName
+                .toLowerCase()
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=/g, '') + '.sqlite'
+        );
+    },
 });
 
 // Re-export for explicit use if needed
