@@ -298,22 +298,24 @@ export function* loadReduxFromIdb(): SagaIterator {
     console.log('Saga triggered: loadReduxFromIdb');
     const dbApi: DbApi = yield getContext('dbApi');
 
-    const getAllIdbData = () => {
-        const stores = [SPACE_STORE, CONVERSATION_STORE, MESSAGE_STORE, ATTACHMENT_STORE, ASSET_STORE, REMOTE_ID_STORE];
-        // prettier-ignore
-        return dbApi.newTransaction(stores, 'readonly')
-            .then(tx => ({tx}))
-            .then(({tx, ...rest}) => dbApi.getAllIdMaps(tx).then((idMapEntries) => ({tx, ...rest, idMapEntries})))
-            .then(({tx, ...rest}) => dbApi.getAllSpaces(tx).then((spaces) => ({tx, ...rest, spaces})))
-            .then(({tx, ...rest}) => dbApi.getAllConversations(tx).then((conversations) => ({
-                tx, ...rest,
-                conversations
-            })))
-            .then(({tx, ...rest}) => dbApi.getAllMessages(tx).then((messages) => ({tx, ...rest, messages})))
-            .then(({tx, ...rest}) => dbApi.getAllAttachments(tx).then((attachments) => ({tx, ...rest, attachments})))
-            .then(({tx, ...rest}) => dbApi.getAllAssets(tx).then((assets) => ({tx, ...rest, assets})))
-            .then(({tx, ...rest}) => rest)
-    };
+    // Use Promise.all with separate transactions to avoid indexeddbshim auto-commit issue
+    // See: docs/upstream-storage-research.md "IndexedDB Transaction Auto-Commit Issue"
+    const getAllIdbData = () =>
+        Promise.all([
+            dbApi.getAllIdMaps(),
+            dbApi.getAllSpaces(),
+            dbApi.getAllConversations(),
+            dbApi.getAllMessages(),
+            dbApi.getAllAttachments(),
+            dbApi.getAllAssets(),
+        ]).then(([idMapEntries, spaces, conversations, messages, attachments, assets]) => ({
+            idMapEntries,
+            spaces,
+            conversations,
+            messages,
+            attachments,
+            assets,
+        }));
 
     const allIdbData = yield call(getAllIdbData);
     const { idMapEntries, spaces, conversations, messages } = allIdbData;
