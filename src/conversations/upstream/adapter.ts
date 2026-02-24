@@ -49,7 +49,8 @@ import {
     addConversation,
     changeConversationTitle,
     updateConversationStatus,
-    deleteConversation as deleteConversationAction,
+    locallyDeleteConversationFromLocalRequest,
+    pushConversationRequest,
 } from '@lumo/redux/slices/core/conversations.js';
 import {
     addMessage as addUpstreamMessage,
@@ -226,6 +227,8 @@ export class UpstreamConversationStore {
             };
 
             this.store.dispatch(addConversation(newConv));
+            // Request push to server/IDB
+            this.store.dispatch(pushConversationRequest({ id }));
             conv = newConv;
 
             getMetrics()?.conversationsCreatedTotal.inc();
@@ -554,6 +557,7 @@ export class UpstreamConversationStore {
                 id,
                 status: ConversationStatus.GENERATING,
             }));
+            this.store.dispatch(pushConversationRequest({ id }));
         }
     }
 
@@ -568,6 +572,7 @@ export class UpstreamConversationStore {
                 title,
                 persist: true,
             }));
+            this.store.dispatch(pushConversationRequest({ id }));
             this.notifyDirty();
         }
         logger.debug({ conversationId: id }, 'Set title');
@@ -611,7 +616,8 @@ export class UpstreamConversationStore {
      */
     delete(id: ConversationId): boolean {
         if (this.has(id)) {
-            this.store.dispatch(deleteConversationAction(id));
+            // Use saga action to handle Redux + IDB + remote sync
+            this.store.dispatch(locallyDeleteConversationFromLocalRequest(id));
             this.accessOrder = this.accessOrder.filter(cid => cid !== id);
             logger.debug({ conversationId: id }, 'Deleted conversation');
             return true;

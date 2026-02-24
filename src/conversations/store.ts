@@ -545,3 +545,11 @@ export function getConversationStore(config?: ConversationStoreConfig): Conversa
 export function resetConversationStore(): void {
     storeInstance = null;
 }
+
+/**
+ * Set a custom store instance (for upstream storage mode)
+ * Allows UpstreamConversationStore to be used as the singleton
+ */
+export function setConversationStore(store: ConversationStore): void {
+    storeInstance = store;
+}

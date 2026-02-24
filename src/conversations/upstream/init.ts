@@ -38,6 +38,7 @@ export interface UpstreamStoreResult {
     store: LumoStore;
     conversationStore: UpstreamConversationStore;
     dbApi: DbApi;
+    spaceId: SpaceId;
     cleanup: () => void;
 }
 
@@ -113,6 +114,7 @@ export async function initializeUpstreamStore(
         store,
         conversationStore,
         dbApi,
+        spaceId,
         cleanup: cleanupFetch,
     };
 }

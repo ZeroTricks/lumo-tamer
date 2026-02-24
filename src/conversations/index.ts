@@ -34,6 +34,7 @@ export {
     ConversationStore,
     getConversationStore,
     resetConversationStore,
+    setConversationStore,
 } from './store.js';
 
 // Deduplication utilities
@@ -88,10 +89,151 @@ import type { AuthProvider, ProtonApi } from '../auth/index.js';
 import type { ConversationsConfig } from '../app/config.js';
 import { getKeyManager } from './encryption/index.js';
 import { getSyncService, getAutoSyncService } from './sync/index.js';
-import { getConversationStore } from './store.js';
+import { ConversationStore, getConversationStore, setConversationStore } from './store.js';
+import type { ConversationStoreConfig } from './types.js';
 
 // Upstream storage imports (dynamic import to avoid loading when not needed)
 import type { UpstreamStoreResult } from './upstream/index.js';
+
+// ============================================================================
+// Conversation Store Initialization
+// ============================================================================
+
+export interface InitializeStoreOptions {
+    protonApi: ProtonApi;
+    uid: string;
+    authProvider: AuthProvider;
+    conversationsConfig: ConversationsConfig;
+}
+
+export interface InitializeStoreResult {
+    /** Whether upstream storage is being used */
+    isUpstream: boolean;
+    /** Upstream store result, only set when upstream storage is used */
+    upstreamStore?: UpstreamStoreResult;
+}
+
+// Module-level state to track upstream store result for sync initialization
+let upstreamStoreResult: UpstreamStoreResult | null = null;
+
+/**
+ * Initialize the conversation store
+ *
+ * Creates either UpstreamConversationStore (if conditions are met) or
+ * the fallback in-memory ConversationStore.
+ *
+ * Conditions for upstream storage:
+ * - useUpstreamStorage config is true
+ * - Auth provider supports persistence (browser auth)
+ * - keyPassword is available (for master key decryption)
+ */
+export async function initializeConversationStore(
+    options: InitializeStoreOptions
+): Promise<InitializeStoreResult> {
+    const { protonApi, uid, authProvider, conversationsConfig } = options;
+    const storeConfig: ConversationStoreConfig = {
+        maxConversationsInMemory: conversationsConfig.maxInMemory,
+    };
+
+    // Check if upstream storage conditions are met
+    if (conversationsConfig.useUpstreamStorage) {
+        if (!authProvider.supportsPersistence()) {
+            logger.warn(
+                { method: authProvider.method },
+                'Upstream storage requires browser auth. Falling back to in-memory store.'
+            );
+        } else {
+            const keyPassword = authProvider.getKeyPassword();
+            if (!keyPassword) {
+                logger.warn(
+                    { method: authProvider.method },
+                    'Upstream storage requires keyPassword. Falling back to in-memory store.'
+                );
+            } else {
+                // All conditions met - initialize upstream storage
+                try {
+                    const result = await initializeUpstreamConversationStore(options, keyPassword);
+                    if (result) {
+                        // Set the upstream store as the singleton
+                        // Type assertion needed: UpstreamConversationStore implements same public API
+                        setConversationStore(result.conversationStore as unknown as ConversationStore);
+                        // Save for later use by initializeSync
+                        upstreamStoreResult = result;
+                        logger.info('Using upstream conversation store');
+                        return { isUpstream: true, upstreamStore: result };
+                    }
+                } catch (error) {
+                    const msg = error instanceof Error ? error.message : String(error);
+                    logger.error({ error: msg }, 'Failed to initialize upstream store. Falling back to in-memory store.');
+                }
+            }
+        }
+    }
+
+    // Fallback: create standard in-memory store
+    getConversationStore(storeConfig);
+    logger.info('Using in-memory conversation store');
+    return { isUpstream: false };
+}
+
+/**
+ * Initialize upstream conversation store
+ * Extracted from initializeUpstreamSync for reuse
+ */
+async function initializeUpstreamConversationStore(
+    options: InitializeStoreOptions,
+    keyPassword: string
+): Promise<UpstreamStoreResult | null> {
+    const { protonApi, uid, authProvider, conversationsConfig } = options;
+    const syncConfig = conversationsConfig.sync;
+
+    // Get cached keys from browser provider if available
+    const cachedUserKeys = authProvider.getCachedUserKeys?.();
+    const cachedMasterKeys = authProvider.getCachedMasterKeys?.();
+
+    logger.info(
+        {
+            method: authProvider.method,
+            hasCachedUserKeys: !!cachedUserKeys,
+            hasCachedMasterKeys: !!cachedMasterKeys,
+        },
+        'Initializing KeyManager for upstream storage...'
+    );
+
+    // Initialize KeyManager
+    const keyManager = getKeyManager({
+        protonApi,
+        cachedUserKeys,
+        cachedMasterKeys,
+    });
+    await keyManager.initialize(keyPassword);
+
+    // Dynamic import to avoid loading upstream modules when not needed
+    const { initializeUpstreamStore } = await import('./upstream/index.js');
+
+    // Get master key as base64 for upstream crypto layer
+    const masterKeyBase64 = keyManager.getMasterKeyBase64();
+
+    // Generate or use configured space ID
+    const spaceId = syncConfig.projectId ?? crypto.randomUUID();
+
+    // Initialize upstream store
+    const upstreamResult = await initializeUpstreamStore({
+        uid,
+        protonApi,
+        masterKey: masterKeyBase64,
+        spaceId,
+        storeConfig: {
+            maxConversationsInMemory: conversationsConfig.maxInMemory,
+        },
+    });
+
+    return upstreamResult;
+}
+
+// ============================================================================
+// Sync Initialization
+// ============================================================================
 
 export interface InitializeSyncOptions {
     protonApi: ProtonApi;
@@ -163,6 +305,14 @@ export async function initializeSync(
     }
 
     try {
+        // Upstream storage: sync uses the already-initialized store
+        if (conversationsConfig.useUpstreamStorage) {
+            if (!upstreamStoreResult) {
+                throw new Error('Upstream storage enabled but store not initialized. Call initializeConversationStore() first.');
+            }
+            return initializeUpstreamSyncOnly(options, upstreamStoreResult);
+        }
+
         // Get cached keys from browser provider if available
         const cachedUserKeys = authProvider.getCachedUserKeys?.();
         const cachedMasterKeys = authProvider.getCachedMasterKeys?.();
@@ -172,12 +322,11 @@ export async function initializeSync(
                 method: authProvider.method,
                 hasCachedUserKeys: !!cachedUserKeys,
                 hasCachedMasterKeys: !!cachedMasterKeys,
-                useUpstreamStorage: conversationsConfig.useUpstreamStorage,
             },
             'Initializing KeyManager with keyPassword...'
         );
 
-        // Initialize KeyManager (needed for both modes)
+        // Initialize KeyManager (needed for lumo-tamer sync)
         const keyManager = getKeyManager({
             protonApi,
             cachedUserKeys,
@@ -185,11 +334,6 @@ export async function initializeSync(
         });
 
         await keyManager.initialize(keyPassword);
-
-        // Branch: use upstream storage or lumo-tamer storage
-        if (conversationsConfig.useUpstreamStorage) {
-            return initializeUpstreamSync(options, keyManager);
-        }
 
         // Standard lumo-tamer sync initialization
         const syncService = getSyncService({
@@ -234,47 +378,28 @@ export async function initializeSync(
 }
 
 /**
- * Initialize upstream storage mode
+ * Initialize sync for an already-initialized upstream store
  *
- * Uses the upstream WebClient storage layer (Redux + IndexedDB + Sagas)
- * instead of the lumo-tamer implementation.
- * TODO: move up
+ * Called when initializeConversationStore() already set up the upstream store.
+ * Just creates the sync service and fetches/creates the space.
  */
-async function initializeUpstreamSync(
+async function initializeUpstreamSyncOnly(
     options: InitializeSyncOptions,
-    keyManager: import('./encryption/index.js').KeyManager
+    upstreamResult: UpstreamStoreResult
 ): Promise<InitializeSyncResult> {
-    const { protonApi, uid, authProvider, conversationsConfig } = options;
+    const { authProvider, conversationsConfig } = options;
     const syncConfig = conversationsConfig.sync;
 
-    logger.info('Initializing upstream storage mode');
+    logger.info('Initializing upstream sync (store already initialized)');
 
     try {
-        // Dynamic import to avoid loading upstream modules when not needed
-        const { initializeUpstreamStore, UpstreamSyncService } = await import('./upstream/index.js');
-
-        // Get master key as base64 for upstream crypto layer
-        const masterKeyBase64 = keyManager.getMasterKeyBase64();
-
-        // Generate or use configured space ID
-        const spaceId = syncConfig.projectId ?? crypto.randomUUID();
-
-        // Initialize upstream store
-        const upstreamResult = await initializeUpstreamStore({
-            uid,
-            protonApi,
-            masterKey: masterKeyBase64,
-            spaceId,
-            storeConfig: {
-                maxConversationsInMemory: conversationsConfig.maxInMemory,
-            },
-        });
+        const { UpstreamSyncService } = await import('./upstream/index.js');
 
         // Create upstream sync service adapter
         const upstreamSyncService = new UpstreamSyncService({
             store: upstreamResult.store,
             dbApi: upstreamResult.dbApi,
-            spaceId,
+            spaceId: upstreamResult.spaceId,
         });
 
         // Fetch/create space via upstream sagas
@@ -296,9 +421,8 @@ async function initializeUpstreamSync(
             upstreamStore: upstreamResult,
         };
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const errorStack = error instanceof Error ? error.stack : undefined;
-        logger.error({ errorMessage, errorStack }, 'Failed to initialize upstream storage');
+        logger.error({ error }, 'Failed to initialize upstream sync');
         return { initialized: false };
     }
 }
+
