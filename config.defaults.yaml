@@ -71,7 +71,7 @@ conversations:
   maxInMemory: 100
 
   # Path for IndexedDB SQLite files (used when useUpstreamStorage is true)
-  databasePath: "sesions/"
+  databasePath: "sessions/"
 
   # WORKAROUND for clients without conversation_id support (e.g., Home Assistant).
   # Derives conversation ID from the `user` field in the request.
