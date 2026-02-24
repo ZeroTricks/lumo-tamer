@@ -1,14 +1,11 @@
 /**
- * Shim for json-stable-stringify to work with ESM
+ * Shim for json-stable-stringify
  *
- * The package doesn't export correctly for ESM default imports.
- * This shim uses createRequire for clean CJS interop.
+ * Re-exports the default export with proper typing.
  *
  * Source: json-stable-stringify package
  */
 
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
+import stableStringify from 'json-stable-stringify/index.js';
 
-const stableStringify: (obj: unknown, opts?: unknown) => string | undefined = require('json-stable-stringify');
-export default stableStringify;
+export default stableStringify as (obj: unknown, opts?: unknown) => string | undefined;

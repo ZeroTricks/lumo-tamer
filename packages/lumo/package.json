@@ -2,5 +2,9 @@
   "name": "lumo-node",
   "version": "0.0.0",
   "private": true,
-  "description": "Synced from ProtonMail/WebClients applications/lumo/src/app/ - DO NOT EDIT MANUALLY"
+  "type": "module",
+  "description": "Synced from ProtonMail/WebClients applications/lumo/src/app/ - DO NOT EDIT MANUALLY",
+  "exports": {
+    "./*": "./src/*"
+  }
 }

@@ -2,13 +2,12 @@
  * Shim for toposort to work with ESM
  *
  * The package doesn't export correctly for ESM default imports.
- * This shim uses createRequire for clean CJS interop.
+ * We re-export the actual implementation here.
  *
- * Source: toposort package
+ * Note: Import path uses 'toposort/index.js' to avoid tsc-alias
+ * rewriting it back to this shim (creating a cycle).
  */
 
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-
-const toposortFn: <T>(edges: Array<[T, T | undefined]>) => T[] = require('toposort');
-export default toposortFn;
+// @ts-ignore - CJS interop
+import toposortFn from 'toposort/index.js';
+export default toposortFn as <T>(edges: Array<[T, T | undefined]>) => T[];
