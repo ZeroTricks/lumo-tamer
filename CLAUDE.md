@@ -33,7 +33,7 @@ This project creates an OpenAI-compatible API on top of Proton's conversation ag
     - /v1/responses and /v1/chat/completions endpoints
     - API and CLI calls
   - Use config.ts, config.yaml and config.defaults.yaml to add configuration parameters. Don't put defaults in config.ts or other code; config.defaults.yaml is the single source of truth.
-  - Use src/logger.ts for logging. Use print() to force printing to stdout. Don't use console.log().
+  - Use src/logger.ts for logging. Use print() to force printing to stdout. Don't use console.log(). Log errors like this: logger.error({error}, "Can't do that").
 
   ## Testing:
   - Framework: Vitest. Run `npm test` (all) or `npm run test:unit` / `npm run test:integration`.
