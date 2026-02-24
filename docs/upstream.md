@@ -68,7 +68,7 @@ src/
 
 - **~40 files** synced unchanged from `applications/lumo/src/app/`
 - **3 files** synced unchanged from `packages/` (aesGcm.ts, hash.ts, mergeUint8Arrays.ts)
-- **2 patches** for minor Node.js adaptations
+- **4 patches** for Node.js adaptations (mostly IndexedDB transaction fixes)
 - **8 shims** in `lumo/` (local implementations)
 - **4 shims** in `proton/` (for `@proton/*` aliases)
 - **9 shims** in `shims/` (polyfills and library wrappers)
@@ -99,7 +99,9 @@ Pulled unchanged and optionally patched. See `sync.sh` for full list.
 | File | Patch | Description |
 |------|-------|-------------|
 | `keys.ts` | `keys.patch` | Export for Node.js (no webpack DefinePlugin) |
-| `redux/selectors.ts` | `selectors.patch` | Remove react-redux, @proton/account |
+| `redux/selectors.ts` | `redux-selectors.patch` | Remove react-redux, @proton/account |
+| `redux/sagas/index.ts` | `redux-sagas-index.patch` | Fix IDB transaction auto-commit in loadReduxFromIdb |
+| `indexedDb/db.ts` | `indexedDb-db.patch` | Fix IDB transaction auto-commit throughout DbApi |
 
 ### Shims in lumo/ (LUMO_SHIMS)
 
@@ -165,23 +167,43 @@ Patches in `packages/lumo/patches/` use DEP-3 format. The `series` file lists th
 
 ### Creating a Patch
 
-1. Sync upstream to get pristine file
-2. Make changes
-3. `diff -u file.orig file > patches/name.patch`
-4. Add DEP-3 headers (Description, Author, Origin)
-5. Add to `patches/series`
+Use the helper script:
+
+```bash
+scripts/upstream/create-patch.sh <file-path> "<description>"
+
+# Example:
+scripts/upstream/create-patch.sh indexedDb/db.ts "Fix transaction auto-commit"
+# Creates: packages/lumo/patches/indexedDb-db.patch
+```
+
+The patch name is derived from the file path (`indexedDb/db.ts` → `indexedDb-db.patch`).
+
+The script downloads the pristine upstream file, creates a diff with DEP-3 headers, and verifies it applies. After running:
+
+1. Edit the generated `.patch` file to improve the Description
+2. Add the patch name to `packages/lumo/patches/series`
 
 ### DEP-3 Format
 
 ```
 Description: Short summary
-Author: Name <email>
+ Additional lines indented with space.
+ .
+ Blank paragraph uses single period.
 Origin: vendor
-
 ---
+ path/to/file.ts | 10 ++++------
+ 1 file changed, 4 insertions(+), 6 deletions(-)
+
 diff --git a/path/to/file.ts b/path/to/file.ts
+--- a/path/to/file.ts
++++ b/path/to/file.ts
+@@ -1,5 +1,5 @@
 ...
 ```
+
+The `diff --git` line and `--- a/` prefix are required. Patches are applied with `patch -p1` which strips the `a/` prefix.
 
 See [DEP-3 spec](https://dep-team.pages.debian.net/deps/dep3/).
 
