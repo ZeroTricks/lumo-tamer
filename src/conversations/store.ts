@@ -11,7 +11,7 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../app/logger.js';
 import { deterministicUUID } from '../app/id-generator.js';
-import type { Turn } from '../lumo-client/types.js';
+import type { Turn, AssistantMessageData } from '../lumo-client/types.js';
 import {
     findNewMessages,
     hashMessage,
@@ -178,25 +178,23 @@ export class ConversationStore {
     }
 
     /**
-     * Append assistant response after LLM generation
+     * Append an assistant response to a conversation.
      *
      * @param id - Conversation ID
-     * @param content - Assistant's response content
-     * @param status - Message status (default: completed)
-     * @param semanticId - Optional semantic ID for deduplication (e.g., call_id for tool calls)
+     * @param messageData - Assistant message data (content, optional toolCall/toolResult)
+     * @param status - Message status (default: succeeded)
+     * @param semanticId - Optional semantic ID for deduplication
      * @returns The created message
-     * @todo Refactor to share code with appendMessages()
      */
     appendAssistantResponse(
         id: ConversationId,
-        content: string,
+        messageData: AssistantMessageData,
         status: 'succeeded' | 'failed' = 'succeeded',
         semanticId?: string
     ): Message {
         const state = this.getOrCreate(id);
         const now = Date.now();
 
-        // Get parent ID (last message)
         const parentId = state.messages.length > 0
             ? state.messages[state.messages.length - 1].id
             : undefined;
@@ -208,8 +206,10 @@ export class ConversationStore {
             role: 'assistant',
             parentId,
             status,
-            content,
-            semanticId: semanticId ?? hashMessage('assistant', content).slice(0, 16),
+            content: messageData.content,
+            toolCall: messageData.toolCall,
+            toolResult: messageData.toolResult,
+            semanticId: semanticId ?? hashMessage('assistant', messageData.content).slice(0, 16),
         };
 
         state.messages.push(message);
@@ -217,13 +217,14 @@ export class ConversationStore {
         state.metadata.updatedAt = now;
         state.status = 'completed';
 
-        // Track metric for new assistant message
         getMetrics()?.messagesTotal.inc({ role: 'assistant' });
 
         logger.debug({
             conversationId: id,
             messageId: message.id,
-            contentLength: content.length,
+            contentLength: messageData.content.length,
+            hasToolCall: !!messageData.toolCall,
+            hasToolResult: !!messageData.toolResult,
         }, 'Appended assistant response');
 
         return message;
@@ -251,7 +252,7 @@ export class ConversationStore {
                 name: tc.name,
                 arguments: tc.arguments,
             });
-            this.appendAssistantResponse(id, content, 'succeeded', tc.call_id);
+            this.appendAssistantResponse(id, { content }, 'succeeded', tc.call_id);
         }
     }
 
@@ -343,18 +344,7 @@ export class ConversationStore {
      * Convert conversation to Lumo Turn[] format for API call
      */
     toTurns(id: ConversationId): Turn[] {
-        const state = this.conversations.get(id);
-        if (!state) {
-            return [];
-        }
-
-        // Filter to user and assistant messages only
-        return state.messages
-            .filter(m => m.role === 'user' || m.role === 'assistant')
-            .map(m => ({
-                role: m.role as 'user' | 'assistant',
-                content: m.content,
-            }));
+        return this.getMessages(id).map(({role, content}) => ({role, content}));
     }
 
     /**

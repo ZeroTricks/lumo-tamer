@@ -93,55 +93,113 @@ describe('createAccumulatingToolProcessor', () => {
 });
 
 describe('persistAssistantTurn', () => {
-  function createMockDeps(): EndpointDependencies & { appendCalls: string[] } {
-    const appendCalls: string[] = [];
+  interface PersistedMessage {
+    content: string;
+    toolCall?: string;
+    toolResult?: string;
+  }
+
+  function createMockDeps(): EndpointDependencies & {
+    persistedMessages: PersistedMessage[];
+  } {
+    const persistedMessages: PersistedMessage[] = [];
     return {
-      appendCalls,
+      persistedMessages,
       queue: {} as any,
       lumoClient: {} as any,
       conversationStore: {
-        appendAssistantResponse: vi.fn((_id: string, content: string) => {
-          appendCalls.push(content);
-        }),
+        appendAssistantResponse: vi.fn(
+          (_id: string, messageData: { content: string; toolCall?: string; toolResult?: string }) => {
+            persistedMessages.push(messageData);
+          }
+        ),
       } as any,
     };
   }
 
   it('persists content when no tool calls', () => {
     const deps = createMockDeps();
-    persistAssistantTurn(deps, 'conv-123', 'Hello world', undefined);
+    persistAssistantTurn(deps, 'conv-123', { content: 'Hello world' }, undefined);
 
-    expect(deps.appendCalls).toEqual(['Hello world']);
+    expect(deps.persistedMessages).toHaveLength(1);
+    expect(deps.persistedMessages[0].content).toBe('Hello world');
+    expect(deps.persistedMessages[0].toolCall).toBeUndefined();
   });
 
-  it('skips persistence when tool calls are present', () => {
+  it('skips persistence when custom tool calls are present', () => {
     const deps = createMockDeps();
     const toolCalls = [
       { name: 'search', arguments: '{}', call_id: 'call-123' },
     ];
 
-    persistAssistantTurn(deps, 'conv-123', 'Some text', toolCalls);
+    persistAssistantTurn(deps, 'conv-123', { content: 'Some text' }, toolCalls);
 
     // Should NOT persist anything - client will send it back
-    expect(deps.appendCalls).toEqual([]);
+    expect(deps.persistedMessages).toEqual([]);
   });
 
-  it('skips persistence when multiple tool calls are present', () => {
+  it('skips persistence when multiple custom tool calls are present', () => {
     const deps = createMockDeps();
     const toolCalls = [
       { name: 'search', arguments: '{"q":"test"}', call_id: 'call-1' },
       { name: 'weather', arguments: '{"loc":"Paris"}', call_id: 'call-2' },
     ];
 
-    persistAssistantTurn(deps, 'conv-123', 'Let me check that', toolCalls);
+    persistAssistantTurn(deps, 'conv-123', { content: 'Let me check that' }, toolCalls);
 
-    expect(deps.appendCalls).toEqual([]);
+    expect(deps.persistedMessages).toEqual([]);
   });
 
   it('does nothing for stateless requests (no conversationId)', () => {
     const deps = createMockDeps();
-    persistAssistantTurn(deps, undefined, 'Hello', undefined);
+    persistAssistantTurn(deps, undefined, { content: 'Hello' }, undefined);
 
-    expect(deps.appendCalls).toEqual([]);
+    expect(deps.persistedMessages).toEqual([]);
+  });
+
+  it('persists native tool call with tool data', () => {
+    const deps = createMockDeps();
+    const message = {
+      content: 'Based on search results...',
+      toolCall: '{"name":"web_search","arguments":{"query":"test search"}}',
+      toolResult: '{"results":[{"title":"Result"}]}',
+    };
+
+    persistAssistantTurn(deps, 'conv-123', message, undefined);
+
+    expect(deps.persistedMessages).toHaveLength(1);
+    expect(deps.persistedMessages[0].content).toBe('Based on search results...');
+    expect(deps.persistedMessages[0].toolCall).toBe('{"name":"web_search","arguments":{"query":"test search"}}');
+    expect(deps.persistedMessages[0].toolResult).toBe('{"results":[{"title":"Result"}]}');
+  });
+
+  it('persists native tool call without tool result', () => {
+    const deps = createMockDeps();
+    const message = {
+      content: 'Weather info...',
+      toolCall: '{"name":"weather","arguments":{"location":{"city":"Paris"}}}',
+      toolResult: undefined,
+    };
+
+    persistAssistantTurn(deps, 'conv-123', message, undefined);
+
+    expect(deps.persistedMessages).toHaveLength(1);
+    expect(deps.persistedMessages[0].toolCall).toBe('{"name":"weather","arguments":{"location":{"city":"Paris"}}}');
+    expect(deps.persistedMessages[0].toolResult).toBeUndefined();
+  });
+
+  it('prioritizes custom tool calls over native tool calls', () => {
+    const deps = createMockDeps();
+    const customToolCalls = [{ name: 'custom_tool', arguments: '{}', call_id: 'call-1' }];
+    const message = {
+      content: 'Text',
+      toolCall: '{"name":"web_search","arguments":{"query":"test"}}',
+      toolResult: '{}',
+    };
+
+    // Both custom and native present - custom takes precedence (skip persistence)
+    persistAssistantTurn(deps, 'conv-123', message, customToolCalls);
+
+    expect(deps.persistedMessages).toEqual([]);
   });
 });

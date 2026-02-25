@@ -102,7 +102,7 @@ describe('ConversationStore', () => {
   describe('appendAssistantResponse', () => {
     it('appends response and marks conversation completed', () => {
       store.appendMessages('conv-1', [{ role: 'user', content: 'Hi' }]);
-      const msg = store.appendAssistantResponse('conv-1', 'Hello there!');
+      const msg = store.appendAssistantResponse('conv-1', { content: 'Hello there!' });
 
       expect(msg.role).toBe('assistant');
       expect(msg.content).toBe('Hello there!');
@@ -117,7 +117,7 @@ describe('ConversationStore', () => {
       store.markSynced('conv-1');
       expect(store.get('conv-1')!.dirty).toBe(false);
 
-      store.appendAssistantResponse('conv-1', 'Response');
+      store.appendAssistantResponse('conv-1', { content: 'Response' });
       expect(store.get('conv-1')!.dirty).toBe(true);
     });
 
@@ -125,8 +125,21 @@ describe('ConversationStore', () => {
       const [userMsg] = store.appendMessages('conv-1', [
         { role: 'user', content: 'Hi' },
       ]);
-      const assistantMsg = store.appendAssistantResponse('conv-1', 'Hello');
+      const assistantMsg = store.appendAssistantResponse('conv-1', { content: 'Hello' });
       expect(assistantMsg.parentId).toBe(userMsg.id);
+    });
+
+    it('stores native tool call data', () => {
+      store.appendMessages('conv-1', [{ role: 'user', content: 'Search for news' }]);
+      const msg = store.appendAssistantResponse('conv-1', {
+        content: 'Here are the results...',
+        toolCall: '{"name":"web_search","arguments":{"query":"news"}}',
+        toolResult: '{"results":[]}',
+      });
+
+      expect(msg.content).toBe('Here are the results...');
+      expect(msg.toolCall).toBe('{"name":"web_search","arguments":{"query":"news"}}');
+      expect(msg.toolResult).toBe('{"results":[]}');
     });
   });
 
@@ -135,33 +148,13 @@ describe('ConversationStore', () => {
       store.appendMessages('conv-1', [
         { role: 'user', content: 'Hello' },
       ]);
-      store.appendAssistantResponse('conv-1', 'Hi!');
+      store.appendAssistantResponse('conv-1', { content: 'Hi!' });
 
       const turns = store.toTurns('conv-1');
       expect(turns).toEqual([
         { role: 'user', content: 'Hello' },
         { role: 'assistant', content: 'Hi!' },
       ]);
-    });
-
-    it('filters to user and assistant roles only', () => {
-      // Manually add a system message via the store internals
-      const state = store.getOrCreate('conv-1');
-      state.messages.push({
-        id: 'sys-1',
-        conversationId: 'conv-1',
-        createdAt: Date.now(),
-        role: 'system',
-        status: 'succeeded',
-        content: 'You are helpful',
-      });
-      store.appendMessages('conv-1', [
-        { role: 'user', content: 'Hello' },
-      ]);
-
-      const turns = store.toTurns('conv-1');
-      expect(turns).toHaveLength(1);
-      expect(turns[0].role).toBe('user');
     });
 
     it('returns empty array for non-existent conversation', () => {

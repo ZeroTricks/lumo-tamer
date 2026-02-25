@@ -2,5 +2,17 @@
  * Lumo client exports
  */
 
-export { LumoClient, type LumoClientOptions, type ChatResult } from './client.js';
-export type { ProtonApi, ProtonApiOptions, Turn, ToolName, CachedUserKey, CachedMasterKey } from './types.js';
+export { LumoClient } from './client.js';
+export type {
+    ProtonApi,
+    ProtonApiOptions,
+    Turn,
+    ToolName,
+    CachedUserKey,
+    CachedMasterKey,
+    ParsedToolCall,
+    NativeToolData,
+    AssistantMessageData,
+    LumoClientOptions,
+    ChatResult,
+} from './types.js';

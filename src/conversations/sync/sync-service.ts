@@ -1,24 +1,11 @@
 /**
  * Sync Service for conversation persistence
  *
- * Handles:
- * - Space creation on first conversation (lazy initialization)
- * - Encrypting and syncing dirty conversations to the server
- * - Message encryption with proper AEAD
+ * Orchestrates syncing conversations to the Lumo server.
+ * Delegates to SpaceManager for space lifecycle and EncryptionCodec for encryption.
  */
 
-import { randomUUID } from 'crypto';
-import stableStringify from 'json-stable-stringify';
 import { logger } from '../../app/logger.js';
-import {
-    generateKey,
-    importKey,
-    exportKey,
-    wrapKey,
-    encryptData,
-    decryptData,
-    deriveKey,
-} from '../../proton-shims/aesGcm.js';
 import {
     createLumoApi,
     type LumoApi,
@@ -28,72 +15,14 @@ import {
 import type { ProtonApi } from '../../lumo-client/types.js';
 import { getConversationStore } from '../store.js';
 import type { KeyManager } from '../encryption/key-manager.js';
-import type { ConversationState, Message, SpaceId, RemoteId, MessageRole, MessageStatus } from '../types.js';
+import type { ConversationState, Message, SpaceId, RemoteId, MessageRole, MessageStatus, MessagePrivate } from '../types.js';
+import { SpaceManager } from './space-manager.js';
 
-// HKDF parameters matching Proton's implementation
-const SPACE_KEY_DERIVATION_SALT = Buffer.from('Xd6V94/+5BmLAfc67xIBZcjsBPimm9/j02kHPI7Vsuc=', 'base64');
-const SPACE_DEK_CONTEXT = new TextEncoder().encode('dek.space.lumo');
-
-/**
- * Space private data (encrypted)
- * Matches Lumo WebClient's ProjectSpace type
- */
-interface SpacePrivate {
-    isProject: true;
-    projectName?: string;
-    projectInstructions?: string;
-    projectIcon?: string;
-}
-
-/**
- * Conversation private data (encrypted)
- */
-interface ConversationPrivate {
-    title: string;
-}
-
-/**
- * Message private data (encrypted)
- */
-interface MessagePrivate {
-    content?: string;
-    context?: string;
-    toolCall?: string;
-    toolResult?: string;
-}
-
-/**
- * ID mapping for local to remote
- */
-interface IdMapping {
-    spaces: Map<SpaceId, RemoteId>;
-    conversations: Map<string, RemoteId>;
-    messages: Map<string, RemoteId>;
-}
-
-export interface SyncServiceConfig {
-    protonApi: ProtonApi;
-    keyManager: KeyManager;
-    /** User ID for LumoApi authentication */
-    uid: string;
-    /** Space name to search/create (used if spaceId not set) */
-    spaceName?: string;
-    /** Space UUID to use directly (bypasses name-matching) */
-    spaceId?: string;
-    /** If true, sync all message types to server; if false, only user/assistant */
-    includeSystemMessages?: boolean;
-}
-
-/**
- * Sync Service
- *
- * Manages server-side persistence for conversations.
- */
 // Role mapping: our internal roles to API integer values
 const RoleToInt: Record<MessageRole, number> = {
     user: RoleInt.User,
     assistant: RoleInt.Assistant,
-    system: RoleInt.User,  // Treat system as user for storage
+    system: RoleInt.User,
     tool_call: RoleInt.Assistant,
     tool_result: RoleInt.User,
 };
@@ -104,25 +33,50 @@ const StatusToInt: Record<MessageStatus, number> = {
     succeeded: StatusInt.Succeeded,
 };
 
+export interface SyncServiceConfig {
+    protonApi: ProtonApi;
+    keyManager: KeyManager;
+    uid: string;
+    spaceName?: string;
+    spaceId?: string;
+    includeSystemMessages?: boolean;
+}
+
+/**
+ * Find the synced parent message in the chain
+ *
+ * Walks up the parent chain until finding a message that was synced to the server.
+ * This handles filtered messages (e.g., system messages) by finding their synced ancestors.
+ */
+function findSyncedParent(
+    messageParentId: string | undefined,
+    messageMap: Map<string, Message>,
+    messageIdMap: Map<string, RemoteId>
+): { effectiveParentId?: string; parentRemoteId?: RemoteId } {
+    let effectiveParentId = messageParentId;
+    while (effectiveParentId) {
+        const parentRemoteId = messageIdMap.get(effectiveParentId);
+        if (parentRemoteId) {
+            return { effectiveParentId, parentRemoteId };
+        }
+        effectiveParentId = messageMap.get(effectiveParentId)?.parentId;
+    }
+    return {};
+}
+
+/**
+ * Sync Service
+ *
+ * Manages server-side persistence for conversations.
+ */
 export class SyncService {
     private lumoApi: LumoApi;
     private keyManager: KeyManager;
-    private spaceName?: string;
-    private configuredSpaceId?: string;
+    private spaceManager: SpaceManager;
     private includeSystemMessages: boolean;
 
-    // Current space info
-    private spaceId?: SpaceId;
-    private spaceRemoteId?: RemoteId;
-    private spaceKey?: CryptoKey;
-    private dataEncryptionKey?: CryptoKey;
-
-    // ID mappings
-    private idMap: IdMapping = {
-        spaces: new Map(),
-        conversations: new Map(),
-        messages: new Map(),
-    };
+    // Message ID mapping (local -> remote)
+    private messageIdMap = new Map<string, RemoteId>();
 
     constructor(config: SyncServiceConfig) {
         if (!config.spaceId && !config.spaceName) {
@@ -130,240 +84,38 @@ export class SyncService {
         }
         this.lumoApi = createLumoApi(config.protonApi, config.uid);
         this.keyManager = config.keyManager;
-        this.spaceName = config.spaceName;
-        this.configuredSpaceId = config.spaceId;
         this.includeSystemMessages = config.includeSystemMessages ?? false;
+
+        this.spaceManager = new SpaceManager({
+            lumoApi: this.lumoApi,
+            keyManager: config.keyManager,
+            spaceName: config.spaceName,
+            configuredSpaceId: config.spaceId,
+        });
     }
 
     /**
      * Ensure a space exists, creating one if needed
-     * Called lazily on first sync
-     *
-     * Matching logic:
-     * 1. If spaceId is configured, use that space directly (by UUID)
-     * 2. Otherwise, find a space with matching spaceName (projectName)
-     * 3. If no match found, create a new space
      */
     async getOrCreateSpace(): Promise<{ spaceId: SpaceId; remoteId: RemoteId }> {
-        // Already have a space
-        if (this.spaceId && this.spaceRemoteId && this.spaceKey) {
-            return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
-        }
-
-        // Check if we already have a space on the server
-        const searchCriteria = this.configuredSpaceId
-            ? { spaceId: this.configuredSpaceId }
-            : { spaceName: this.spaceName };
-        logger.info(searchCriteria, 'Checking for existing project...');
-        const listResult = await this.lumoApi.listSpaces();
-
-        // Convert spaces record to array for iteration
-        const existingSpaces = Object.values(listResult.spaces);
-
-        // Log available spaces
-        const spacesWithData = existingSpaces.filter(s => s.encrypted);
-        logger.info({
-            totalSpaces: existingSpaces.length,
-            spacesWithEncryptedData: spacesWithData.length,
-            spaceTags: existingSpaces.map(s => s.id),
-        }, 'Available projects');
-
-        // If spaceId is configured, find that specific space by UUID
-        if (this.configuredSpaceId) {
-            const space = existingSpaces.find(s => s.id === this.configuredSpaceId);
-            if (space) {
-                try {
-                    const spaceKey = await this.keyManager.getSpaceKey(space.id, space.wrappedSpaceKey);
-                    const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
-
-                    this.spaceId = space.id;
-                    this.spaceRemoteId = space.remoteId;
-                    this.spaceKey = spaceKey;
-                    this.dataEncryptionKey = dataEncryptionKey;
-                    this.idMap.spaces.set(space.id, space.remoteId);
-
-                    logger.info(`Using project by id ${space.id}: ${space.remoteId}`);
-
-                    return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
-                } catch (error) {
-                    logger.error({ spaceId: this.configuredSpaceId, error }, 'Failed to decrypt configured project');
-                    throw new Error(`Cannot decrypt configured project ${this.configuredSpaceId}`);
-                }
-            } else {
-                logger.error({ spaceId: this.configuredSpaceId }, 'Configured project not found');
-                throw new Error(`Configured project ${this.configuredSpaceId} not found on server`);
-            }
-        }
-
-        // First pass: look for a space with matching project name
-        logger.info(`Looking up project by name "${this.spaceName}" (among ${existingSpaces.length} projects)`);
-        for (const space of existingSpaces) {
-            if (!space.id) continue;
-
-            try {
-                const spaceKey = await this.keyManager.getSpaceKey(space.id, space.wrappedSpaceKey);
-                const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
-
-                const encryptedData = typeof space.encrypted === 'string' ? space.encrypted : undefined;
-                logger.debug({
-                    spaceTag: space.id,
-                    hasEncrypted: !!encryptedData,
-                    encryptedLength: encryptedData?.length ?? 0,
-                }, 'Fetching space');
-
-                // Try to decrypt and check project name
-                if (encryptedData) {
-                    const spacePrivate = await this.decryptSpacePrivate(encryptedData, space.id, dataEncryptionKey);
-
-                    logger.debug({
-                        spaceTag: space.id,
-                        projectName: spacePrivate?.projectName,
-                        lookingFor: this.spaceName,
-                        hasEncrypted: !!encryptedData,
-                        decryptedOk: !!spacePrivate,
-                    }, 'Checking project name match');
-
-                    if (spacePrivate && spacePrivate.projectName === this.spaceName) {
-                        this.spaceId = space.id;
-                        this.spaceRemoteId = space.remoteId;
-                        this.spaceKey = spaceKey;
-                        this.dataEncryptionKey = dataEncryptionKey;
-                        this.idMap.spaces.set(space.id, space.remoteId);
-
-                        logger.info({
-                            spaceId: space.id,
-                            remoteId: space.remoteId,
-                            projectName: spacePrivate.projectName,
-                        }, 'Found existing project');
-
-                        return { spaceId: this.spaceId, remoteId: this.spaceRemoteId };
-                    }
-                }
-            } catch (error) {
-                // Can't decrypt this space, try next
-                logger.debug({ spaceTag: space.id, error }, 'Could not decrypt space');
-                continue;
-            }
-        }
-
-        // No matching space found, create a new one
-        if (!this.spaceName) {
-            // This shouldn't happen - constructor validates that spaceId or spaceName is set
-            throw new Error('Cannot create project: no projectName configured');
-        }
-        logger.info({ spaceName: this.spaceName }, 'Creating new project...');
-        return await this.createSpace();
+        return this.spaceManager.getOrCreateSpace();
     }
 
     /**
-     * Create a new space on the server
+     * Ensure existing conversations are loaded from server
      */
-    private async createSpace(): Promise<{ spaceId: SpaceId; remoteId: RemoteId }> {
-        const localId = randomUUID();
-
-        // Generate a new space key and get it cached in KeyManager
-        // KeyManager.getSpaceKey without wrappedKey will generate a new key
-        const spaceKey = await this.keyManager.getSpaceKey(localId);
-
-        // Wrap the space key with the master key
-        const wrappedSpaceKey = await this.keyManager.wrapSpaceKey(localId);
-
-        // Derive the data encryption key for encrypting space metadata
-        const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
-
-        // Encrypt space private data (project name, etc.)
-        const spacePrivate: SpacePrivate = {
-            isProject: true,
-            projectName: this.spaceName,
-        };
-        const encryptedPrivate = await this.encryptSpacePrivate(spacePrivate, localId, dataEncryptionKey);
-
-        const remoteId = await this.lumoApi.postSpace({
-            SpaceKey: wrappedSpaceKey,
-            SpaceTag: localId,
-            Encrypted: encryptedPrivate,
-        }, 'background');
-
-        if (!remoteId) {
-            throw new Error('Failed to create project - no remote ID returned');
-        }
-
-        // Cache everything locally
-        this.spaceId = localId;
-        this.spaceRemoteId = remoteId;
-        this.spaceKey = spaceKey;
-        this.dataEncryptionKey = dataEncryptionKey;
-        this.idMap.spaces.set(localId, remoteId);
-
-        logger.info({
-            spaceId: localId,
-            remoteId,
-            projectName: this.spaceName,
-        }, 'Created new project');
-
-        return { spaceId: localId, remoteId };
-    }
-
-    /**
-     * Derive data encryption key from space key using HKDF
-     */
-    private async deriveDataEncryptionKey(spaceKey: CryptoKey): Promise<CryptoKey> {
-        const keyBytes = await exportKey(spaceKey);
-        return deriveKey(keyBytes, new Uint8Array(SPACE_KEY_DERIVATION_SALT), SPACE_DEK_CONTEXT);
-    }
-
-    /**
-     * Load existing conversations from server to populate idMap
-     * Prevents 409 errors when conversations already exist from previous sessions
-     */
-    private async loadExistingConversations(): Promise<void> {
-        if (!this.spaceRemoteId || !this.spaceId) return;
-
-        try {
-            const spaceData = await this.lumoApi.getSpace(this.spaceRemoteId);
-            if (!spaceData) {
-                logger.warn({ spaceRemoteId: this.spaceRemoteId }, 'Project not found on server');
-                return;
-            }
-
-            for (const conv of spaceData.conversations ?? []) {
-                // id is our local conversationId (was ConversationTag in old API)
-                this.idMap.conversations.set(conv.id, conv.remoteId);
-
-                // Load messages for this conversation
-                try {
-                    const convData = await this.lumoApi.getConversation(conv.remoteId, this.spaceId);
-                    if (convData) {
-                        for (const msg of convData.messages ?? []) {
-                            this.idMap.messages.set(msg.id, msg.remoteId);
-                        }
-                    }
-                } catch (error) {
-                    logger.warn({ conversationId: conv.id, error }, 'Failed to load messages for conversation');
-                }
-            }
-
-            logger.info({
-                conversations: this.idMap.conversations.size,
-                messages: this.idMap.messages.size,
-            }, 'Loaded existing conversations from server');
-        } catch (error) {
-            logger.error({ error }, 'Failed to load existing conversations');
-            // Don't throw - idMap will just be empty and we'll get 409 errors as before
-        }
+    async ensureExistingConversationsLoaded(): Promise<void> {
+        return this.spaceManager.ensureExistingConversationsLoaded();
     }
 
     /**
      * Sync all dirty conversations to the server
-     *
-     * @returns Number of conversations synced
      */
     async sync(): Promise<number> {
         if (!this.keyManager.isInitialized()) {
             throw new Error('KeyManager not initialized - cannot sync without encryption keys');
         }
 
-        // Ensure we have a space
         const { remoteId: spaceRemoteId } = await this.getOrCreateSpace();
 
         const store = getConversationStore();
@@ -396,9 +148,6 @@ export class SyncService {
 
     /**
      * Sync a single conversation by ID
-     *
-     * @param conversationId - The conversation ID to sync
-     * @returns true if synced, false if not found or not dirty
      */
     async syncById(conversationId: string): Promise<boolean> {
         if (!this.keyManager.isInitialized()) {
@@ -418,7 +167,6 @@ export class SyncService {
             return true;
         }
 
-        // Ensure we have a space
         const { remoteId: spaceRemoteId } = await this.getOrCreateSpace();
 
         // Mark as synced early to prevent auto-sync from picking it up concurrently
@@ -431,7 +179,6 @@ export class SyncService {
             logger.info({ conversationId }, 'Conversation synced successfully');
             return true;
         } catch (error) {
-            // Re-mark as dirty so it can be retried
             store.markDirtyById(conversationId);
             logger.error({ conversationId, error }, 'Failed to sync conversation');
             throw error;
@@ -446,16 +193,18 @@ export class SyncService {
         spaceRemoteId: RemoteId
     ): Promise<void> {
         const conversationId = conversation.metadata.id;
+        const spaceId = this.spaceManager.spaceId!;
+        const codec = this.spaceManager.codec!;
 
-        // Check if conversation already exists on server
-        let conversationRemoteId = this.idMap.conversations.get(conversationId);
+        let conversationRemoteId = this.spaceManager.getConversationRemoteId(conversationId);
 
         if (!conversationRemoteId) {
             // Create new conversation
-            // Note: Use this.spaceId (local space ID) for AD, not conversation.metadata.spaceId
-            const encryptedPrivate = await this.encryptConversationPrivate({
-                title: conversation.title,
-            }, conversationId, this.spaceId!);
+            const encryptedPrivate = await codec.encryptConversation(
+                { title: conversation.title },
+                conversationId,
+                spaceId
+            );
 
             const newRemoteId = await this.lumoApi.postConversation({
                 SpaceID: spaceRemoteId,
@@ -468,14 +217,15 @@ export class SyncService {
                 throw new Error(`Failed to create conversation ${conversationId}`);
             }
             conversationRemoteId = newRemoteId;
-
-            this.idMap.conversations.set(conversationId, conversationRemoteId);
+            this.spaceManager.setConversationRemoteId(conversationId, conversationRemoteId);
             logger.debug({ conversationId, remoteId: conversationRemoteId }, 'Created conversation on server');
         } else {
             // Update existing conversation
-            const encryptedPrivate = await this.encryptConversationPrivate({
-                title: conversation.title,
-            }, conversationId, this.spaceId!);
+            const encryptedPrivate = await codec.encryptConversation(
+                { title: conversation.title },
+                conversationId,
+                spaceId
+            );
 
             await this.lumoApi.putConversation({
                 ID: conversationRemoteId,
@@ -487,12 +237,11 @@ export class SyncService {
             logger.debug({ conversationId, remoteId: conversationRemoteId }, 'Updated conversation on server');
         }
 
-        // Sync messages (filter based on includeSystemMessages config)
+        // Sync messages
         const messagesToSync = this.includeSystemMessages
             ? conversation.messages
             : conversation.messages.filter(m => m.role === 'user' || m.role === 'assistant');
 
-        // Create a map for quick lookup of messages by ID (for parent chain walking)
         const messageMap = new Map(conversation.messages.map(m => [m.id, m]));
 
         for (const message of messagesToSync) {
@@ -508,49 +257,40 @@ export class SyncService {
         conversationRemoteId: RemoteId,
         messageMap: Map<string, Message>
     ): Promise<void> {
-        // Check if message already exists on server
-        if (this.idMap.messages.has(message.id)) {
-            // Messages are immutable, skip if already synced
+        // Skip if already synced (messages are immutable)
+        if (this.messageIdMap.has(message.id)) {
             return;
         }
 
-        // For non-user/assistant roles, prefix content with role type for clarity in Proton UI
+        const codec = this.spaceManager.codec!;
+
+        // Prefix non-user/assistant content with role for clarity in Proton UI
         let contentToStore = message.content;
         if (message.role !== 'user' && message.role !== 'assistant') {
             contentToStore = `[${message.role}]\n${message.content}`;
         }
 
-        // Find the parent message that was actually synced to the server
-        // Walk up the parent chain until we find one that exists in idMap
-        let effectiveParentId: string | undefined = message.parentId;
-        let parentRemoteId: string | undefined;
-        while (effectiveParentId) {
-            parentRemoteId = this.idMap.messages.get(effectiveParentId);
-            if (parentRemoteId) {
-                break; // Found a synced parent
-            }
-            // Parent not synced, look for its parent (it was filtered out)
-            const parentMessage = messageMap.get(effectiveParentId);
-            if (parentMessage) {
-                effectiveParentId = parentMessage.parentId;
-            } else {
-                // Parent not found at all, give up
-                effectiveParentId = undefined;
-            }
-        }
+        // Find the synced parent (walk up chain if parent was filtered)
+        const { effectiveParentId, parentRemoteId } = findSyncedParent(
+            message.parentId,
+            messageMap,
+            this.messageIdMap
+        );
 
-        const encryptedPrivate = await this.encryptMessagePrivate({
+        const messagePrivate: MessagePrivate = {
             content: contentToStore,
             context: message.context,
             toolCall: message.toolCall,
             toolResult: message.toolResult,
-        }, message, effectiveParentId);
+        };
+
+        const encryptedPrivate = await codec.encryptMessage(messagePrivate, message, effectiveParentId);
 
         const remoteId = await this.lumoApi.postMessage({
             ConversationID: conversationRemoteId,
             Role: RoleToInt[message.role] ?? RoleInt.User,
             ParentID: parentRemoteId,
-            ParentId: parentRemoteId,  // Duplicate for buggy backend (lowercase 'd')
+            ParentId: parentRemoteId,  // Duplicate for buggy backend
             Status: StatusToInt[message.status ?? 'succeeded'],
             MessageTag: message.id,
             Encrypted: encryptedPrivate,
@@ -560,143 +300,116 @@ export class SyncService {
             throw new Error(`Failed to create message ${message.id}`);
         }
 
-        this.idMap.messages.set(message.id, remoteId);
+        this.messageIdMap.set(message.id, remoteId);
         logger.debug({ messageId: message.id, remoteId }, 'Created message on server');
     }
 
     /**
-     * Encrypt conversation private data
-     *
-     * AD format must match Lumo WebClient (json-stable-stringify with alphabetically sorted keys):
-     * {"app":"lumo","id":"<conversationId>","spaceId":"<spaceId>","type":"conversation"}
+     * Load a single conversation from the server by local ID
      */
-    private async encryptConversationPrivate(
-        data: ConversationPrivate,
-        conversationId: string,
-        spaceId: string
-    ): Promise<string> {
-        if (!this.dataEncryptionKey) {
-            throw new Error('Data encryption key not initialized');
+    async loadExistingConversation(localId: string): Promise<string | undefined> {
+        if (!this.keyManager.isInitialized()) {
+            throw new Error('KeyManager not initialized - cannot load without encryption keys');
         }
 
-        const json = JSON.stringify(data);
-        const plaintext = new TextEncoder().encode(json);
-        // AD must be alphabetically sorted JSON (matching json-stable-stringify)
-        const adString = stableStringify({
-            app: 'lumo',
-            type: 'conversation',
-            id: conversationId,
-            spaceId: spaceId,
-        });
-        logger.debug({ adString, conversationId, spaceId }, 'Encrypting conversation with AD');
-        const ad = new TextEncoder().encode(adString);
+        await this.getOrCreateSpace();
 
-        const encrypted = await encryptData(this.dataEncryptionKey, plaintext, ad);
-        return encrypted.toBase64();
-    }
-
-    /**
-     * Encrypt message private data
-     *
-     * AD format must match Lumo WebClient (json-stable-stringify with alphabetically sorted keys):
-     * {"app":"lumo","conversationId":"...","id":"...","parentId":"...","role":"...","type":"message"}
-     *
-     * IMPORTANT: The role in AD must be the mapped role (user/assistant) that matches what
-     * the WebClient will reconstruct from the Role integer field, NOT our internal role names.
-     */
-    private async encryptMessagePrivate(
-        data: MessagePrivate,
-        message: Message,
-        effectiveParentId?: string
-    ): Promise<string> {
-        if (!this.dataEncryptionKey) {
-            throw new Error('Data encryption key not initialized');
+        const spaceId = this.spaceManager.spaceId;
+        const codec = this.spaceManager.codec;
+        if (!spaceId || !codec) {
+            throw new Error('Space not initialized - cannot decrypt conversation');
         }
 
-        // Map our internal role to the role the WebClient will use for AD reconstruction
-        // WebClient uses IntToRole[Role] where Role is what we send to the API
-        const roleInt = RoleToInt[message.role as keyof typeof RoleToInt] ?? 1;
-        const adRole = roleInt === 2 ? 'assistant' : 'user';
+        await this.ensureExistingConversationsLoaded();
 
-        const json = JSON.stringify(data);
-        const plaintext = new TextEncoder().encode(json);
-        // AD must be alphabetically sorted JSON (matching json-stable-stringify)
-        // Use effectiveParentId (the parent that was actually synced) for AD
-        // Use adRole (mapped to user/assistant) to match WebClient's AD reconstruction
-        const adString = stableStringify({
-            app: 'lumo',
-            type: 'message',
-            id: message.id,
-            role: adRole,
-            parentId: effectiveParentId,
-            conversationId: message.conversationId,
-        });
-        logger.debug({ adString, messageId: message.id }, 'Encrypting message with AD');
-        const ad = new TextEncoder().encode(adString);
+        const remoteId = this.spaceManager.getConversationRemoteId(localId);
+        if (!remoteId) {
+            logger.warn({ localId }, 'Conversation not found in project');
+            return undefined;
+        }
 
-        const encrypted = await encryptData(this.dataEncryptionKey, plaintext, ad);
-        return encrypted.toBase64();
-    }
-
-    /**
-     * Encrypt space private data
-     *
-     * AD format must match Lumo WebClient (json-stable-stringify with alphabetically sorted keys):
-     * {"app":"lumo","id":"<spaceId>","type":"space"}
-     */
-    private async encryptSpacePrivate(
-        data: SpacePrivate,
-        spaceId: string,
-        dataEncryptionKey: CryptoKey
-    ): Promise<string> {
-        const json = JSON.stringify(data);
-        const plaintext = new TextEncoder().encode(json);
-        // AD must be alphabetically sorted JSON (matching json-stable-stringify)
-        const adString = stableStringify({
-            app: 'lumo',
-            type: 'space',
-            id: spaceId,
-        });
-        logger.debug({ adString, spaceId }, 'Encrypting space with AD');
-        const ad = new TextEncoder().encode(adString);
-
-        const encrypted = await encryptData(dataEncryptionKey, plaintext, ad);
-        return encrypted.toBase64();
-    }
-
-    /**
-     * Decrypt space private data
-     *
-     * AD format must match Lumo WebClient (json-stable-stringify with alphabetically sorted keys):
-     * {"app":"lumo","id":"<spaceId>","type":"space"}
-     */
-    private async decryptSpacePrivate(
-        encryptedBase64: string,
-        spaceId: string,
-        dataEncryptionKey: CryptoKey
-    ): Promise<SpacePrivate | null> {
         try {
-            const encrypted = Buffer.from(encryptedBase64, 'base64');
-            // AD must be alphabetically sorted JSON (matching json-stable-stringify)
-            const adString = stableStringify({
-                app: 'lumo',
-                type: 'space',
-                id: spaceId,
-            });
-            logger.debug({
-                adString,
-                spaceId,
-                encryptedLength: encrypted.length,
-            }, 'Attempting to decrypt space private data');
-            const ad = new TextEncoder().encode(adString);
+            const convData = await this.lumoApi.getConversation(remoteId, spaceId);
+            if (!convData?.conversation) {
+                logger.warn({ localId, remoteId }, 'Conversation not found on server');
+                return undefined;
+            }
 
-            const decrypted = await decryptData(dataEncryptionKey, new Uint8Array(encrypted), ad);
-            const json = new TextDecoder().decode(decrypted);
-            logger.debug({ spaceId, json }, 'Successfully decrypted space private data');
-            return JSON.parse(json) as SpacePrivate;
+            const conv = convData.conversation;
+            if ('deleted' in conv && conv.deleted) {
+                logger.warn({ localId }, 'Conversation is deleted');
+                return undefined;
+            }
+
+            // Decrypt title
+            let title = 'Untitled';
+            if (conv.encrypted && typeof conv.encrypted === 'string') {
+                const decryptedPrivate = await codec.decryptConversation(conv.encrypted, localId, spaceId);
+                if (decryptedPrivate?.title) {
+                    title = decryptedPrivate.title;
+                }
+            }
+
+            // Create/update in store
+            const store = getConversationStore();
+            const state = store.getOrCreate(localId);
+            state.title = title;
+            state.metadata.starred = conv.starred ?? false;
+            state.metadata.createdAt = new Date(conv.createdAt).getTime();
+            state.metadata.spaceId = spaceId;
+            state.remoteId = remoteId;
+            state.dirty = false;
+            state.messages = [];
+
+            // Load messages
+            for (const msg of convData.messages ?? []) {
+                this.messageIdMap.set(msg.id, msg.remoteId);
+
+                const fullMsg = await this.lumoApi.getMessage(
+                    msg.remoteId,
+                    localId,
+                    msg.parentId,
+                    remoteId
+                );
+
+                let messagePrivate: MessagePrivate | null = null;
+                if (fullMsg?.encrypted && typeof fullMsg.encrypted === 'string') {
+                    messagePrivate = await codec.decryptMessage(
+                        fullMsg.encrypted,
+                        msg.id,
+                        localId,
+                        msg.role,
+                        msg.parentId
+                    );
+                }
+
+                state.messages.push({
+                    id: msg.id,
+                    conversationId: localId,
+                    createdAt: new Date(msg.createdAt).getTime(),
+                    role: msg.role as MessageRole,
+                    parentId: msg.parentId,
+                    status: msg.status as MessageStatus | undefined,
+                    content: messagePrivate?.content,
+                    context: messagePrivate?.context,
+                    toolCall: messagePrivate?.toolCall,
+                    toolResult: messagePrivate?.toolResult,
+                });
+            }
+
+            store.markSynced(localId);
+
+            logger.info({
+                localId,
+                remoteId,
+                title,
+                messageCount: state.messages.length,
+            }, 'Loaded conversation from server');
+
+            return localId;
         } catch (error) {
-            logger.warn({ spaceId, error }, 'Failed to decrypt space private data');
-            return null;
+            logger.error({ localId, error }, 'Failed to load conversation');
+            throw error;
         }
     }
 
@@ -711,44 +424,20 @@ export class SyncService {
         mappedMessages: number;
     } {
         return {
-            hasSpace: !!this.spaceId,
-            spaceId: this.spaceId,
-            spaceRemoteId: this.spaceRemoteId,
-            mappedConversations: this.idMap.conversations.size,
-            mappedMessages: this.idMap.messages.size,
+            hasSpace: !!this.spaceManager.spaceId,
+            spaceId: this.spaceManager.spaceId,
+            spaceRemoteId: this.spaceManager.spaceRemoteId,
+            mappedConversations: 0, // SpaceManager doesn't expose this count
+            mappedMessages: this.messageIdMap.size,
         };
     }
 
     /**
      * Delete ALL spaces from the server
-     * WARNING: This is destructive and cannot be undone!
      */
     async deleteAllSpaces(): Promise<number> {
-        const listResult = await this.lumoApi.listSpaces();
-        const spaces = Object.values(listResult.spaces);
-        logger.warn({ count: spaces.length }, 'Deleting ALL projects...');
-
-        let deleted = 0;
-        for (const space of spaces) {
-            try {
-                await this.lumoApi.deleteSpace(space.remoteId, 'background');
-                deleted++;
-                logger.info({ spaceId: space.id, remoteId: space.remoteId }, 'Deleted project');
-            } catch (error) {
-                logger.error({ spaceId: space.id, error }, 'Failed to delete project');
-            }
-        }
-
-        // Clear local state
-        this.spaceId = undefined;
-        this.spaceRemoteId = undefined;
-        this.spaceKey = undefined;
-        this.dataEncryptionKey = undefined;
-        this.idMap.spaces.clear();
-        this.idMap.conversations.clear();
-        this.idMap.messages.clear();
-
-        logger.warn({ deleted, total: spaces.length }, 'Finished deleting projects');
+        const deleted = await this.spaceManager.deleteAllSpaces();
+        this.messageIdMap.clear();
         return deleted;
     }
 }

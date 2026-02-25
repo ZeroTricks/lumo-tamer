@@ -106,6 +106,9 @@ export async function executeCommand(
       case 'sync':
         return await handleSyncCommand(context);
 
+      case 'load':
+        return await handleLoadCommand(params, context);
+
       case 'title':
         return handleTitleCommand(params, context);
 
@@ -143,6 +146,7 @@ function getHelpText(): string {
   /title <text>      - Set conversation title
   /save [title]      - Save current conversation (optionally set title) to Proton
   /sync              - Sync all conversations to Proton
+  /load <id>         - Load a conversation from Proton by ID
   /refreshtokens     - Manually refresh auth tokens
   /logout            - Revoke session and delete tokens
   /quit              - Exit CLI (CLI mode only)${wakewordHint}`;
@@ -222,6 +226,39 @@ async function handleSaveCommand(params: string, context?: CommandContext): Prom
   } catch (error) {
     logger.error({ error }, 'Failed to execute /save command');
     return `Save failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+  }
+}
+
+/**
+ * Handle /load command - load a conversation from server by local ID
+ */
+async function handleLoadCommand(params: string, context?: CommandContext): Promise<string> {
+  try {
+    if (!context?.syncInitialized) {
+      return 'Sync not initialized. Persistence may be disabled or KeyManager not ready.';
+    }
+
+    const localId = params.trim();
+    if (!localId) {
+      return 'Usage: /load <id>\nExample: /load f0654976-d628-4516-8e80-a0599b6593ac';
+    }
+
+    const syncService = getSyncService();
+    const conversationId = await syncService.loadExistingConversation(localId);
+
+    if (!conversationId) {
+      return `Conversation not found: ${localId}`;
+    }
+
+    const store = getConversationStore();
+    const conversation = store.get(conversationId);
+    const messageCount = conversation?.messages.length ?? 0;
+    const title = conversation?.title ?? 'Untitled';
+
+    return `Loaded conversation: ${title}\nLocal ID: ${conversationId}\nMessages: ${messageCount}`;
+  } catch (error) {
+    logger.error({ error }, 'Failed to execute /load command');
+    return `Load failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
   }
 }
 

@@ -107,15 +107,16 @@ const upstreamScenarios: Record<string, ScenarioGenerator> = {
             type: 'token_data',
             target: 'tool_call',
             count: 0,
-            content: '{"name": "web_search", "parameters": {"search_term": "test search"}}',
+            content: '{"name": "web_search", "parameters": {"query": "test search"}}',
         });
         await delay(500);
 
+        // Tool result must be valid JSON (matching Proton's format)
         yield formatSSEMessage({
             type: 'token_data',
             target: 'tool_result',
             count: 1,
-            content: 'Mock search result data',
+            content: '{"results":[{"title":"Mock Result","url":"https://example.com","description":"Mock search result data"}],"total_count":1}',
         });
         await delay(300);
 

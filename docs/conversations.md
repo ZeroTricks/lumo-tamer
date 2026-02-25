@@ -35,6 +35,16 @@ Conversation titles are auto-generated on the first message, following Proton's 
 
 ---
 
+## Tool Call Persistence
+
+| Type | Persistence | Notes |
+|------|-------------|-------|
+| **Native** (web_search, weather, stock, cryptocurrency) | `toolCall` + `toolResult` JSON strings | Persisted immediately from SSE stream |
+| **Custom** (client-defined) | Text in `content` | Client sends back with results; deduplication handles it |
+| **Misrouted** (custom via native pipeline) | Not persisted | Bounced back to Lumo for re-output as JSON text |
+
+---
+
 ## Synchronization
 
 ### Manual Sync (`/save`)

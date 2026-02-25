@@ -182,7 +182,13 @@ async function handleChatRequest(
       processor.finalize();
       persistTitle(result, deps, conversationId);
       toolCalls = processor.toolCallsEmitted.length > 0 ? processor.toolCallsEmitted : undefined;
-      persistAssistantTurn(deps, conversationId, accumulatedText, mapToolCallsForPersistence(processor.toolCallsEmitted));
+
+      persistAssistantTurn(
+        deps,
+        conversationId,
+        result.message,
+        mapToolCallsForPersistence(processor.toolCallsEmitted)
+      );
     } catch (error) {
       logger.error({ error: String(error) }, 'Chat completion error');
       if (emitter) {

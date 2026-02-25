@@ -15,12 +15,14 @@ import { BUSY_INDICATOR, clearBusyIndicator, print } from 'app/terminal.js';
 import type { AppContext } from 'app/types.js';
 import { randomUUID } from 'crypto';
 import * as readline from 'readline';
+import type { AssistantMessageData } from '../lumo-client/index.js';
 import { blockHandlers, executeBlocks, formatResultsMessage } from './local-actions/block-handlers.js';
 import { CodeBlockDetector, type CodeBlock } from './local-actions/code-block-detector.js';
 import { buildCliInstructions } from './message-converter.js';
 
 interface LumoResponse {
-  response: string;
+  /** Assistant message data ready for persistence */
+  message: AssistantMessageData;
   blocks: CodeBlock[];
   title?: string;
 }
@@ -95,7 +97,11 @@ export class CLIClient {
       this.store.setTitle(this.conversationId, result.title);
     }
 
-    return { response: result.response, blocks, title: result.title };
+    return {
+      message: result.message,
+      blocks,
+      title: result.title,
+    };
   }
 
   private async singleQuery(query: string): Promise<void> {
@@ -120,7 +126,7 @@ export class CLIClient {
       if (chunkCount === 0) clearBusyIndicator();
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
       print('\n');
-      logger.info({ responseLength: result.response.length, chunkCount, elapsedSeconds: elapsed }, 'Done');
+      logger.info({ responseLength: result.message.content.length, chunkCount, elapsedSeconds: elapsed }, 'Done');
     } catch (error) {
       clearBusyIndicator();
       print('');
@@ -216,12 +222,12 @@ export class CLIClient {
       const existingConv = this.store.get(this.conversationId);
       const requestTitle = existingConv?.title === 'New Conversation';
 
-      let { response, blocks } = await this.sendToLumo({ requestTitle });
-      this.store.appendAssistantResponse(this.conversationId, response);
+      let lumoResponse = await this.sendToLumo({ requestTitle });
+      this.store.appendAssistantResponse(this.conversationId, lumoResponse.message);
 
       // Execute blocks until none remain (or user skips all)
-      while (blocks.length > 0) {
-        const results = await executeBlocks(rl, blocks);
+      while (lumoResponse.blocks.length > 0) {
+        const results = await executeBlocks(rl, lumoResponse.blocks);
         if (results.length === 0) break; // user skipped all
 
 
@@ -230,8 +236,8 @@ export class CLIClient {
         const batchMessage = formatResultsMessage(results);
         this.store.appendUserMessage(this.conversationId, batchMessage);
 
-        ({ response, blocks } = await this.sendToLumo());
-        this.store.appendAssistantResponse(this.conversationId, response);
+        lumoResponse = await this.sendToLumo();
+        this.store.appendAssistantResponse(this.conversationId, lumoResponse.message);
       }
     } catch (error) {
       clearBusyIndicator();
