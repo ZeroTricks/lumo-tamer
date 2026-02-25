@@ -4,12 +4,12 @@
  */
 
 // Import types from upstream @lumo
-import type { ConversationId, MessageId, SpaceId, ProjectSpace, ConversationPriv } from '@lumo/types.js';
+import type { ConversationId, MessageId, SpaceId, ProjectSpace, ConversationPriv, MessagePub } from '@lumo/types.js';
 import { ConversationStatus, Role, Status } from '@lumo/types.js';
 import type { RemoteId } from '@lumo/remote/types.ts';
 
 // Re-export types for consumers
-export type { ConversationId, MessageId, SpaceId, RemoteId, ProjectSpace, ConversationPriv };
+export type { ConversationId, MessageId, SpaceId, RemoteId, ProjectSpace, ConversationPriv, MessagePub };
 
 /**
  * Conversation metadata
@@ -30,20 +30,6 @@ export interface ConversationMetadata {
 export interface Conversation extends ConversationMetadata {
     title: string;              // Decrypted
     status: ConversationStatus;
-}
-
-/**
- * Message public fields
- *
- * WebClient also has: placeholder?: boolean (we don't use it)
- */
-export interface MessagePublic {
-    id: MessageId;
-    conversationId: ConversationId;
-    createdAt: number;          // Unix timestamp (local tracking, server generates its own)
-    role: Role;
-    parentId?: MessageId;       // For branching conversations
-    status?: Status;            // Optional to match WebClient
 }
 
 /**
@@ -76,7 +62,7 @@ export interface MessagePrivate {
 /**
  * Full message record
  */
-export interface Message extends MessagePublic, MessagePrivate { }
+export interface Message extends MessagePub, MessagePrivate { }
 
 /**
  * In-memory conversation state

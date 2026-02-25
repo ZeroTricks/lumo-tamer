@@ -128,7 +128,7 @@ export class ConversationStore {
         }
 
         // Convert to Message format and append
-        const now = Date.now();
+        const now = new Date().toISOString();
         const lastMessageId = state.messages.length > 0
             ? state.messages[state.messages.length - 1].id
             : undefined;
@@ -158,7 +158,7 @@ export class ConversationStore {
 
         // Mark as dirty
         this.markDirty(state);
-        state.metadata.updatedAt = now;
+        state.metadata.updatedAt = Date.now();
 
         // Track metrics for new messages only
         const metrics = getMetrics();
@@ -193,7 +193,7 @@ export class ConversationStore {
         semanticId?: string
     ): Message {
         const state = this.getOrCreate(id);
-        const now = Date.now();
+        const now = new Date();
 
         const parentId = state.messages.length > 0
             ? state.messages[state.messages.length - 1].id
@@ -202,7 +202,7 @@ export class ConversationStore {
         const message: Message = {
             id: randomUUID(),
             conversationId: id,
-            createdAt: now,
+            createdAt: now.toISOString(),
             role: Role.Assistant,
             parentId,
             status,
@@ -214,7 +214,7 @@ export class ConversationStore {
 
         state.messages.push(message);
         this.markDirty(state);
-        state.metadata.updatedAt = now;
+        state.metadata.updatedAt = now.getTime();
         state.status = ConversationStatus.COMPLETED;
 
         getMetrics()?.messagesTotal.inc({ role: Role.Assistant });
@@ -261,7 +261,7 @@ export class ConversationStore {
      */
     appendUserMessage(id: ConversationId, content: string): Message {
         const state = this.getOrCreate(id);
-        const now = Date.now();
+        const now = new Date();
 
         const parentId = state.messages.length > 0
             ? state.messages[state.messages.length - 1].id
@@ -270,7 +270,7 @@ export class ConversationStore {
         const message: Message = {
             id: randomUUID(),
             conversationId: id,
-            createdAt: now,
+            createdAt: now.toISOString(),
             role: Role.User,
             parentId,
             status: 'succeeded',
@@ -280,7 +280,7 @@ export class ConversationStore {
 
         state.messages.push(message);
         this.markDirty(state);
-        state.metadata.updatedAt = now;
+        state.metadata.updatedAt = now.getTime();
 
         logger.debug({
             conversationId: id,

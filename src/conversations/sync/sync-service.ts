@@ -387,7 +387,7 @@ export class SyncService {
                 state.messages.push({
                     id: msg.id,
                     conversationId: localId,
-                    createdAt: new Date(msg.createdAt).getTime(),
+                    createdAt: msg.createdAt,
                     role: msg.role ,
                     parentId: msg.parentId,
                     status: msg.status as Status | undefined,

@@ -17,7 +17,6 @@ export type {
     Message,
     MessageId,
     MessagePrivate,
-    MessagePublic,
     PendingChange,
     ConversationStoreConfig,
     SpaceId,

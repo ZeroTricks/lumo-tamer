@@ -80,16 +80,7 @@ function fromUpstreamMessage(
         ?? hashMessage(msg.role, msg.content ?? '').slice(0, 16);
 
     return {
-        id: msg.id,
-        conversationId,
-        createdAt: new Date(msg.createdAt).getTime(),
-        role: msg.role,
-        parentId: msg.parentId,
-        status: msg.status,
-        content: msg.content,
-        context: msg.context,
-        toolCall: msg.toolCall,
-        toolResult: msg.toolResult,
+        ...msg,
         semanticId,
     };
 }
@@ -308,7 +299,7 @@ export class UpstreamConversationStore {
             const message: Message = {
                 id: messageId,
                 conversationId: id,
-                createdAt: now.getTime(),
+                createdAt: now.toISOString(),
                 role: msg.role ,
                 parentId,
                 status: 'succeeded',
@@ -392,7 +383,7 @@ export class UpstreamConversationStore {
         const message: Message = {
             id: messageId,
             conversationId: id,
-            createdAt: now.getTime(),
+            createdAt: now.toISOString(),
             role: Role.Assistant,
             parentId,
             status,
@@ -475,7 +466,7 @@ export class UpstreamConversationStore {
         const message: Message = {
             id: messageId,
             conversationId: id,
-            createdAt: now.getTime(),
+            createdAt: now.toISOString(),
             role: Role.User,
             parentId,
             status: 'succeeded',
@@ -559,7 +550,7 @@ export class UpstreamConversationStore {
         const messages = selectMessagesByConversationId(id)(state);
         return Object.values(messages)
             .map(m => fromUpstreamMessage(m, id))
-            .sort((a, b) => a.createdAt - b.createdAt);
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
 
     /**
