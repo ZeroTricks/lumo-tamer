@@ -27,7 +27,7 @@ import type {
     ConversationStoreConfig,
     SpaceId,
 } from './types.js';
-import { getLogConfig } from 'app/config.js';
+import { getLogConfig } from '../app/config.js';
 import { getMetrics } from '../app/metrics.js';
 
 /**

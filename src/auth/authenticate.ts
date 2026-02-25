@@ -28,7 +28,7 @@ import { LoginAuthProvider } from './providers/login.js';
 import { printStatus, printSummary, runStatus } from './status.js';
 import { updateAuthConfig } from './update-config.js';
 import type { AuthMethod, AuthProvider } from './types.js';
-import { print } from 'app/terminal.js';
+import { print } from '../app/terminal.js';
 
 const numToMethod: Record<string, AuthMethod> = { '1': 'login', '2': 'browser', '3': 'rclone' };
 const methodToNum: Record<AuthMethod, string> = { login: '1', browser: '2', rclone: '3' };

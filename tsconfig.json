@@ -14,17 +14,18 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "baseUrl": "./src",
+    "baseUrl": ".",
     "paths": {
-      "@lumo/*": ["../packages/lumo/src/*"],
-      "@proton/*": ["../packages/proton/src/*"],
-      "@proton/crypto": ["../packages/proton/src/crypto/index.ts"],
-      "@proton/crypto/lib": ["../packages/proton/src/crypto/index.ts"],
-      "lodash/isNil": ["./shims/lodash-isNil.ts"],
-      "lodash/isEqual": ["./shims/lodash-isEqual.ts"],
-      "lodash/isObject": ["./shims/lodash-isObject.ts"],
-      "json-stable-stringify": ["./shims/json-stable-stringify.ts"],
-      "toposort": ["./shims/toposort.ts"]
+      "@lumo/*": ["packages/lumo/src/*"],
+      "@proton/*": ["packages/proton/src/*"],
+      "@proton/crypto": ["packages/proton/src/crypto/index.ts"],
+      "@proton/crypto/lib": ["packages/proton/src/crypto/index.ts"],
+      "@proton/crypto/lib/*": ["packages/proton/src/crypto/lib/*"],
+      "lodash/isNil": ["src/shims/lodash-isNil.ts"],
+      "lodash/isEqual": ["src/shims/lodash-isEqual.ts"],
+      "lodash/isObject": ["src/shims/lodash-isObject.ts"],
+      "json-stable-stringify": ["src/shims/json-stable-stringify.ts"],
+      "toposort": ["src/shims/toposort.ts"]
     }
   },
   "include": ["src/**/*", "packages/**/*"],

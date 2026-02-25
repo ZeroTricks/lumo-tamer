@@ -8,7 +8,7 @@
 
 import { logger } from '../app/logger.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
-import { interpolateTemplate } from 'app/template.js';
+import { interpolateTemplate } from '../app/template.js';
 import { applyToolPrefix, applyToolNamePrefix } from './tools/prefix.js';
 import type { OpenAITool } from './types.js';
 
