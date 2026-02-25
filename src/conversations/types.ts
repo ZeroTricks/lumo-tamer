@@ -5,7 +5,7 @@
 
 // Import types from upstream @lumo
 import type { ConversationId, MessageId, SpaceId, ProjectSpace, ConversationPriv, MessagePub, ConversationPub } from '@lumo/types.js';
-import { ConversationStatus, Role, Status } from '@lumo/types.js';
+import { ConversationStatus } from '@lumo/types.js';
 import type { RemoteId } from '@lumo/remote/types.ts';
 
 // Re-export types for consumers
