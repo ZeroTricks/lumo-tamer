@@ -7,7 +7,7 @@
 
 import { createHash } from 'crypto';
 import { Role } from '@lumo/types.js';
-import type { Message, MessageFingerprint } from './types.js';
+import type { Message } from './types.js';
 
 /**
  * Compute hash for a message (role + content)
@@ -15,6 +15,12 @@ import type { Message, MessageFingerprint } from './types.js';
 export function hashMessage(role: Role, content: string): string {
     const data = `${role}:${content}`;
     return createHash('sha256').update(data, 'utf8').digest('hex');
+}
+
+interface MessageFingerprint {
+    hash: string;               // SHA-256 of role + content
+    role: Role;
+    index: number;              // Position in conversation
 }
 
 /**

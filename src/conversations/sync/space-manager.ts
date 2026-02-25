@@ -12,7 +12,7 @@ import { logger } from '../../app/logger.js';
 import { exportKey, deriveKey } from '@proton/crypto/lib/subtle/aesGcm';
 import type { LumoApi, RemoteSpace } from './lumo-api.js';
 import type { KeyManager } from '../encryption/key-manager.js';
-import type { SpaceId, RemoteId, SpacePrivate } from '../types.js';
+import type { SpaceId, RemoteId, ProjectSpace } from '../types.js';
 import { EncryptionCodec } from './encryption-codec.js';
 
 // HKDF parameters matching Proton's implementation
@@ -172,16 +172,16 @@ export class SpaceManager {
 
                 if (!encryptedData) continue;
 
-                const spacePrivate = await codec.decryptSpace(encryptedData, space.id);
+                const projectSpace = await codec.decryptSpace(encryptedData, space.id);
 
                 logger.debug({
                     spaceTag: space.id,
-                    projectName: spacePrivate?.projectName,
+                    projectName: projectSpace?.projectName,
                     lookingFor: this.spaceName,
-                    decryptedOk: !!spacePrivate,
+                    decryptedOk: !!projectSpace,
                 }, 'Checking project name match');
 
-                if (spacePrivate && spacePrivate.projectName === this.spaceName) {
+                if (projectSpace && projectSpace.projectName === this.spaceName) {
                     this._spaceId = space.id;
                     this._spaceRemoteId = space.remoteId;
                     this.spaceKey = spaceKey;
@@ -191,7 +191,7 @@ export class SpaceManager {
                     logger.info({
                         spaceId: space.id,
                         remoteId: space.remoteId,
-                        projectName: spacePrivate.projectName,
+                        projectName: projectSpace.projectName,
                     }, 'Found existing project');
 
                     return { spaceId: this._spaceId, remoteId: this._spaceRemoteId };
@@ -222,11 +222,11 @@ export class SpaceManager {
         const dataEncryptionKey = await this.deriveDataEncryptionKey(spaceKey);
         const codec = new EncryptionCodec(dataEncryptionKey);
 
-        const spacePrivate: SpacePrivate = {
+        const projectSpace: ProjectSpace = {
             isProject: true,
             projectName: this.spaceName,
         };
-        const encryptedPrivate = await codec.encryptSpace(spacePrivate, localId);
+        const encryptedPrivate = await codec.encryptSpace(projectSpace, localId);
 
         const remoteId = await this.lumoApi.postSpace({
             SpaceKey: wrappedSpaceKey,

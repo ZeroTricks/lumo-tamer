@@ -4,13 +4,13 @@
  */
 
 // Import types from upstream @lumo
-import { Role, Status, ConversationStatus } from '@lumo/types.js';
+import type { ConversationId, MessageId, SpaceId, ProjectSpace } from '@lumo/types.js';
+import { ConversationStatus, Role, Status } from '@lumo/types.js';
+import type { RemoteId } from '@lumo/remote/types.ts';
 
-// Unique identifiers
-export type ConversationId = string;   // UUID format
-export type MessageId = string;        // UUID format
-export type SpaceId = string;          // UUID format
-export type RemoteId = string;         // Server-assigned ID
+// Re-export ID types for consumers
+export type { ConversationId, MessageId, SpaceId, RemoteId, ProjectSpace };
+
 
 /**
  * Conversation metadata
@@ -22,17 +22,6 @@ export interface ConversationMetadata {
     createdAt: number;          // Unix timestamp (local tracking, server generates its own)
     updatedAt: number;          // Unix timestamp (local tracking, server generates its own)
     starred: boolean;
-}
-
-/**
- * Space private data (encrypted)
- * Matches Lumo WebClient's ProjectSpace type
- */
-export interface SpacePrivate {
-    isProject: true;
-    projectName?: string;
-    projectInstructions?: string;
-    projectIcon?: string;
 }
 
 /**
@@ -94,7 +83,7 @@ export interface MessagePrivate {
 /**
  * Full message record
  */
-export interface Message extends MessagePublic, MessagePrivate {}
+export interface Message extends MessagePublic, MessagePrivate { }
 
 /**
  * In-memory conversation state
@@ -124,15 +113,6 @@ export type PendingChange =
  */
 export interface ConversationStoreConfig {
     maxConversationsInMemory: number;
-}
-
-/**
- * Message fingerprint for deduplication
- */
-export interface MessageFingerprint {
-    hash: string;               // SHA-256 of role + content
-    role: Role;
-    index: number;              // Position in conversation
 }
 
 /**

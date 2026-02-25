@@ -13,7 +13,7 @@ import { encryptData, decryptData } from '@proton/crypto/lib/subtle/aesGcm';
 import { Role } from '@lumo/types.js';
 import type {
     Message,
-    SpacePrivate,
+    ProjectSpace,
     ConversationPrivate,
     MessagePrivate,
 } from '../types.js';
@@ -79,7 +79,7 @@ export class EncryptionCodec {
 
     // --- Space ---
 
-    async encryptSpace(data: SpacePrivate, spaceId: string): Promise<string> {
+    async encryptSpace(data: ProjectSpace, spaceId: string): Promise<string> {
         return this.encrypt(data, {
             app: 'lumo',
             type: 'space',
@@ -87,8 +87,8 @@ export class EncryptionCodec {
         });
     }
 
-    async decryptSpace(encryptedBase64: string, spaceId: string): Promise<SpacePrivate | null> {
-        return this.decrypt<SpacePrivate>(
+    async decryptSpace(encryptedBase64: string, spaceId: string): Promise<ProjectSpace | null> {
+        return this.decrypt<ProjectSpace>(
             encryptedBase64,
             {
                 app: 'lumo',
