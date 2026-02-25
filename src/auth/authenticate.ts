@@ -75,10 +75,8 @@ async function authenticateBrowser(): Promise<BrowserAuthResult> {
   const syncEnabled = getConversationsConfig().sync.enabled;
   if (!syncEnabled) {
     logger.info('Sync disabled - encryption keys not fetched');
-  } else if (result.tokens.persistedSession?.blob && result.tokens.persistedSession?.clientKey) {
+  } else if (result.tokens.keyPassword) {
     logger.info('Extended auth data extracted - conversation persistence enabled');
-  } else if (result.tokens.persistedSession?.blob) {
-    logger.warn('Conversation persistence may not work without ClientKey');
   } else {
     logger.warn('Conversation persistence will use local-only encryption');
   }

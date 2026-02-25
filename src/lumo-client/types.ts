@@ -45,19 +45,20 @@ export interface CachedMasterKey {
     Version: number;
 }
 
-// Persisted session structure (from Proton localStorage ps-{localID})
+// Persisted session metadata (from Proton localStorage ps-{localID})
+// Note: keyPassword is now stored directly in StoredTokens, not encrypted here
 export interface PersistedSessionData {
     localID: number;
     UserID: string;
     UID: string;
-    blob?: string;              // Encrypted blob containing keyPassword (base64)
-    payloadVersion: 1 | 2;      // Encryption version
     persistedAt: number;
-    // ClientKey fetched from API, used to decrypt blob
+    // Legacy fields - only present in old vaults that need re-auth
+    blob?: string;
+    payloadVersion?: 1 | 2;
     clientKey?: string;
 }
 
-// Decrypted session blob structure
+// Decrypted session blob structure (used during extraction only)
 export interface DecryptedSessionBlob {
     keyPassword: string;        // The mailbox password
     type: 'default' | 'offline';

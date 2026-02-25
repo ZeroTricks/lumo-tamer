@@ -37,13 +37,6 @@ export type { ExtractionOptions, ExtractionResult } from './browser/authenticate
 export { parseRcloneSection } from './rclone/index.js';
 export { runProtonAuth } from './login/proton-auth-cli.js';
 
-// Re-export session key utilities
-export {
-    decryptPersistedSession,
-    canDecryptSession,
-    getMailboxPassword,
-} from './session-keys.js';
-
 /**
  * Create an auth provider based on current configuration
  *

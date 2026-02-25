@@ -10,7 +10,6 @@ import { authConfig, getConversationsConfig } from '../../app/config.js';
 import { APP_VERSION_HEADER } from '@lumo/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { resolveProjectPath } from '../../app/paths.js';
-import { decryptPersistedSession } from '../session-keys.js';
 import { BaseAuthProvider, type ProviderConfig } from './base.js';
 import type { AuthProviderStatus } from '../types.js';
 
@@ -32,8 +31,6 @@ function getProviderConfig(): ProviderConfig {
 export class BrowserAuthProvider extends BaseAuthProvider {
     readonly method = 'browser' as const;
 
-    private keyPassword?: string;
-
     constructor() {
         super(getProviderConfig());
     }
@@ -46,6 +43,13 @@ export class BrowserAuthProvider extends BaseAuthProvider {
                 'Run: tamer auth browser'
             );
         }
+        // Detect old vault format that needs re-authentication
+        if (this.tokens?.persistedSession?.blob && !this.tokens?.keyPassword) {
+            throw new Error(
+                'Auth format outdated (encrypted blob without keyPassword).\n' +
+                'Run: tamer auth'
+            );
+        }
     }
 
     protected override async onAfterLoad(): Promise<void> {
@@ -54,28 +58,10 @@ export class BrowserAuthProvider extends BaseAuthProvider {
             extractedAt: this.tokens!.extractedAt,
             ageHours: tokenAge.toFixed(1),
             uid: this.tokens!.uid.slice(0, 8) + '...',
-        }, 'Browser tokens loaded');
-
-        // Try to extract keyPassword from persisted session
-        if (this.tokens!.persistedSession?.blob && this.tokens!.persistedSession?.clientKey) {
-            try {
-                const decrypted = await decryptPersistedSession(this.tokens!.persistedSession);
-                this.keyPassword = decrypted.keyPassword;
-                logger.debug('Extracted keyPassword from browser session');
-            } catch (err) {
-                logger.warn({ err }, 'Failed to decrypt browser session - keyPassword unavailable');
-            }
-        }
-
-        logger.debug({
+            hasKeyPassword: !!this.tokens!.keyPassword,
             hasUserKeys: this.tokens!.userKeys?.length ?? 0,
             hasMasterKeys: this.tokens!.masterKeys?.length ?? 0,
-        }, 'Browser provider initialized');
-    }
-
-    // Override to use extracted keyPassword instead of tokens.keyPassword
-    getKeyPassword(): string | undefined {
-        return this.keyPassword;
+        }, 'Browser tokens loaded');
     }
 
     isValid(): boolean {
@@ -125,15 +111,10 @@ export class BrowserAuthProvider extends BaseAuthProvider {
         }
 
         // Check keyPassword availability (only warn if sync is enabled)
-        status.details.hasKeyPassword = !!this.keyPassword;
+        status.details.hasKeyPassword = !!this.tokens.keyPassword;
         const syncEnabled = getConversationsConfig().sync.enabled;
-        if (!this.keyPassword && syncEnabled) {
-            if (!this.tokens.persistedSession?.blob) {
-                status.warnings.push('No persisted session blob found');
-            }
-            if (!this.tokens.persistedSession?.clientKey) {
-                status.warnings.push('No clientKey available - run tamer auth');
-            }
+        if (!this.tokens.keyPassword && syncEnabled) {
+            status.warnings.push('No keyPassword available - run tamer auth');
         }
 
         return status;

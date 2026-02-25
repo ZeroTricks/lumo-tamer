@@ -104,20 +104,3 @@ export async function decryptPersistedSession(
     }
 }
 
-/**
- * Check if we have the required data to decrypt the session
- */
-export function canDecryptSession(session?: PersistedSessionData): boolean {
-    return !!(session?.blob && session?.clientKey);
-}
-
-/**
- * Get the mailbox password from a persisted session
- * This is the main entry point for getting the password needed for PGP decryption
- */
-export async function getMailboxPassword(
-    session: PersistedSessionData
-): Promise<string> {
-    const decrypted = await decryptPersistedSession(session);
-    return decrypted.keyPassword;
-}
