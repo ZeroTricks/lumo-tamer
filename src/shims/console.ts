@@ -32,8 +32,10 @@ const suppressPatterns = [
 ];
 const suppressMatch = new RegExp(`^(?:${suppressPatterns.join('|')})`);
 
+type EE = unknown[] & { error?: Error };
+
 function extractError(args: unknown[]) {
-    const result: unknown[] & { error?: Error } = [];
+    const result: EE = [];
     for (const arg of args) {
         if (arg instanceof Error)
             result.error = arg;
@@ -43,19 +45,32 @@ function extractError(args: unknown[]) {
     return result;
 }
 
+function minimal(ee: EE){
+    if(ee.error !== undefined)
+        return ee;
+    switch (ee.length) {
+        case 0:
+            return undefined;
+        case 1:
+            return ee[0]
+        default:
+            return ee;
+    }
+}
+
 function log(levelOrLog: Level | 'log', args: unknown[]) {
-    const [first, ...rest] = args;
+    const ee = extractError(args);
+    const first = ee[0];
     let level = (levelOrLog == 'log') ? 'debug' : levelOrLog;
 
     if (typeof first == 'string') {
+        ee.shift()
         if (levelOrLog == 'log' && suppressMatch.test(first))
             level = 'trace';
-        const ee = extractError(rest);
-        logger[level](ee, first);
+        logger[level](minimal(ee), first);
     }
     else {
-        const ee = extractError(args);
-        logger[level](ee);
+        logger[level](minimal(ee));
     }
 }
 
