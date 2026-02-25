@@ -209,7 +209,7 @@ export class SyncService {
 
             const newRemoteId = await this.lumoApi.postConversation({
                 SpaceID: spaceRemoteId,
-                IsStarred: conversation.metadata.starred,
+                IsStarred: conversation.metadata.starred ?? false,
                 ConversationTag: conversationId,
                 Encrypted: encryptedPrivate,
             }, 'background');
@@ -231,7 +231,7 @@ export class SyncService {
             await this.lumoApi.putConversation({
                 ID: conversationRemoteId,
                 SpaceID: spaceRemoteId,
-                IsStarred: conversation.metadata.starred,
+                IsStarred: conversation.metadata.starred ?? false,
                 ConversationTag: conversationId,
                 Encrypted: encryptedPrivate,
             }, 'background');
@@ -356,7 +356,7 @@ export class SyncService {
             const state = store.getOrCreate(localId);
             state.title = title;
             state.metadata.starred = conv.starred ?? false;
-            state.metadata.createdAt = new Date(conv.createdAt).getTime();
+            state.metadata.createdAt = conv.createdAt;
             state.metadata.spaceId = spaceId;
             state.remoteId = remoteId;
             state.dirty = false;

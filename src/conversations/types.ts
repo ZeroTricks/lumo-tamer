@@ -4,30 +4,17 @@
  */
 
 // Import types from upstream @lumo
-import type { ConversationId, MessageId, SpaceId, ProjectSpace, ConversationPriv, MessagePub } from '@lumo/types.js';
+import type { ConversationId, MessageId, SpaceId, ProjectSpace, ConversationPriv, MessagePub, ConversationPub } from '@lumo/types.js';
 import { ConversationStatus, Role, Status } from '@lumo/types.js';
 import type { RemoteId } from '@lumo/remote/types.ts';
 
 // Re-export types for consumers
-export type { ConversationId, MessageId, SpaceId, RemoteId, ProjectSpace, ConversationPriv, MessagePub };
-
-/**
- * Conversation metadata
- * Public fields that can be stored unencrypted
- * Upstream name: ConversationPub
- */
-export interface ConversationMetadata {
-    id: ConversationId;
-    spaceId: SpaceId;
-    createdAt: number;          // Unix timestamp (local tracking, server generates its own)
-    updatedAt: number;          // Unix timestamp (local tracking, server generates its own)
-    starred: boolean;
-}
+export type { ConversationId, MessageId, SpaceId, RemoteId, ProjectSpace, ConversationPriv, MessagePub, ConversationPub };
 
 /**
  * Full conversation record
  */
-export interface Conversation extends ConversationMetadata {
+export interface Conversation extends ConversationPub {
     title: string;              // Decrypted
     status: ConversationStatus;
 }
@@ -68,7 +55,7 @@ export interface Message extends MessagePub, MessagePrivate { }
  * In-memory conversation state
  */
 export interface ConversationState {
-    metadata: ConversationMetadata;
+    metadata: ConversationPub;
     title: string;
     status: ConversationStatus;
     messages: Message[];
@@ -77,15 +64,6 @@ export interface ConversationState {
     remoteId?: RemoteId;        // Server-assigned ID (if synced)
     lastSyncedAt?: number;      // Last successful sync timestamp
 }
-
-/**
- * Pending change for sync queue
- */
-export type PendingChange =
-    | { type: 'create_conversation'; conversation: ConversationState }
-    | { type: 'update_conversation'; conversationId: ConversationId; updates: Partial<ConversationMetadata & ConversationPriv> }
-    | { type: 'create_message'; message: Message }
-    | { type: 'delete_conversation'; conversationId: ConversationId };
 
 /**
  * Conversation store configuration (internal)

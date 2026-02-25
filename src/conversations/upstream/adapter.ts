@@ -99,8 +99,8 @@ function toConversationState(
         metadata: {
             id: conv.id,
             spaceId: conv.spaceId,
-            createdAt: new Date(conv.createdAt).getTime(),
-            updatedAt: new Date(conv.updatedAt).getTime(),
+            createdAt: conv.createdAt,
+            updatedAt: conv.updatedAt,
             starred: conv.starred ?? false,
         },
         title: conv.title,

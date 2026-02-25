@@ -158,7 +158,7 @@ export class ConversationStore {
 
         // Mark as dirty
         this.markDirty(state);
-        state.metadata.updatedAt = Date.now();
+        state.metadata.updatedAt = new Date().toISOString();
 
         // Track metrics for new messages only
         const metrics = getMetrics();
@@ -214,7 +214,7 @@ export class ConversationStore {
 
         state.messages.push(message);
         this.markDirty(state);
-        state.metadata.updatedAt = now.getTime();
+        state.metadata.updatedAt = now.toISOString();
         state.status = ConversationStatus.COMPLETED;
 
         getMetrics()?.messagesTotal.inc({ role: Role.Assistant });
@@ -280,7 +280,7 @@ export class ConversationStore {
 
         state.messages.push(message);
         this.markDirty(state);
-        state.metadata.updatedAt = now.getTime();
+        state.metadata.updatedAt = now.toISOString();
 
         logger.debug({
             conversationId: id,
@@ -335,7 +335,7 @@ export class ConversationStore {
         if (state) {
             state.title = title;
             this.markDirty(state);
-            state.metadata.updatedAt = Date.now();
+            state.metadata.updatedAt = new Date().toISOString();
         }
         logger.debug(`Set title for ${id}${getLogConfig().messageContent ? `: ${title}` : ''}`);
     }
@@ -439,7 +439,7 @@ export class ConversationStore {
     }
 
     private createEmptyState(id: ConversationId): ConversationState {
-        const now = Date.now();
+        const now = new Date().toISOString();
         return {
             metadata: {
                 id,

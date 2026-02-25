@@ -10,14 +10,12 @@
 // Types
 export type {
     ConversationId,
-    ConversationMetadata,
     ConversationPriv,
     Conversation,
     ConversationState,
     Message,
     MessageId,
     MessagePrivate,
-    PendingChange,
     ConversationStoreConfig,
     SpaceId,
     RemoteId,
