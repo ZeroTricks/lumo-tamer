@@ -97,6 +97,8 @@ LUMO_FILES=(
 
     # Services
     services/attachmentDataCache.ts
+
+    lib/toolCall/types.ts
 )
 
 # Shim files: local implementations, check upstream changes between syncs
