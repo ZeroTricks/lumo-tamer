@@ -5,7 +5,7 @@
  * This polyfill enables upstream Proton code to work unchanged in Node.js.
  *
  * Import this file once at application entry point.
- * TODO: is this needed in new nodejs versions?
+ * NOTE: supported in Node >=v25
  */
 
 declare global {

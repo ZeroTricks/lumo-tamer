@@ -15,20 +15,21 @@ import {
 import type { ProtonApi } from '../../lumo-client/types.js';
 import { getConversationStore } from '../store.js';
 import type { KeyManager } from '../encryption/key-manager.js';
-import type { ConversationState, Message, SpaceId, RemoteId, MessageRole, MessageStatus, MessagePrivate } from '../types.js';
+import { Role, type Status } from '@lumo/types.js';
+import type { ConversationState, Message, SpaceId, RemoteId, MessagePrivate } from '../types.js';
 import { SpaceManager } from './space-manager.js';
 
 // Role mapping: our internal roles to API integer values
-const RoleToInt: Record<MessageRole, number> = {
-    user: RoleInt.User,
-    assistant: RoleInt.Assistant,
-    system: RoleInt.User,
-    tool_call: RoleInt.Assistant,
-    tool_result: RoleInt.User,
+const RoleToInt: Record<Role, number> = {
+    [Role.User]: RoleInt.User,
+    [Role.Assistant]: RoleInt.Assistant,
+    [Role.System]: RoleInt.User,
+    [Role.ToolCall]: RoleInt.Assistant,
+    [Role.ToolResult]: RoleInt.User,
 };
 
 // Status mapping: our internal status to API integer values
-const StatusToInt: Record<MessageStatus, number> = {
+const StatusToInt: Record<Status, number> = {
     failed: StatusInt.Failed,
     succeeded: StatusInt.Succeeded,
 };
@@ -240,7 +241,7 @@ export class SyncService {
         // Sync messages
         const messagesToSync = this.includeSystemMessages
             ? conversation.messages
-            : conversation.messages.filter(m => m.role === 'user' || m.role === 'assistant');
+            : conversation.messages.filter(m => m.role === Role.User || m.role === Role.Assistant);
 
         const messageMap = new Map(conversation.messages.map(m => [m.id, m]));
 
@@ -266,7 +267,7 @@ export class SyncService {
 
         // Prefix non-user/assistant content with role for clarity in Proton UI
         let contentToStore = message.content;
-        if (message.role !== 'user' && message.role !== 'assistant') {
+        if (message.role !== Role.User && message.role !== Role.Assistant) {
             contentToStore = `[${message.role}]\n${message.content}`;
         }
 
@@ -387,9 +388,9 @@ export class SyncService {
                     id: msg.id,
                     conversationId: localId,
                     createdAt: new Date(msg.createdAt).getTime(),
-                    role: msg.role as MessageRole,
+                    role: msg.role ,
                     parentId: msg.parentId,
-                    status: msg.status as MessageStatus | undefined,
+                    status: msg.status as Status | undefined,
                     content: messagePrivate?.content,
                     context: messagePrivate?.context,
                     toolCall: messagePrivate?.toolCall,

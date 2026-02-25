@@ -10,9 +10,9 @@
 import stableStringify from 'json-stable-stringify';
 import { logger } from '../../app/logger.js';
 import { encryptData, decryptData } from '@proton/crypto/lib/subtle/aesGcm';
+import { Role } from '@lumo/types.js';
 import type {
     Message,
-    MessageRole,
     SpacePrivate,
     ConversationPrivate,
     MessagePrivate,
@@ -20,12 +20,12 @@ import type {
 
 // Role mapping for AD construction
 // Maps internal roles to API-compatible roles (user/assistant)
-const RoleToApiInt: Record<MessageRole, number> = {
-    user: 1,
-    assistant: 2,
-    system: 1,       // Treat system as user for storage
-    tool_call: 2,    // Tool calls are assistant messages
-    tool_result: 1,  // Tool results are user messages
+const RoleToApiInt: Record<Role, number> = {
+    [Role.User]: 1,
+    [Role.Assistant]: 2,
+    [Role.System]: 1,       // Treat system as user for storage
+    [Role.ToolCall]: 2,     // Tool calls are assistant messages
+    [Role.ToolResult]: 1,   // Tool results are user messages
 };
 
 /**

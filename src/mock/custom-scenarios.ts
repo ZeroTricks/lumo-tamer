@@ -5,8 +5,7 @@
  * these are lumo-tamer-specific scenarios for features we built on top.
  */
 
-import { Role, type Turn } from '../lumo-client/types.js';
-import type { ProtonApiOptions } from '../lumo-client/types.js';
+import { Role, type Turn, type ProtonApiOptions } from '../lumo-client/types.js';
 import { formatSSEMessage, delay, type ScenarioGenerator } from './mock-api.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
 

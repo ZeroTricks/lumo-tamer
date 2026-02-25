@@ -3,20 +3,14 @@
  * Compatible with Proton Lumo webclient format
  */
 
+// Import types from upstream @lumo
+import { Role, Status, ConversationStatus } from '@lumo/types.js';
+
 // Unique identifiers
 export type ConversationId = string;   // UUID format
 export type MessageId = string;        // UUID format
 export type SpaceId = string;          // UUID format
 export type RemoteId = string;         // Server-assigned ID
-
-// Message roles matching Lumo format
-export type MessageRole = 'user' | 'assistant' | 'system' | 'tool_call' | 'tool_result';
-
-// Message status (matches Proton's Status type)
-export type MessageStatus = 'succeeded' | 'failed';
-
-// Conversation status
-export type ConversationStatus = 'generating' | 'completed';
 
 /**
  * Conversation metadata
@@ -65,9 +59,9 @@ export interface MessagePublic {
     id: MessageId;
     conversationId: ConversationId;
     createdAt: number;          // Unix timestamp (local tracking, server generates its own)
-    role: MessageRole;
+    role: Role;
     parentId?: MessageId;       // For branching conversations
-    status?: MessageStatus;     // Optional to match WebClient
+    status?: Status;            // Optional to match WebClient
 }
 
 /**
@@ -137,7 +131,7 @@ export interface ConversationStoreConfig {
  */
 export interface MessageFingerprint {
     hash: string;               // SHA-256 of role + content
-    role: MessageRole;
+    role: Role;
     index: number;              // Position in conversation
 }
 

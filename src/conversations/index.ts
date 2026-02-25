@@ -14,13 +14,10 @@ export type {
     ConversationPrivate,
     Conversation,
     ConversationState,
-    ConversationStatus,
     Message,
     MessageId,
     MessagePrivate,
     MessagePublic,
-    MessageRole,
-    MessageStatus,
     MessageFingerprint,
     PendingChange,
     ConversationStoreConfig,
@@ -28,6 +25,7 @@ export type {
     RemoteId,
     IdMapEntry,
 } from './types.js';
+
 
 // Store
 export {

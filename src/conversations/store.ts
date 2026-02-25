@@ -11,7 +11,8 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../app/logger.js';
 import { deterministicUUID } from '../app/id-generator.js';
-import { Role, type Turn, type AssistantMessageData } from '../lumo-client/types.js';
+import { Role, ConversationStatus } from '@lumo/types.js';
+import type { Turn, AssistantMessageData } from '../lumo-client/types.js';
 import {
     findNewMessages,
     hashMessage,
@@ -23,7 +24,6 @@ import type {
     ConversationState,
     Message,
     MessageId,
-    MessageRole,
     ConversationStoreConfig,
     SpaceId,
 } from './types.js';
@@ -144,7 +144,7 @@ export class ConversationStore {
                 id: randomUUID(),
                 conversationId: id,
                 createdAt: now,
-                role: msg.role as MessageRole,
+                role: msg.role ,
                 parentId,
                 status: 'succeeded',
                 content: msg.content,
@@ -203,21 +203,21 @@ export class ConversationStore {
             id: randomUUID(),
             conversationId: id,
             createdAt: now,
-            role: 'assistant',
+            role: Role.Assistant,
             parentId,
             status,
             content: messageData.content,
             toolCall: messageData.toolCall,
             toolResult: messageData.toolResult,
-            semanticId: semanticId ?? hashMessage('assistant', messageData.content).slice(0, 16),
+            semanticId: semanticId ?? hashMessage(Role.Assistant, messageData.content).slice(0, 16),
         };
 
         state.messages.push(message);
         this.markDirty(state);
         state.metadata.updatedAt = now;
-        state.status = 'completed';
+        state.status = ConversationStatus.COMPLETED;
 
-        getMetrics()?.messagesTotal.inc({ role: 'assistant' });
+        getMetrics()?.messagesTotal.inc({ role: Role.Assistant });
 
         logger.debug({
             conversationId: id,
@@ -271,11 +271,11 @@ export class ConversationStore {
             id: randomUUID(),
             conversationId: id,
             createdAt: now,
-            role: 'user',
+            role: Role.User,
             parentId,
             status: 'succeeded',
             content,
-            semanticId: hashMessage('user', content).slice(0, 16),
+            semanticId: hashMessage(Role.User, content).slice(0, 16),
         };
 
         state.messages.push(message);
@@ -323,7 +323,7 @@ export class ConversationStore {
     setGenerating(id: ConversationId): void {
         const state = this.get(id);
         if (state) {
-            state.status = 'generating';
+            state.status = ConversationStatus.GENERATING;
         }
     }
 
@@ -344,15 +344,8 @@ export class ConversationStore {
      * Convert conversation to Lumo Turn[] format for API call
      */
     toTurns(id: ConversationId): Turn[] {
-        const roleMap: Record<string, Role> = {
-            user: Role.User,
-            assistant: Role.Assistant,
-            system: Role.System,
-            tool_call: Role.ToolCall,
-            tool_result: Role.ToolResult,
-        };
-        return this.getMessages(id).map(({role, content}) => ({
-            role: roleMap[role] ?? Role.User,
+        return this.getMessages(id).map(({ role, content }) => ({
+            role,
             content,
         }));
     }
@@ -456,7 +449,7 @@ export class ConversationStore {
                 starred: false,
             },
             title: 'New Conversation',
-            status: 'completed',
+            status: ConversationStatus.COMPLETED,
             messages: [],
             dirty: true,  // New conversations need sync
         };
@@ -512,7 +505,7 @@ export class ConversationStore {
  * Used for stateless /save where we don't have a Lumo-generated title.
  */
 function generateAutoTitle(turns: Turn[]): string {
-    const firstUserTurn = turns.find(t => t.role === 'user');
+    const firstUserTurn = turns.find(t => t.role === Role.User);
     if (firstUserTurn?.content) {
         const content = firstUserTurn.content.trim();
         return content.length > 50 ? content.slice(0, 47) + '...' : content;

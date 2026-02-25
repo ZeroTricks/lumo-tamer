@@ -33,7 +33,6 @@ import type {
     ConversationState,
     Message,
     MessageId,
-    MessageRole,
     ConversationStoreConfig,
     SpaceId,
 } from '../types.js';
@@ -66,42 +65,6 @@ import type {
 import { ConversationStatus, Role } from '@lumo/types.js';
 
 /**
- * Convert lumo-tamer MessageRole to upstream Role
- * TODO: can we replace MessageRole with Role in consumers, we we don't need this mapper
- */
-function toUpstreamRole(role: MessageRole): Role {
-    switch (role) {
-        case 'user':
-            return Role.User;
-        case 'assistant':
-            return Role.Assistant;
-        case 'system':
-            return Role.User; // System messages stored as user messages
-        case 'tool_call':
-            return Role.Assistant;
-        case 'tool_result':
-            return Role.User;
-        default:
-            return Role.User;
-    }
-}
-
-/**
- * Convert upstream Role to lumo-tamer MessageRole
- * TODO: can we replace MessageRole with Role in consumers, we we don't need this mapper
- */
-function fromUpstreamRole(role: Role): MessageRole {
-    switch (role) {
-        case Role.User:
-            return 'user';
-        case Role.Assistant:
-            return 'assistant';
-        default:
-            return 'user';
-    }
-}
-
-/**
  * Convert upstream Message to lumo-tamer Message
  *
  * @param semanticIdMap - Optional map of messageId -> semanticId for deduplication.
@@ -114,13 +77,13 @@ function fromUpstreamMessage(
 ): Message {
     // Use cached semanticId if available, otherwise compute from content
     const semanticId = semanticIdMap?.get(msg.id)
-        ?? hashMessage(fromUpstreamRole(msg.role), msg.content ?? '').slice(0, 16);
+        ?? hashMessage(msg.role, msg.content ?? '').slice(0, 16);
 
     return {
         id: msg.id,
         conversationId,
         createdAt: new Date(msg.createdAt).getTime(),
-        role: fromUpstreamRole(msg.role),
+        role: msg.role,
         parentId: msg.parentId,
         status: msg.status,
         content: msg.content,
@@ -150,7 +113,7 @@ function toConversationState(
             starred: conv.starred ?? false,
         },
         title: conv.title,
-        status: conv.status === ConversationStatus.GENERATING ? 'generating' : 'completed',
+        status: conv.status === ConversationStatus.GENERATING ? ConversationStatus.GENERATING : ConversationStatus.COMPLETED,
         messages: messages.map(m => fromUpstreamMessage(m, conv.id, semanticIdMap)),
         dirty: false, // Upstream uses IDB dirty flag, not in-memory
     };
@@ -322,7 +285,7 @@ export class UpstreamConversationStore {
                 id: messageId,
                 conversationId: id,
                 createdAt: now.toISOString(),
-                role: toUpstreamRole(msg.role as MessageRole),
+                role: msg.role ,
                 parentId,
                 status: 'succeeded',
             }));
@@ -335,7 +298,7 @@ export class UpstreamConversationStore {
                     spaceId: this.spaceId,
                     content: msg.content,
                     status: 'succeeded',
-                    role: toUpstreamRole(msg.role as MessageRole),
+                    role: msg.role ,
                 }));
             }
 
@@ -346,7 +309,7 @@ export class UpstreamConversationStore {
                 id: messageId,
                 conversationId: id,
                 createdAt: now.getTime(),
-                role: msg.role as MessageRole,
+                role: msg.role ,
                 parentId,
                 status: 'succeeded',
                 content: msg.content,
@@ -388,7 +351,7 @@ export class UpstreamConversationStore {
         const convState = this.getOrCreate(id);
         const now = new Date();
         const messageId = randomUUID();
-        const effectiveSemanticId = semanticId ?? hashMessage('assistant', messageData.content).slice(0, 16);
+        const effectiveSemanticId = semanticId ?? hashMessage(Role.Assistant, messageData.content).slice(0, 16);
 
         // Store semanticId in map for later retrieval
         this.semanticIdMap.set(messageId, effectiveSemanticId);
@@ -430,7 +393,7 @@ export class UpstreamConversationStore {
             id: messageId,
             conversationId: id,
             createdAt: now.getTime(),
-            role: 'assistant',
+            role: Role.Assistant,
             parentId,
             status,
             content: messageData.content,
@@ -439,7 +402,7 @@ export class UpstreamConversationStore {
             semanticId: effectiveSemanticId,
         };
 
-        getMetrics()?.messagesTotal.inc({ role: 'assistant' });
+        getMetrics()?.messagesTotal.inc({ role: Role.Assistant });
 
         logger.debug({
             conversationId: id,
@@ -477,7 +440,7 @@ export class UpstreamConversationStore {
         const convState = this.getOrCreate(id);
         const now = new Date();
         const messageId = randomUUID();
-        const semanticId = hashMessage('user', content).slice(0, 16);
+        const semanticId = hashMessage(Role.User, content).slice(0, 16);
 
         // Store semanticId in map for later retrieval
         this.semanticIdMap.set(messageId, semanticId);
@@ -513,7 +476,7 @@ export class UpstreamConversationStore {
             id: messageId,
             conversationId: id,
             createdAt: now.getTime(),
-            role: 'user',
+            role: Role.User,
             parentId,
             status: 'succeeded',
             content,
@@ -583,7 +546,7 @@ export class UpstreamConversationStore {
      */
     toTurns(id: ConversationId): Turn[] {
         return this.getMessages(id).map(({ role, content }) => ({
-            role: toUpstreamRole(role),
+            role,
             content,
         }));
     }
@@ -694,7 +657,7 @@ export class UpstreamConversationStore {
     }
 
     private generateAutoTitle(turns: Turn[]): string {
-        const firstUserTurn = turns.find(t => t.role === 'user');
+        const firstUserTurn = turns.find(t => t.role === Role.User);
         if (firstUserTurn?.content) {
             const content = firstUserTurn.content.trim();
             return content.length > 50 ? content.slice(0, 47) + '...' : content;

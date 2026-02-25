@@ -6,12 +6,13 @@
  */
 
 import { createHash } from 'crypto';
-import type { Message, MessageFingerprint, MessageRole } from './types.js';
+import { Role } from '@lumo/types.js';
+import type { Message, MessageFingerprint } from './types.js';
 
 /**
  * Compute hash for a message (role + content)
  */
-export function hashMessage(role: string, content: string): string {
+export function hashMessage(role: Role, content: string): string {
     const data = `${role}:${content}`;
     return createHash('sha256').update(data, 'utf8').digest('hex');
 }
@@ -20,7 +21,7 @@ export function hashMessage(role: string, content: string): string {
  * Create fingerprint for a message
  */
 export function createFingerprint(
-    role: MessageRole,
+    role: Role,
     content: string,
     index: number
 ): MessageFingerprint {
@@ -46,7 +47,7 @@ export function fingerprintMessages(messages: Message[]): MessageFingerprint[] {
  * Incoming message format from API
  */
 export interface IncomingMessage {
-    role: string;
+    role: Role;
     content?: string;
     id?: string;  // Semantic ID for deduplication (call_id for tools)
 }
