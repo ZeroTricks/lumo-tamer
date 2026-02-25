@@ -11,7 +11,7 @@
 export type {
     ConversationId,
     ConversationMetadata,
-    ConversationPrivate,
+    ConversationPriv,
     Conversation,
     ConversationState,
     Message,

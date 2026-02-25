@@ -4,17 +4,17 @@
  */
 
 // Import types from upstream @lumo
-import type { ConversationId, MessageId, SpaceId, ProjectSpace } from '@lumo/types.js';
+import type { ConversationId, MessageId, SpaceId, ProjectSpace, ConversationPriv } from '@lumo/types.js';
 import { ConversationStatus, Role, Status } from '@lumo/types.js';
 import type { RemoteId } from '@lumo/remote/types.ts';
 
-// Re-export ID types for consumers
-export type { ConversationId, MessageId, SpaceId, RemoteId, ProjectSpace };
-
+// Re-export types for consumers
+export type { ConversationId, MessageId, SpaceId, RemoteId, ProjectSpace, ConversationPriv };
 
 /**
  * Conversation metadata
  * Public fields that can be stored unencrypted
+ * Upstream name: ConversationPub
  */
 export interface ConversationMetadata {
     id: ConversationId;
@@ -22,13 +22,6 @@ export interface ConversationMetadata {
     createdAt: number;          // Unix timestamp (local tracking, server generates its own)
     updatedAt: number;          // Unix timestamp (local tracking, server generates its own)
     starred: boolean;
-}
-
-/**
- * Conversation private data (encrypted)
- */
-export interface ConversationPrivate {
-    title: string;
 }
 
 /**
@@ -104,7 +97,7 @@ export interface ConversationState {
  */
 export type PendingChange =
     | { type: 'create_conversation'; conversation: ConversationState }
-    | { type: 'update_conversation'; conversationId: ConversationId; updates: Partial<ConversationMetadata & ConversationPrivate> }
+    | { type: 'update_conversation'; conversationId: ConversationId; updates: Partial<ConversationMetadata & ConversationPriv> }
     | { type: 'create_message'; message: Message }
     | { type: 'delete_conversation'; conversationId: ConversationId };
 

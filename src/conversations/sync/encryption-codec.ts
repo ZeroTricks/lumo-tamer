@@ -14,7 +14,7 @@ import { Role } from '@lumo/types.js';
 import type {
     Message,
     ProjectSpace,
-    ConversationPrivate,
+    ConversationPriv,
     MessagePrivate,
 } from '../types.js';
 
@@ -103,7 +103,7 @@ export class EncryptionCodec {
     // --- Conversation ---
 
     async encryptConversation(
-        data: ConversationPrivate,
+        data: ConversationPriv,
         conversationId: string,
         spaceId: string
     ): Promise<string> {
@@ -119,8 +119,8 @@ export class EncryptionCodec {
         encryptedBase64: string,
         conversationId: string,
         spaceId: string
-    ): Promise<ConversationPrivate | null> {
-        return this.decrypt<ConversationPrivate>(
+    ): Promise<ConversationPriv | null> {
+        return this.decrypt<ConversationPriv>(
             encryptedBase64,
             {
                 app: 'lumo',
