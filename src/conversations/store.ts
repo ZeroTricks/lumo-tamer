@@ -23,7 +23,7 @@ import {
     findNewMessages,
     hashMessage,
     isValidContinuation,
-    type IncomingMessage,
+    type MessageForStore,
 } from './deduplication.js';
 import type {
     ConversationId,
@@ -113,11 +113,7 @@ function toConversationState(
 export class ConversationStore {
     private store: LumoStore;
     private spaceId: SpaceId;
-    private maxConversations: number;
     private onDirtyCallback?: () => void;
-
-    // LRU tracking (for eviction)
-    private accessOrder: ConversationId[] = [];
 
     /**
      * Map of messageId (UUID) -> semanticId for deduplication.
@@ -140,11 +136,10 @@ export class ConversationStore {
     constructor(
         store: LumoStore,
         spaceId: SpaceId,
-        config: ConversationStoreConfig
+        _config: ConversationStoreConfig
     ) {
         this.store = store;
         this.spaceId = spaceId;
-        this.maxConversations = config.maxConversationsInMemory;
         logger.info({ spaceId }, 'ConversationStore initialized');
     }
 
@@ -183,8 +178,6 @@ export class ConversationStore {
             logger.debug({ conversationId: id }, 'Created new conversation');
         }
 
-        this.touchLRU(id);
-
         // Get messages for this conversation
         const messages = Object.values(
             selectMessagesByConversationId(id)(this.store.getState())
@@ -203,8 +196,6 @@ export class ConversationStore {
         if (!conv) {
             return undefined;
         }
-
-        this.touchLRU(id);
 
         const messages = Object.values(
             selectMessagesByConversationId(id)(state)
@@ -226,7 +217,7 @@ export class ConversationStore {
      */
     appendMessages(
         id: ConversationId,
-        incoming: IncomingMessage[]
+        incoming: MessageForStore[]
     ): Message[] {
         const convState = this.getOrCreate(id);
 
@@ -543,7 +534,7 @@ export class ConversationStore {
         const state = this.store.getState();
         const messages = selectMessagesByConversationId(id)(state);
         return Object.values(messages)
-            .map(m => fromUpstreamMessage(m, id))
+            .map(m => fromUpstreamMessage(m, id, this.semanticIdMap))
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
 
@@ -554,7 +545,7 @@ export class ConversationStore {
         const state = this.store.getState();
         const msg = state.messages[messageId];
         if (msg && msg.conversationId === conversationId) {
-            return fromUpstreamMessage(msg, conversationId);
+            return fromUpstreamMessage(msg, conversationId, this.semanticIdMap);
         }
         return undefined;
     }
@@ -566,7 +557,6 @@ export class ConversationStore {
         if (this.has(id)) {
             // Use saga action to handle Redux + IDB + remote sync
             this.store.dispatch(locallyDeleteConversationFromLocalRequest(id));
-            this.accessOrder = this.accessOrder.filter(cid => cid !== id);
             logger.debug({ conversationId: id }, 'Deleted conversation');
             return true;
         }
@@ -617,13 +607,11 @@ export class ConversationStore {
     getStats(): {
         total: number;
         dirty: number;
-        maxSize: number;
     } {
         const state = this.store.getState();
         return {
             total: Object.keys(state.conversations).length,
             dirty: 0, // Upstream uses IDB dirty flag
-            maxSize: this.maxConversations,
         };
     }
 
@@ -631,14 +619,6 @@ export class ConversationStore {
 
     private notifyDirty(): void {
         this.onDirtyCallback?.();
-    }
-
-    private touchLRU(id: ConversationId): void {
-        const index = this.accessOrder.indexOf(id);
-        if (index !== -1) {
-            this.accessOrder.splice(index, 1);
-        }
-        this.accessOrder.push(id);
     }
 
     private generateAutoTitle(turns: Turn[]): string {

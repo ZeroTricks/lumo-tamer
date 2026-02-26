@@ -20,7 +20,7 @@ import {
     findNewMessages,
     hashMessage,
     isValidContinuation,
-    type IncomingMessage,
+    type MessageForStore,
 } from '../deduplication.js';
 import type {
     ConversationId,
@@ -107,7 +107,7 @@ export class FallbackStore {
      */
     appendMessages(
         id: ConversationId,
-        incoming: IncomingMessage[]
+        incoming: MessageForStore[]
     ): Message[] {
         const state = this.getOrCreate(id);
 

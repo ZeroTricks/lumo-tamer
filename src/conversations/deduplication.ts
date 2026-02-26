@@ -52,7 +52,7 @@ export function fingerprintMessages(messages: Message[]): MessageFingerprint[] {
 /**
  * Incoming message format from API
  */
-export interface IncomingMessage {
+export interface MessageForStore {
     role: Role;
     content?: string;
     id?: string;  // Semantic ID for deduplication (call_id for tools)
@@ -67,9 +67,9 @@ export interface IncomingMessage {
  * 3. Return incoming messages after the matching prefix
  */
 export function findNewMessages(
-    incoming: IncomingMessage[],
+    incoming: MessageForStore[],
     stored: Message[]
-): IncomingMessage[] {
+): MessageForStore[] {
     if (stored.length === 0) {
         return incoming;
     }
@@ -112,7 +112,7 @@ export function findNewMessages(
  * - Or incoming is entirely new (stored is empty)
  */
 export function isValidContinuation(
-    incoming: IncomingMessage[],
+    incoming: MessageForStore[],
     stored: Message[]
 ): { valid: boolean; reason?: string; debugInfo?: { storedMsg?: string; incomingMsg?: string } } {
     if (stored.length === 0) {
@@ -154,7 +154,7 @@ export function isValidContinuation(
  * - But then diverges (different message at some index)
  */
 export function detectBranching(
-    incoming: IncomingMessage[],
+    incoming: MessageForStore[],
     stored: Message[]
 ): { isBranching: boolean; branchPoint?: number } {
     if (stored.length === 0 || incoming.length === 0) {

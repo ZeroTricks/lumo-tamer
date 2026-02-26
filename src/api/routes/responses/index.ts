@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { EndpointDependencies, OpenAIResponseRequest, FunctionCallOutput } from '../../types.js';
 import { logger } from '../../../app/logger.js';
 import { handleRequest } from './request-handlers.js';
-import { convertResponseInputToTurns } from '../../message-converter.js';
+import { convertResponseInput } from '../../message-converter.js';
 import { buildInstructions } from '../../instructions.js';
 import { getConversationsConfig, getServerInstructionsConfig } from '../../../app/config.js';
 import { getMetrics } from '../../../app/metrics.js';
@@ -98,7 +98,7 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
 
       // ===== STEP 3: Convert input to turns =====
       // Handles normal messages, function_call, and function_call_output items.
-      const turns = convertResponseInputToTurns(request.input, request.instructions);
+      const turns = convertResponseInput(request.input, request.instructions);
 
       // ===== Build instructions (injected in LumoClient, not persisted) =====
       const instructions = buildInstructions(request.tools, request.instructions);

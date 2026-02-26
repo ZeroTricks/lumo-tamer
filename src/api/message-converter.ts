@@ -1,28 +1,14 @@
 /**
- * Converts OpenAI message format to Lumo Turn format
+ * Converts OpenAI message formats to MessageForStore format.
+ *
+ * MessageForStore is compatible with Lumo's Turn type (role + content)
+ * but also includes an optional `id` field for deduplication of tool messages.
  */
 
 import type { ChatMessage, ResponseInputItem, OpenAIToolCall } from './types.js';
-import { Role, type Turn } from '../lumo-client/index.js';
+import { Role } from '../lumo-client/index.js';
 import { addToolNameToFunctionOutput } from './tools/call-id.js';
-
-// ── Input normalization ───────────────────────────────────────────────
-//
-// - normalizeInputItem(): Converts OpenAI tool formats (role:'tool', tool_calls,
-//   function_call, function_call_output) to normalized {role, content} with JSON.
-//
-// - convertMessagesToTurns() / convertResponseInputToTurns(): Build clean Turn[]
-//   for persistence. Instruction injection happens later in LumoClient.
-
-/**
- * Normalized message format (role + content only).
- * Used for both Lumo turns and persistence.
- */
-export interface NormalizedMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  id?: string;  // Semantic ID for deduplication (call_id for tools)
-}
+import { type MessageForStore } from '../conversations/deduplication.js';
 
 /**
  * Extract text from OpenAI-compatible content shapes.
@@ -61,16 +47,17 @@ function extractTextContent(content: unknown): string {
 }
 
 /**
- * Normalize any input item to a standard { role, content } format.
+ * Convert tool-related message formats to MessageForStore.
+ *
  * Handles both Chat Completions (role: 'tool', tool_calls) and
  * Responses API (function_call, function_call_output) formats.
  *
  * Tool-related items are converted to user/assistant roles with JSON content,
  * since Lumo's tool_call/tool_result roles are reserved for SSE tools.
  *
- * @returns Normalized message(s), or null if item cannot be normalized
+ * @returns Converted message(s), or null if item is not a tool message
  */
-export function normalizeInputItem(item: unknown): NormalizedMessage | NormalizedMessage[] | null {
+export function convertToolMessage(item: unknown): MessageForStore | MessageForStore[] | null {
   if (typeof item !== 'object' || item === null) return null;
   const obj = item as Record<string, unknown>;
 
@@ -82,7 +69,7 @@ export function normalizeInputItem(item: unknown): NormalizedMessage | Normalize
       output: obj.content,
     });
     return {
-      role: 'user',
+      role: Role.User,
       content: '```json\n' + json + '\n```',
       id: obj.tool_call_id as string,
     };
@@ -97,7 +84,7 @@ export function normalizeInputItem(item: unknown): NormalizedMessage | Normalize
         ? JSON.stringify(JSON.parse(tc.function.arguments))
         : JSON.stringify(tc.function.arguments ?? {});
       return {
-        role: 'assistant' as const,
+        role: Role.Assistant,
         content: JSON.stringify({
           type: 'function_call',
           call_id: tc.id,
@@ -117,7 +104,7 @@ export function normalizeInputItem(item: unknown): NormalizedMessage | Normalize
       ? JSON.stringify(JSON.parse(obj.arguments))
       : JSON.stringify(obj.arguments ?? {});
     return {
-      role: 'assistant',
+      role: Role.Assistant,
       content: JSON.stringify({
         type: 'function_call',
         call_id: obj.call_id,
@@ -136,7 +123,7 @@ export function normalizeInputItem(item: unknown): NormalizedMessage | Normalize
       output: obj.output,
     });
     return {
-      role: 'user',
+      role: Role.User,
       content: '```json\n' + json + '\n```',
       id: obj.call_id as string,
     };
@@ -162,14 +149,16 @@ export function extractSystemMessage(messages: ChatMessage[]): string | undefine
 
 
 /**
- * Core conversion: ChatMessage[] to Turn[].
+ * Convert OpenAI ChatMessage[] to MessageForStore[].
  *
  * Handles tool-related messages:
- * - role: 'tool' -> user turn with JSON content
- * - assistant with tool_calls -> assistant turn(s) with JSON content
+ * - role: 'tool' -> user message with JSON content
+ * - assistant with tool_calls -> assistant message(s) with JSON content
+ *
+ * Preserves semantic IDs (call_id) for tool messages to enable deduplication.
  */
-function convertChatMessagesToTurns(messages: ChatMessage[]): Turn[] {
-  const turns: Turn[] = [];
+export function convertChatMessages(messages: ChatMessage[]): MessageForStore[] {
+  const result: MessageForStore[] = [];
 
   for (const msg of messages) {
     // Skip system/developer messages - they're handled via instructions parameter
@@ -177,49 +166,40 @@ function convertChatMessagesToTurns(messages: ChatMessage[]): Turn[] {
       continue;
     }
 
-    // Handle tool-related messages via normalizeInputItem
-    const normalized = normalizeInputItem(msg);
-    if (normalized) {
-      const normalizedArray = Array.isArray(normalized) ? normalized : [normalized];
-      for (const norm of normalizedArray) {
+    // Handle tool-related messages via convertToolMessage
+    const converted = convertToolMessage(msg);
+    if (converted) {
+      const convertedArray = Array.isArray(converted) ? converted : [converted];
+      for (const item of convertedArray) {
         // For function_call_output, add prefixed tool_name for Lumo context
-        const content = norm.role === 'user'
-          ? addToolNameToFunctionOutput(norm.content)
-          : norm.content;
-        turns.push({ role: norm.role === 'user' ? Role.User : Role.Assistant, content });
+        const content = item.role === Role.User
+          ? addToolNameToFunctionOutput(item.content ?? '')
+          : item.content;
+        result.push({ role: item.role, content, id: item.id });
       }
       continue;
     }
 
     // Regular user/assistant message
-    turns.push({
+    result.push({
       role: msg.role === 'user' ? Role.User : Role.Assistant,
       content: extractTextContent(msg.content),
     });
   }
 
-  return turns;
+  return result;
 }
 
 /**
- * Convert OpenAI ChatMessage[] to Lumo Turn[].
- * Returns clean turns without instruction injection (injection happens in LumoClient).
+ * Convert OpenAI Responses API input to MessageForStore[].
  *
- * @param messages - Array of chat messages
- */
-export function convertMessagesToTurns(messages: ChatMessage[]): Turn[] {
-  return convertChatMessagesToTurns(messages);
-}
-
-/**
- * Convert OpenAI Responses API input to Lumo Turn[].
- * Returns clean turns without instruction injection (injection happens in LumoClient).
  * Handles both string input and message array input.
+ * Preserves semantic IDs for tool messages to enable deduplication.
  */
-export function convertResponseInputToTurns(
+export function convertResponseInput(
   input: string | ResponseInputItem[] | undefined,
   requestInstructions?: string
-): Turn[] {
+): MessageForStore[] {
   if (!input) {
     return [];
   }
@@ -231,7 +211,7 @@ export function convertResponseInputToTurns(
 
   // Array of messages -> ChatMessage[]
   // - function_call -> assistant turn with tool call JSON
-  // - function_call_output -> user turn with JSON (via normalizeInputItem in convertChatMessagesToTurns)
+  // - function_call_output -> user turn with JSON (via convertToolMessage in convertChatMessages)
   // - regular messages -> passed through
   const chatMessages: ChatMessage[] = [];
   for (const item of input) {
@@ -245,9 +225,9 @@ export function convertResponseInputToTurns(
       });
       continue;
     }
-    // function_call_output will be handled by normalizeInputItem in convertChatMessagesToTurns
+    // function_call_output will be handled by convertToolMessage in convertChatMessages
     if (itemType === 'function_call_output') {
-      // Pass through as-is - convertChatMessagesToTurns will normalize it
+      // Pass through as-is - convertChatMessages will normalize it
       chatMessages.push(item as unknown as ChatMessage);
       continue;
     }
@@ -265,5 +245,5 @@ export function convertResponseInputToTurns(
     chatMessages.unshift({ role: 'system', content: requestInstructions });
   }
 
-  return convertChatMessagesToTurns(chatMessages);
+  return convertChatMessages(chatMessages);
 }

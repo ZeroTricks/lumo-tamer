@@ -41,7 +41,7 @@ export {
     findNewMessages,
     isValidContinuation,
     detectBranching,
-    type IncomingMessage,
+    type MessageForStore,
 } from './deduplication.js';
 
 // Key management
