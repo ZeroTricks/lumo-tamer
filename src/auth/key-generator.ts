@@ -46,8 +46,9 @@ export async function generateLocalKeys(keyPassword: string): Promise<GeneratedK
     });
     const encryptedMasterKey = Buffer.from(encrypted as Uint8Array).toString('base64');
 
-    // 4. Return in Proton-compatible format
+    // 4. Return in Proton-compatible format with local-only markers
     const userId = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
 
     return {
         userKeys: [{
@@ -55,12 +56,16 @@ export async function generateLocalKeys(keyPassword: string): Promise<GeneratedK
             PrivateKey: privateKey,
             Primary: 1,
             Active: 1,
+            isLocalOnly: true,
+            createdAt,
         }],
         masterKeys: [{
             ID: crypto.randomUUID(),
             MasterKey: encryptedMasterKey,
             IsLatest: true,
             Version: 1,
+            isLocalOnly: true,
+            createdAt,
         }],
     };
 }

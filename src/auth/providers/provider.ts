@@ -164,6 +164,15 @@ export class AuthProvider implements IAuthProvider {
             status.warnings.push('keyPassword missing - conversation persistence disabled');
         }
 
+        // Encryption keys info
+        const userKey = this.tokens.userKeys?.[0];
+        if (userKey) {
+            status.details.encryptionKeys = userKey.isLocalOnly ? 'local-only' : 'proton';
+            if (userKey.createdAt) {
+                status.details.keysCreatedAt = userKey.createdAt;
+            }
+        }
+
         return status;
     }
 

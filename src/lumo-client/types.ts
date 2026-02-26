@@ -35,6 +35,9 @@ export interface CachedUserKey {
     PrivateKey: string;     // Armored PGP private key
     Primary: number;        // 1 = primary
     Active: number;         // 1 = active
+    // Local-only fields (not from Proton)
+    isLocalOnly?: boolean;  // true if generated locally (cannot sync)
+    createdAt?: string;     // ISO timestamp of key generation
 }
 
 // Cached master key structure (for persistence without lumo/v1/masterkeys scope)
@@ -43,6 +46,9 @@ export interface CachedMasterKey {
     MasterKey: string;      // PGP-encrypted master key (base64)
     IsLatest: boolean;
     Version: number;
+    // Local-only fields (not from Proton)
+    isLocalOnly?: boolean;  // true if generated locally (cannot sync)
+    createdAt?: string;     // ISO timestamp of key generation
 }
 
 // Persisted session metadata (from Proton localStorage ps-{localID})
