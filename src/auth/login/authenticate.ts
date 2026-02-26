@@ -53,6 +53,16 @@ export async function runLoginAuthentication(): Promise<void> {
         masterKeys: existingTokens.masterKeys,
     };
 
+    // Generate local keys if no existing keys and keyPassword available
+    // These enable local persistence without sync capability
+    if (!tokens.userKeys?.length && tokens.keyPassword) {
+        const { generateLocalKeys } = await import('../key-generator.js');
+        const generated = await generateLocalKeys(tokens.keyPassword);
+        tokens.userKeys = generated.userKeys;
+        tokens.masterKeys = generated.masterKeys;
+        logger.info('Generated local encryption keys (sync disabled)');
+    }
+
     await writeVault(vaultPath, tokens, keyConfig);
 
     const preservedSyncData = existingTokens.userKeys?.length || existingTokens.masterKeys?.length;
