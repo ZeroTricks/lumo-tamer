@@ -21,6 +21,7 @@ export type {
     SpaceId,
     RemoteId,
     IdMapEntry,
+    MessageForStore,
 } from './types.js';
 
 // Primary store
@@ -41,7 +42,6 @@ export {
     findNewMessages,
     isValidContinuation,
     detectBranching,
-    type MessageForStore,
 } from './deduplication.js';
 
 // Key management
