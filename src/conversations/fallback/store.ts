@@ -20,8 +20,8 @@ import {
     findNewMessages,
     hashMessage,
     isValidContinuation,
-    type MessageForStore,
 } from '../deduplication.js';
+import { type MessageForStore } from '../types.js';
 import type {
     ConversationId,
     ConversationState,

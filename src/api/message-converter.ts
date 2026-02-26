@@ -8,7 +8,7 @@
 import type { ChatMessage, ResponseInputItem, OpenAIToolCall } from './types.js';
 import { Role } from '../lumo-client/index.js';
 import { addToolNameToFunctionOutput } from './tools/call-id.js';
-import { type MessageForStore } from '../conversations/deduplication.js';
+import { type MessageForStore } from 'src/conversations/types.js';
 
 /**
  * Extract text from OpenAI-compatible content shapes.

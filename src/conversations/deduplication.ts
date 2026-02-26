@@ -7,7 +7,7 @@
 
 import { createHash } from 'crypto';
 import { Role } from '@lumo/types.js';
-import type { Message } from './types.js';
+import type { Message, MessageForStore } from './types.js';
 
 /**
  * Compute hash for a message (role + content)
@@ -47,15 +47,6 @@ export function fingerprintMessages(messages: Message[]): MessageFingerprint[] {
         msg.content ?? '',
         index
     ));
-}
-
-/**
- * Incoming message format from API
- */
-export interface MessageForStore {
-    role: Role;
-    content?: string;
-    id?: string;  // Semantic ID for deduplication (call_id for tools)
 }
 
 /**

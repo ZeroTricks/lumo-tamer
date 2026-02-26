@@ -4,7 +4,7 @@
  */
 
 // Import types from upstream @lumo
-import type { ConversationId, MessageId, SpaceId, ProjectSpace, ConversationPriv, MessagePub, ConversationPub } from '@lumo/types.js';
+import type { ConversationId, MessageId, SpaceId, ProjectSpace, ConversationPriv, MessagePub, ConversationPub, Role } from '@lumo/types.js';
 import { ConversationStatus } from '@lumo/types.js';
 import type { RemoteId } from '@lumo/remote/types.ts';
 
@@ -79,4 +79,13 @@ export interface IdMapEntry {
     localId: string;
     remoteId: RemoteId;
     type: 'space' | 'conversation' | 'message';
+}
+/**
+ * Incoming message format from API
+ */
+
+export interface MessageForStore {
+    role: Role;
+    content?: string;
+    id?: string; // Semantic ID for deduplication (call_id for tools)
 }

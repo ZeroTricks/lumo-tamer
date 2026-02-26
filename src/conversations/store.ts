@@ -23,7 +23,6 @@ import {
     findNewMessages,
     hashMessage,
     isValidContinuation,
-    type MessageForStore,
 } from './deduplication.js';
 import type {
     ConversationId,
@@ -31,6 +30,7 @@ import type {
     ConversationStoreConfig,
     Message,
     MessageId,
+    MessageForStore,
     SpaceId,
 } from './types.js';
 
