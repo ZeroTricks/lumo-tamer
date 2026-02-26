@@ -8,7 +8,7 @@
  */
 
 import stableStringify from 'json-stable-stringify';
-import { logger } from '../../app/logger.js';
+import { logger } from '../../../app/logger.js';
 import { encryptData, decryptData } from '@proton/crypto/lib/subtle/aesGcm';
 import { Role } from '@lumo/types.js';
 import type {
@@ -16,7 +16,7 @@ import type {
     ProjectSpace,
     ConversationPriv,
     MessagePrivate,
-} from '../types.js';
+} from '../../types.js';
 
 // Role mapping for AD construction
 // Maps internal roles to API-compatible roles (user/assistant)

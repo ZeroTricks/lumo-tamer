@@ -10,7 +10,7 @@ import { logger } from './logger.js';
 import { resolveProjectPath } from './paths.js';
 import { LumoClient } from '../lumo-client/index.js';
 import { createAuthProvider, AuthManager, type AuthProvider, type ProtonApi } from '../auth/index.js';
-import { getConversationStore, type ConversationStore, initializeSync, initializeConversationStore } from '../conversations/index.js';
+import { getConversationStore, getFallbackStore, type ConversationStore, initializeSync, initializeConversationStore, FallbackStore } from '../conversations/index.js';
 import { createMockProtonApi } from '../mock/mock-api.js';
 import { installFetchAdapter } from '../shims/fetch-adapter.js';
 import type { AppContext } from './types.js';
@@ -44,7 +44,8 @@ export class Application implements AppContext {
    */
   private initializeMock(): void {
     const conversationsConfig = getConversationsConfig();
-    getConversationStore({ maxConversationsInMemory: conversationsConfig.maxInMemory });
+    // In mock mode, use the fallback store directly
+    getFallbackStore({ maxConversationsInMemory: conversationsConfig.maxInMemory });
 
     this.protonApi = createMockProtonApi(mockConfig.scenario);
     this.lumoClient = new LumoClient(this.protonApi, { enableEncryption: false });
@@ -123,7 +124,7 @@ export class Application implements AppContext {
     return this.lumoClient;
   }
 
-  getConversationStore(): ConversationStore {
+  getConversationStore(): ConversationStore | FallbackStore {
     return getConversationStore();
   }
 

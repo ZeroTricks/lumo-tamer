@@ -10,9 +10,9 @@
  * (see ~/WebClients/applications/lumo/src/app/redux/sagas/conversations.ts)
  */
 
-import { logger } from '../../app/logger.js';
+import { logger } from '../../../app/logger.js';
 import { getSyncService, type SyncService } from './sync-service.js';
-import { getMetrics } from '../../app/metrics.js';
+import { getMetrics } from '../../../app/metrics.js';
 
 // Timing constants (not configurable - sensible defaults)
 const DEBOUNCE_MS = 5000;      // Wait after last change before syncing

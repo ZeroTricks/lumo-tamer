@@ -19,9 +19,9 @@ import {
     exportKey,
     deriveKey,
 } from '@proton/crypto/lib/subtle/aesGcm';
-import { logger } from '../../app/logger.js';
-import type { SpaceId } from '../types.js';
-import type { ProtonApi } from '../../lumo-client/types.js';
+import { logger } from '../app/logger.js';
+import type { SpaceId } from './types.js';
+import type { ProtonApi } from '../lumo-client/types.js';
 
 // Constants for key derivation
 const SPACE_KEY_SALT = new Uint8Array([0x6c, 0x75, 0x6d, 0x6f, 0x2d, 0x73, 0x70, 0x61, 0x63, 0x65]); // 'lumo-space'

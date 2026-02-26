@@ -47,14 +47,14 @@ export function printSummary(status: AuthProviderStatus, options: SummaryOptions
     if (status.valid) {
         print('\x1b[32mAuthentication is configured and valid.\x1b[0m');
 
-        // Upstream storage status (local encryption)
-        if (conversationsConfig.useUpstreamStorage) {
+        // Primary store status (local encryption)
+        if (!conversationsConfig.useFallbackStore) {
             if (!supportsPersistence) {
-                print('Upstream storage: \x1b[33mdisabled\x1b[0m (no cached encryption keys)');
+                print('Primary store: \x1b[33mdisabled\x1b[0m (no cached encryption keys)');
             } else if (!status.details.hasKeyPassword) {
-                print('Upstream storage: \x1b[33mdisabled\x1b[0m (no keyPassword)');
+                print('Primary store: \x1b[33mdisabled\x1b[0m (no keyPassword)');
             } else {
-                print('Upstream storage: \x1b[32menabled\x1b[0m');
+                print('Primary store: \x1b[32menabled\x1b[0m');
             }
         }
 

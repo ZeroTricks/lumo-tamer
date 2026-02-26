@@ -1,8 +1,8 @@
 /**
- * Upstream Store Initialization
+ * Conversation Store Initialization
  *
  * Sets up the Redux store with saga middleware, IndexedDB persistence,
- * and returns an UpstreamConversationStore adapter.
+ * and returns a ConversationStore.
  *
  * This module handles:
  * 1. IndexedDB polyfill initialization (must happen first)
@@ -14,8 +14,8 @@
 
 import createSagaMiddleware from 'redux-saga';
 
-import { logger } from '../../app/logger.js';
-import type { ConversationStoreConfig, SpaceId } from '../types.js';
+import { logger } from '../app/logger.js';
+import type { ConversationStoreConfig, SpaceId } from './types.js';
 
 import { DbApi } from '@lumo/indexedDb/db.js';
 import { generateSpaceKeyBase64 } from '@lumo/crypto/index.js';
@@ -30,9 +30,9 @@ import { setupStore, type LumoSagaContext, type LumoStore } from '@lumo/redux/st
 import { LumoApi } from '@lumo/remote/api.js';
 import type { Space } from '@lumo/types.js';
 
-import { UpstreamConversationStore } from './adapter.js';
+import { ConversationStore } from './store.js';
 
-export interface UpstreamStoreConfig {
+export interface StoreConfig {
     /** Session UID for API authentication (x-pm-uid header) */
     sessionUid: string;
     /** Stable user ID for database naming (userKeys[0].ID) */
@@ -42,9 +42,9 @@ export interface UpstreamStoreConfig {
     storeConfig: ConversationStoreConfig;
 }
 
-export interface UpstreamStoreResult {
+export interface StoreResult {
     store: LumoStore;
-    conversationStore: UpstreamConversationStore;
+    conversationStore: ConversationStore;
     dbApi: DbApi;
     spaceId: SpaceId;
 }
@@ -56,18 +56,18 @@ export interface UpstreamStoreResult {
  * - IndexedDB (via indexeddbshim) for local persistence
  * - Redux store for in-memory state
  * - Saga middleware for async operations
- * - UpstreamConversationStore adapter for compatibility
+ * - ConversationStore adapter for compatibility
  */
-export async function initializeUpstreamStore(
-    config: UpstreamStoreConfig
-): Promise<UpstreamStoreResult> {
+export async function initializeStore(
+    config: StoreConfig
+): Promise<StoreResult> {
     const { sessionUid, userId, masterKey, spaceId, storeConfig } = config;
 
     logger.info({ userId: userId.slice(0, 8) + '...' }, 'Initializing upstream storage');
 
     // 1. Import indexeddb polyfill (must happen before DbApi)
     // This is done at module level in the polyfill file
-    await import('../../shims/indexeddb-polyfill.js');
+    await import('../shims/indexeddb-polyfill.js');
 
     // 2. Create DbApi for IndexedDB operations (uses stable userId for db naming)
     const dbApi = new DbApi(userId);
@@ -116,7 +116,7 @@ export async function initializeUpstreamStore(
     await ensureSpaceExists(store, spaceId);
 
     // 10. Create adapter
-    const conversationStore = new UpstreamConversationStore(
+    const conversationStore = new ConversationStore(
         store,
         spaceId,
         storeConfig

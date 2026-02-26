@@ -28,7 +28,7 @@ const conversationsConfigSchema = z.object({
   maxInMemory: z.number(),
   deriveIdFromUser: z.boolean(),
   databasePath: z.string(),
-  useUpstreamStorage: z.boolean(),
+  useFallbackStore: z.boolean(),
   sync: z.object({
     enabled: z.boolean(),
     projectId: z.string().uuid().optional(),

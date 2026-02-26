@@ -79,11 +79,10 @@ conversations:
   # WARNING: May incorrectly merge unrelated conversations with same "user" field. Ignored if `user` is absent.
   deriveIdFromUser: false
 
-  # Use upstream Proton storage (Redux + IndexedDB + Sagas)
-  # When true, uses the upstream WebClient storage layer for persistence.
-  # When false, uses the existing lumo-tamer storage implementation.
-  # This is experimental and requires additional setup.
-  useUpstreamStorage: false
+  # Use fallback in-memory store instead of the primary store
+  # When true, uses the legacy in-memory store (will be removed in future).
+  # When false (default), uses the primary Redux + IndexedDB store.
+  useFallbackStore: true
 
   # Sync: persist conversations to Proton servers (requires browser auth)
   sync:

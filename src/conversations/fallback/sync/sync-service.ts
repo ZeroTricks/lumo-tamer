@@ -5,13 +5,13 @@
  * Delegates to SpaceManager for space lifecycle and EncryptionCodec for encryption.
  */
 
-import { logger } from '../../app/logger.js';
+import { logger } from '../../../app/logger.js';
 import { LumoApi } from '@lumo/remote/api.js';
 import { RoleInt, StatusInt } from '@lumo/remote/types.js';
-import { getConversationStore } from '../store.js';
-import type { KeyManager } from '../encryption/key-manager.js';
+import { getFallbackStore } from '../store.js';
+import type { KeyManager } from '../../key-manager.js';
 import { Role, type Status } from '@lumo/types.js';
-import type { ConversationState, Message, SpaceId, RemoteId, MessagePrivate } from '../types.js';
+import type { ConversationState, Message, SpaceId, RemoteId, MessagePrivate } from '../../types.js';
 import { SpaceManager } from './space-manager.js';
 
 // Role mapping: our internal roles to API integer values
@@ -113,7 +113,7 @@ export class SyncService {
 
         const { remoteId: spaceRemoteId } = await this.getOrCreateSpace();
 
-        const store = getConversationStore();
+        const store = getFallbackStore();
         const dirtyConversations = store.getDirty();
 
         if (dirtyConversations.length === 0) {
@@ -149,7 +149,7 @@ export class SyncService {
             throw new Error('KeyManager not initialized - cannot sync without encryption keys');
         }
 
-        const store = getConversationStore();
+        const store = getFallbackStore();
         const conversation = store.get(conversationId);
 
         if (!conversation) {
@@ -346,7 +346,7 @@ export class SyncService {
             }
 
             // Create/update in store
-            const store = getConversationStore();
+            const store = getFallbackStore();
             const state = store.getOrCreate(localId);
             state.title = title;
             state.metadata.starred = conv.starred ?? false;
