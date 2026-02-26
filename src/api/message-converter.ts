@@ -5,7 +5,7 @@
  * but also includes an optional `id` field for deduplication of tool messages.
  */
 
-import type { ChatMessage, ResponseInputItem, OpenAIToolCall } from './types.js';
+import type { OpenAIChatMessage, OpenAIResponseMessage, OpenAIToolCall } from './types.js';
 import { Role } from '../lumo-client/index.js';
 import { addToolNameToFunctionOutput } from './tools/call-id.js';
 import { type MessageForStore } from 'src/conversations/types.js';
@@ -136,7 +136,7 @@ export function convertToolMessage(item: unknown): MessageForStore | MessageForS
  * Extract system/developer message content from a ChatMessage array.
  * Exported for routes to build instructions.
  */
-export function extractSystemMessage(messages: ChatMessage[]): string | undefined {
+export function extractSystemMessage(messages: OpenAIChatMessage[]): string | undefined {
   const systemMsg = messages.find(m =>
     m.role === 'system' || (m.role as string) === 'developer'
   );
@@ -157,7 +157,7 @@ export function extractSystemMessage(messages: ChatMessage[]): string | undefine
  *
  * Preserves semantic IDs (call_id) for tool messages to enable deduplication.
  */
-export function convertChatMessages(messages: ChatMessage[]): MessageForStore[] {
+export function convertOpenAIChatMessages(messages: OpenAIChatMessage[]): MessageForStore[] {
   const result: MessageForStore[] = [];
 
   for (const msg of messages) {
@@ -196,8 +196,8 @@ export function convertChatMessages(messages: ChatMessage[]): MessageForStore[] 
  * Handles both string input and message array input.
  * Preserves semantic IDs for tool messages to enable deduplication.
  */
-export function convertResponseInput(
-  input: string | ResponseInputItem[] | undefined,
+export function convertOpenAIResponseMessages(
+  input: string | OpenAIResponseMessage[] | undefined,
   requestInstructions?: string
 ): MessageForStore[] {
   if (!input) {
@@ -213,7 +213,7 @@ export function convertResponseInput(
   // - function_call -> assistant turn with tool call JSON
   // - function_call_output -> user turn with JSON (via convertToolMessage in convertChatMessages)
   // - regular messages -> passed through
-  const chatMessages: ChatMessage[] = [];
+  const chatMessages: OpenAIChatMessage[] = [];
   for (const item of input) {
     if (typeof item !== 'object') continue;
     const itemType = 'type' in item ? (item as { type: string }).type : undefined;
@@ -228,7 +228,7 @@ export function convertResponseInput(
     // function_call_output will be handled by convertToolMessage in convertChatMessages
     if (itemType === 'function_call_output') {
       // Pass through as-is - convertChatMessages will normalize it
-      chatMessages.push(item as unknown as ChatMessage);
+      chatMessages.push(item as unknown as OpenAIChatMessage);
       continue;
     }
     if ('role' in item && 'content' in item) {
@@ -245,5 +245,5 @@ export function convertResponseInput(
     chatMessages.unshift({ role: 'system', content: requestInstructions });
   }
 
-  return convertChatMessages(chatMessages);
+  return convertOpenAIChatMessages(chatMessages);
 }

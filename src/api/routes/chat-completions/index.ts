@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse } from '../../types.js';
 import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig } from '../../../app/config.js';
 import { logger } from '../../../app/logger.js';
-import { convertChatMessages, extractSystemMessage } from '../../message-converter.js';
+import { convertOpenAIChatMessages, extractSystemMessage } from '../../message-converter.js';
 import { buildInstructions } from '../../instructions.js';
 import { getMetrics } from '../../../app/metrics.js';
 import { ChatCompletionEventEmitter } from './events.js';
@@ -100,7 +100,7 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       }
 
       // ===== Convert messages to Lumo turns =====
-      const turns = convertChatMessages(request.messages);
+      const turns = convertOpenAIChatMessages(request.messages);
 
       // ===== Build instructions (injected in LumoClient, not persisted) =====
       const systemContent = extractSystemMessage(request.messages);
