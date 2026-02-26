@@ -662,14 +662,16 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
         }
 
         // Build result
+        const extractedAt = new Date().toISOString();
         const tokens: StoredTokens = {
             method: 'browser',
             uid: outputUid,
             accessToken: outputAccessToken,
             refreshToken,
             keyPassword,
-            extractedAt: new Date().toISOString(),
-            persistedSession,
+            extractedAt,
+            // Set expiresAt for unified validity checking (browser tokens valid ~24h)
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
             userKeys,
             masterKeys,
         };

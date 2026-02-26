@@ -34,19 +34,41 @@ export function printStatus(status: AuthProviderStatus): void {
     }
 }
 
-export function printSummary(status: AuthProviderStatus, supportsPersistence: boolean): void {
+export interface SummaryOptions {
+    supportsPersistence: boolean;
+    supportsSync: boolean;
+}
+
+export function printSummary(status: AuthProviderStatus, options: SummaryOptions): void {
+    const { supportsPersistence, supportsSync } = options;
+    const conversationsConfig = getConversationsConfig();
+
     print('\n--- Summary ---');
     if (status.valid) {
         print('\x1b[32mAuthentication is configured and valid.\x1b[0m');
-        const syncEnabled = getConversationsConfig().sync.enabled;
-        if (!syncEnabled) {
-            print('Conversation persistence: \x1b[33mdisabled\x1b[0m (by configuration)');
-        } else if (!supportsPersistence) {
-            print(`Conversation persistence: \x1b[33mdisabled\x1b[0m (${status.method} auth doesn't support it)`);
-        } else if (!status.details.hasKeyPassword) {
-            print('Conversation persistence: \x1b[33menabled but no keyPassword\x1b[0m');
+
+        // Upstream storage status (local encryption)
+        if (conversationsConfig.useUpstreamStorage) {
+            if (!supportsPersistence) {
+                print('Upstream storage: \x1b[33mdisabled\x1b[0m (no cached encryption keys)');
+            } else if (!status.details.hasKeyPassword) {
+                print('Upstream storage: \x1b[33mdisabled\x1b[0m (no keyPassword)');
+            } else {
+                print('Upstream storage: \x1b[32menabled\x1b[0m');
+            }
+        }
+
+        // Sync status (Proton server sync)
+        if (conversationsConfig.sync.enabled) {
+            if (!supportsSync) {
+                print('Conversation sync: \x1b[33mdisabled\x1b[0m (requires browser auth for lumo scope)');
+            } else if (!status.details.hasKeyPassword) {
+                print('Conversation sync: \x1b[33mdisabled\x1b[0m (no keyPassword)');
+            } else {
+                print('Conversation sync: \x1b[32menabled\x1b[0m');
+            }
         } else {
-            print('Conversation persistence: \x1b[32menabled\x1b[0m');
+            print('Conversation sync: \x1b[33mdisabled\x1b[0m (by configuration)');
         }
     } else {
         print('\x1b[31mAuthentication needs attention.\x1b[0m');
@@ -64,7 +86,10 @@ export async function runStatus(): Promise<void> {
         const provider = await createAuthProvider();
         const status = provider.getStatus();
         printStatus(status);
-        printSummary(status, provider.supportsPersistence());
+        printSummary(status, {
+            supportsPersistence: provider.supportsPersistence(),
+            supportsSync: provider.supportsSync(),
+        });
 
         print('');
         process.exit(status.valid ? 0 : 1);

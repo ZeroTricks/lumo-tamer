@@ -11,7 +11,7 @@ import { parseRcloneSection } from './parser.js';
 import { authConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
 import { resolveProjectPath } from '../../app/paths.js';
-import { writeVault, type VaultKeyConfig } from '../vault/index.js';
+import { readVault, writeVault, type VaultKeyConfig } from '../vault/index.js';
 import type { StoredTokens } from '../types.js';
 import { print } from '../../app/terminal.js';
 
@@ -54,6 +54,7 @@ async function readMultilineInput(): Promise<string> {
  * Run rclone authentication
  *
  * Prompts for rclone config paste, parses tokens, and saves to encrypted vault.
+ * Preserves sync data (userKeys, masterKeys) from existing vault if present.
  */
 export async function runRcloneAuthentication(): Promise<void> {
     const content = await readMultilineInput();
@@ -65,29 +66,47 @@ export async function runRcloneAuthentication(): Promise<void> {
     // Parse the pasted content
     const rcloneTokens = parseRcloneSection(content);
 
-    // Convert to unified StoredTokens format
-    const tokens: StoredTokens = {
-        method: 'rclone',
-        uid: rcloneTokens.uid,
-        accessToken: rcloneTokens.accessToken,
-        refreshToken: rcloneTokens.refreshToken,
-        keyPassword: rcloneTokens.keyPassword,
-        extractedAt: new Date().toISOString(),
-    };
-
-    // Write tokens to encrypted vault
     const vaultPath = resolveProjectPath(authConfig.vault.path);
     const keyConfig: VaultKeyConfig = {
         keychain: authConfig.vault.keychain,
         keyFilePath: authConfig.vault.keyFilePath,
     };
 
+    // Try to load existing vault to preserve sync data
+    let existingTokens: Partial<StoredTokens> = {};
+    try {
+        existingTokens = await readVault(vaultPath, keyConfig);
+    } catch {
+        // No existing vault, start fresh
+    }
+
+    const extractedAt = new Date().toISOString();
+
+    // Convert to unified StoredTokens format
+    // Preserve sync data (userKeys, masterKeys) from existing vault if present
+    // (UID is a session id that changes each login, not a user id)
+    const tokens: StoredTokens = {
+        method: 'rclone',
+        uid: rcloneTokens.uid,
+        accessToken: rcloneTokens.accessToken,
+        refreshToken: rcloneTokens.refreshToken,
+        keyPassword: rcloneTokens.keyPassword,
+        extractedAt,
+        // Set expiresAt for unified validity checking (conservative 12h estimate)
+        expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+        userKeys: existingTokens.userKeys,
+        masterKeys: existingTokens.masterKeys,
+    };
+
     await writeVault(vaultPath, tokens, keyConfig);
+
+    const preservedSyncData = existingTokens.userKeys?.length || existingTokens.masterKeys?.length;
 
     logger.info({ vaultPath }, 'Tokens saved to encrypted vault');
     logger.info({
         uid: tokens.uid.slice(0, 12) + '...',
         hasKeyPassword: !!tokens.keyPassword,
+        preservedSyncData: !!preservedSyncData,
     }, 'Extraction complete');
 }
 

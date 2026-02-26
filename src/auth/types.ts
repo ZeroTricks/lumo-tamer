@@ -2,13 +2,13 @@
  * Auth types - Unified authentication provider interface
  */
 
-import type { ProtonApi, CachedUserKey, CachedMasterKey, PersistedSessionData } from '../lumo-client/types.js';
+import type { ProtonApi, CachedUserKey, CachedMasterKey } from '../lumo-client/types.js';
 
 export type AuthMethod = 'login' | 'browser' | 'rclone';
 
 /**
  * Unified token storage format
- * All auth methods read/write this format to sessions/auth-tokens.json
+ * All auth methods read/write this format to the encrypted vault.
  */
 export interface StoredTokens {
     method: AuthMethod;
@@ -18,8 +18,7 @@ export interface StoredTokens {
     keyPassword?: string;
     expiresAt?: string;
     extractedAt: string;
-    // Persistence data (browser-specific)
-    persistedSession?: PersistedSessionData;
+    // Sync data (cached from browser extraction for persistence)
     userKeys?: CachedUserKey[];
     masterKeys?: CachedMasterKey[];
 }
@@ -36,16 +35,11 @@ export interface AuthProviderStatus {
 }
 
 /**
- * Unified auth provider interface
- * All auth methods (login, browser, rclone) implement this interface
+ * Auth provider interface
+ * Use AuthProvider.create() to instantiate.
  */
-export interface AuthProvider {
+export interface IAuthProvider {
     readonly method: AuthMethod;
-
-    /**
-     * Initialize the provider (load tokens, verify state)
-     */
-    initialize(): Promise<void>;
 
     /**
      * Get the user ID (UID)
@@ -73,11 +67,6 @@ export interface AuthProvider {
     isValid(): boolean;
 
     /**
-     * Check if tokens are near expiry (within 5 minutes)
-     */
-    isNearExpiry(): boolean;
-
-    /**
      * Get status information for display
      */
     getStatus(): AuthProviderStatus;
@@ -98,11 +87,17 @@ export interface AuthProvider {
     getCachedMasterKeys?(): CachedMasterKey[] | undefined;
 
     /**
-     * Whether this auth method supports Proton conversation persistence.
-     * Only browser auth has the lumo scope needed for spaces API.
+     * Whether encryption is supported (has cached userKeys and masterKeys).
+     * Required for upstream storage to encrypt/decrypt conversations locally.
      */
     supportsPersistence(): boolean;
+
+    /**
+     * Whether sync to Proton servers is supported.
+     * Only browser auth has the lumo scope needed for spaces API.
+     */
+    supportsSync(): boolean;
 }
 
 // Re-export types that providers need
-export type { ProtonApi, CachedUserKey, CachedMasterKey, PersistedSessionData };
+export type { ProtonApi, CachedUserKey, CachedMasterKey };

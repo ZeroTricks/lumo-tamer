@@ -134,7 +134,7 @@ export async function initializeConversationStore(
         if (!authProvider.supportsPersistence()) {
             logger.warn(
                 { method: authProvider.method },
-                'Upstream storage requires browser auth. Falling back to in-memory store.'
+                'Upstream storage requires cached encryption keys. Falling back to in-memory store.'
             );
         } else {
             const keyPassword = authProvider.getKeyPassword();
@@ -265,36 +265,21 @@ export async function initializeSync(
         return { initialized: false };
     }
 
-    if (!authProvider.supportsPersistence()) {
-        if (conversationsConfig.useUpstreamStorage) {
-            logger.warn(
-                { method: authProvider.method },
-                'Upstream storage requires browser auth (for master key decryption). ' +
-                'Falling back to in-memory storage only.'
-            );
-        } else {
-            logger.warn(
-                { method: authProvider.method },
-                'Conversation sync requires browser auth method'
-            );
-        }
+    // Sync requires browser auth for lumo scope (spaces API access)
+    if (!authProvider.supportsSync()) {
+        logger.warn(
+            { method: authProvider.method },
+            'Conversation sync requires browser auth method'
+        );
         return { initialized: false };
     }
 
     const keyPassword = authProvider.getKeyPassword();
     if (!keyPassword) {
-        if (conversationsConfig.useUpstreamStorage) {
-            logger.warn(
-                { method: authProvider.method },
-                'Upstream storage requires keyPassword (for master key decryption). ' +
-                'Falling back to in-memory storage only.'
-            );
-        } else {
-            logger.info(
-                { method: authProvider.method },
-                'No keyPassword available - sync will not be initialized'
-            );
-        }
+        logger.warn(
+            { method: authProvider.method },
+            'No keyPassword available - sync will not be initialized'
+        );
         return { initialized: false };
     }
 

@@ -22,12 +22,10 @@ import { logger } from '../app/logger.js';
 import { runBrowserAuthentication } from './browser/authenticate.js';
 import { runRcloneAuthentication } from './rclone/authenticate.js';
 import { runLoginAuthentication } from './login/authenticate.js';
-import { BrowserAuthProvider } from './providers/browser.js';
-import { RcloneAuthProvider } from './providers/rclone.js';
-import { LoginAuthProvider } from './providers/login.js';
+import { AuthProvider } from './providers/index.js';
 import { printStatus, printSummary, runStatus } from './status.js';
 import { updateAuthConfig } from './update-config.js';
-import type { AuthMethod, AuthProvider } from './types.js';
+import type { AuthMethod } from './types.js';
 import { print } from '../app/terminal.js';
 
 const numToMethod: Record<string, AuthMethod> = { '1': 'login', '2': 'browser', '3': 'rclone' };
@@ -134,24 +132,14 @@ export async function runAuthCommand(argv: string[]): Promise<void> {
       cdpEndpoint,
     });
 
-    // Show status after extraction
-    // Create provider directly based on selected method (not from config, which hasn't reloaded)
-    let provider: AuthProvider;
-    switch (method) {
-      case 'login':
-        provider = new LoginAuthProvider();
-        break;
-      case 'rclone':
-        provider = new RcloneAuthProvider();
-        break;
-      default:
-        provider = new BrowserAuthProvider();
-        break;
-    }
-    await provider.initialize();
+    // Show status after extraction - reload from vault
+    const provider = await AuthProvider.create();
     const status = provider.getStatus();
     printStatus(status);
-    printSummary(status, provider.supportsPersistence());
+    printSummary(status, {
+        supportsPersistence: provider.supportsPersistence(),
+        supportsSync: provider.supportsSync(),
+    });
 
     print('\nYou can now run: tamer or tamer server');
   } catch (error) {

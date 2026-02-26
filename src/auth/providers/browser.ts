@@ -1,127 +1,24 @@
 /**
  * Browser Auth Provider
  *
+ * Extends AuthProvider with browser-specific cookie-based token refresh.
  * Uses tokens extracted from browser session via Playwright.
- * Supports token refresh via /auth/refresh if REFRESH cookie was extracted.
  */
 
 import { logger } from '../../app/logger.js';
-import { authConfig, getConversationsConfig } from '../../app/config.js';
 import { APP_VERSION_HEADER } from '@lumo/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
-import { resolveProjectPath } from '../../app/paths.js';
-import { BaseAuthProvider, type ProviderConfig } from './base.js';
-import type { AuthProviderStatus } from '../types.js';
+import { AuthProvider, registerBrowserProvider, type ProviderConfig } from './provider.js';
+import type { StoredTokens } from '../types.js';
 
 interface RefreshResponse {
     UID: string;
     ExpiresIn?: number;
 }
 
-function getProviderConfig(): ProviderConfig {
-    return {
-        vaultPath: resolveProjectPath(authConfig.vault.path),
-        keyConfig: {
-            keychain: authConfig.vault.keychain,
-            keyFilePath: authConfig.vault.keyFilePath,
-        },
-    };
-}
-
-export class BrowserAuthProvider extends BaseAuthProvider {
-    readonly method = 'browser' as const;
-
-    constructor() {
-        super(getProviderConfig());
-    }
-
-    // Browser tokens may not have method field - accept any or 'browser'
-    protected override validateMethod(): void {
-        if (this.tokens?.method && this.tokens.method !== 'browser') {
-            throw new Error(
-                `Token file is not from browser auth (method: ${this.tokens.method}).\n` +
-                'Run: tamer auth browser'
-            );
-        }
-        // Detect old vault format that needs re-authentication
-        if (this.tokens?.persistedSession?.blob && !this.tokens?.keyPassword) {
-            throw new Error(
-                'Auth format outdated (encrypted blob without keyPassword).\n' +
-                'Run: tamer auth'
-            );
-        }
-    }
-
-    protected override async onAfterLoad(): Promise<void> {
-        const tokenAge = this.getTokenAgeHours();
-        logger.debug({
-            extractedAt: this.tokens!.extractedAt,
-            ageHours: tokenAge.toFixed(1),
-            uid: this.tokens!.uid.slice(0, 8) + '...',
-            hasKeyPassword: !!this.tokens!.keyPassword,
-            hasUserKeys: this.tokens!.userKeys?.length ?? 0,
-            hasMasterKeys: this.tokens!.masterKeys?.length ?? 0,
-        }, 'Browser tokens loaded');
-    }
-
-    isValid(): boolean {
-        if (!this.tokens?.uid || !this.tokens?.accessToken) return false;
-        // Tokens typically valid for ~24h
-        const ageHours = this.getTokenAgeHours();
-        return ageHours < 24;
-    }
-
-    isNearExpiry(): boolean {
-        if (!this.tokens) return false;
-        const ageHours = this.getTokenAgeHours();
-        // Consider "near expiry" if within last hour of 24h window
-        return ageHours > 23;
-    }
-
-    getStatus(): AuthProviderStatus {
-        const status: AuthProviderStatus = {
-            method: 'browser',
-            source: this.config.vaultPath,
-            valid: false,
-            details: {},
-            warnings: [],
-        };
-
-        if (!this.tokens) {
-            status.warnings.push(`Vault not found: ${this.config.vaultPath}`);
-            status.warnings.push('Run: tamer auth');
-            return status;
-        }
-
-        status.details.extractedAt = this.tokens.extractedAt;
-        status.details.hasPersistedSession = !!this.tokens.persistedSession;
-
-        const ageHours = this.getTokenAgeHours();
-        status.details.age = this.formatDuration(ageHours);
-
-        if (!this.isValid()) {
-            status.warnings.push('Tokens likely expired (>24h old)');
-        } else {
-            status.valid = true;
-        }
-
-        // Show UID
-        if (this.tokens.uid) {
-            status.details.uid = this.tokens.uid.slice(0, 12) + '...';
-        }
-
-        // Check keyPassword availability (only warn if sync is enabled)
-        status.details.hasKeyPassword = !!this.tokens.keyPassword;
-        const syncEnabled = getConversationsConfig().sync.enabled;
-        if (!this.tokens.keyPassword && syncEnabled) {
-            status.warnings.push('No keyPassword available - run tamer auth');
-        }
-
-        return status;
-    }
-
-    supportsPersistence(): boolean {
-        return true;
+export class BrowserAuthProvider extends AuthProvider {
+    constructor(tokens: StoredTokens, config: ProviderConfig) {
+        super(tokens, config);
     }
 
     /**
@@ -130,8 +27,8 @@ export class BrowserAuthProvider extends BaseAuthProvider {
      * Unlike SRP/rclone which use JSON body, browser auth must send the refresh
      * token as a cookie and parse new tokens from Set-Cookie response headers.
      */
-    async refresh(): Promise<void> {
-        if (!this.tokens?.refreshToken) {
+    override async refresh(): Promise<void> {
+        if (!this.tokens.refreshToken) {
             throw new Error('No refresh token available');
         }
 
@@ -230,22 +127,7 @@ export class BrowserAuthProvider extends BaseAuthProvider {
             expiresIn: `${Math.round(expiresIn / 3600)}h`,
         }, 'Browser token refresh successful');
     }
-
-    // === Browser-specific helpers ===
-
-    private getTokenAgeHours(): number {
-        if (!this.tokens?.extractedAt) return 0;
-        const extractedAt = new Date(this.tokens.extractedAt).getTime();
-        return (Date.now() - extractedAt) / (1000 * 60 * 60);
-    }
-
-    private formatDuration(hours: number): string {
-        if (hours < 1) {
-            return `${Math.round(hours * 60)} minutes`;
-        } else if (hours < 24) {
-            return `${hours.toFixed(1)} hours`;
-        } else {
-            return `${(hours / 24).toFixed(1)} days`;
-        }
-    }
 }
+
+// Register this provider with the factory
+registerBrowserProvider((tokens, config) => new BrowserAuthProvider(tokens, config));
