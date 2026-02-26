@@ -356,48 +356,25 @@ export async function initializeSync(
  * Initialize sync for an already-initialized upstream store
  *
  * Called when initializeConversationStore() already set up the upstream store.
- * Just creates the sync service and fetches/creates the space.
+ * Space creation is handled during store init (ensureSpaceExists in init.ts).
+ * Sync is handled automatically by Redux sagas.
  */
-async function initializeUpstreamSyncOnly(
+function initializeUpstreamSyncOnly(
     options: InitializeSyncOptions,
     upstreamResult: UpstreamStoreResult
-): Promise<InitializeSyncResult> {
+): InitializeSyncResult {
     const { authProvider, conversationsConfig } = options;
-    const syncConfig = conversationsConfig.sync;
 
-    logger.info('Initializing upstream sync (store already initialized)');
+    // Space is created during initializeUpstreamStore() via ensureSpaceExists()
+    // Sync is handled automatically by Redux sagas (pushSpaceRequest, pushConversationRequest, etc.)
+    logger.info(
+        { method: authProvider.method, autoSync: conversationsConfig.sync.autoSync },
+        'Upstream sync initialized (handled by sagas)'
+    );
 
-    try {
-        const { UpstreamSyncService } = await import('./upstream/index.js');
-
-        // Create upstream sync service adapter
-        const upstreamSyncService = new UpstreamSyncService({
-            store: upstreamResult.store,
-            dbApi: upstreamResult.dbApi,
-            spaceId: upstreamResult.spaceId,
-        });
-
-        // Fetch/create space via upstream sagas
-        try {
-            await upstreamSyncService.getOrCreateSpace();
-            logger.info({ method: authProvider.method }, 'Upstream sync service initialized');
-        } catch (spaceError) {
-            const msg = spaceError instanceof Error ? spaceError.message : String(spaceError);
-            logger.warn({ error: msg }, 'Upstream getOrCreateSpace failed');
-        }
-
-        // Auto-sync is handled by sagas in upstream mode
-        if (syncConfig.autoSync) {
-            logger.info('Auto-sync enabled (handled by upstream sagas)');
-        }
-
-        return {
-            initialized: true,
-            upstreamStore: upstreamResult,
-        };
-    } catch (error) {
-        logger.error({ error }, 'Failed to initialize upstream sync');
-        return { initialized: false };
-    }
+    return {
+        initialized: true,
+        upstreamStore: upstreamResult,
+    };
 }
 
