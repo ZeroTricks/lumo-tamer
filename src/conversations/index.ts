@@ -207,8 +207,11 @@ async function initializeUpstreamConversationStore(
     const spaceId = syncConfig.projectId ?? crypto.randomUUID();
 
     // Initialize upstream store
+    // sessionUid: for API authentication (x-pm-uid header)
+    // userId: stable ID from userKeys for database naming (UID changes each session)
     const upstreamResult = await initializeUpstreamStore({
-        uid,
+        sessionUid: uid,
+        userId: authProvider.getUserId() ?? uid,
         masterKey: masterKeyBase64,
         spaceId,
         storeConfig: {

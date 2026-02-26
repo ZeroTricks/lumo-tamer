@@ -54,7 +54,9 @@ return (
                 .toLowerCase()
                 .replace(/\+/g, '-')
                 .replace(/\//g, '_')
-                .replace(/=/g, '') + '.sqlite'
+                .replace(/=/g, '')
+                .substring(0, 24)
+                 + '.sqlite'
         );
     },
 });

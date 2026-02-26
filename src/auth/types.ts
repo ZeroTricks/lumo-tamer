@@ -97,6 +97,13 @@ export interface IAuthProvider {
      * Only browser auth has the lumo scope needed for spaces API.
      */
     supportsSync(): boolean;
+
+    /**
+     * Get stable user ID for database naming.
+     * Uses userKeys[0].ID which is stable across sessions.
+     * Returns undefined if no userKeys are cached.
+     */
+    getUserId(): string | undefined;
 }
 
 // Re-export types that providers need

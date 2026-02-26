@@ -274,4 +274,13 @@ export class AuthProvider implements IAuthProvider {
     supportsSync(): boolean {
         return this.method === 'browser';
     }
+
+    /**
+     * Get stable user ID for database naming.
+     * Uses userKeys[0].ID which is stable across sessions.
+     * Returns undefined if no userKeys are cached.
+     */
+    getUserId(): string | undefined {
+        return this.tokens.userKeys?.[0]?.ID;
+    }
 }
