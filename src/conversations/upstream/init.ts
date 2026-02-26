@@ -239,11 +239,3 @@ async function ensureSpaceExists(store: LumoStore, spaceId: SpaceId): Promise<vo
     store.dispatch(addSpace(newSpace));
     store.dispatch(pushSpaceRequest({ id: spaceId, priority: 'urgent' }));
 }
-
-/**
- * Cleanup upstream store resources
- */
-export async function cleanupUpstreamStore(_result: UpstreamStoreResult): Promise<void> {
-    // Fetch adapter cleanup is handled at Application level
-    logger.debug('Upstream store cleaned up');
-}

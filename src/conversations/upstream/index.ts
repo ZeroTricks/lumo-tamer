@@ -14,7 +14,6 @@
 export { UpstreamConversationStore } from './adapter.js';
 export {
     initializeUpstreamStore,
-    cleanupUpstreamStore,
     type UpstreamStoreConfig,
     type UpstreamStoreResult,
 } from './init.js';
