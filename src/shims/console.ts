@@ -34,12 +34,15 @@ const suppressLogRegex = new RegExp(`^(?:${suppressLogs.join('|')})`);
 
 const suppressErrors = [
     // Sync-disabled errors (login/rclone auth without lumo scope)
+    'list spaces failure',
     'push conversation failure',
     'push message failure',
     'push space failure',
     'push attachment failure',
     'Error pulling spaces',
     'Sync disabled',
+    '.* 418',
+    'Lumo API call ignored \\(local only mode\\)',
 ];
 const suppressErrorRegex = new RegExp(`^(?:${suppressErrors.join('|')})`);
 
@@ -73,6 +76,9 @@ function log(levelOrLog: Level | 'log', args: unknown[]) {
     const ee = extractError(args);
     const first = ee[0];
     let level = (levelOrLog == 'log') ? 'debug' : levelOrLog;
+
+    if(ee?.error?.message && suppressErrorRegex.test(ee.error.message))
+        level = 'trace';
 
     if (typeof first == 'string') {
         ee.shift()

@@ -55,15 +55,17 @@ export function createFetchAdapter(
         const apiUrl = url.replace(/^\/api\//, '');
 
         // Block lumo API calls when not available (login/rclone auth lacks lumo scope)
-        // Return 403 to trigger ClientError (no retry) while preserving dirty flags in IDB
+        // Return 418 to trigger ClientError (no retry) while preserving dirty flags in IDB
+        // Using 418 "I'm a teapot" so it's easily distinguishable from real server errors
         if (!canUseLumoApi && apiUrl.startsWith('lumo/v1/')) {
-            logger.debug({ url: apiUrl }, 'Lumo API blocked - sync disabled');
+            const msg = 'Lumo API call ignored (local only mode)';
+            logger.debug({ url: apiUrl }, msg);
             return new Response(JSON.stringify({
-                Code: 403,
-                Error: 'Sync disabled - local only mode',
+                Code: 418,
+                Error: msg,
             }), {
-                status: 403,
-                statusText: 'Forbidden',
+                status: 418,
+                statusText: "I'm a teapot",
                 headers: { 'content-type': 'application/json' },
             });
         }
