@@ -15,20 +15,17 @@
 import createSagaMiddleware from 'redux-saga';
 
 import { logger } from '../../app/logger.js';
-import type { ProtonApi } from '../../lumo-client/types.js';
 import type { ConversationStoreConfig, SpaceId } from '../types.js';
 
-import { setupStore, type LumoStore, type LumoSagaContext } from '@lumo/redux/store.js';
 import { DbApi } from '@lumo/indexedDb/db.js';
-import { LumoApi } from '@lumo/remote/api.js';
 import { addMasterKey } from '@lumo/redux/slices/core/credentials.js';
+import { setupStore, type LumoSagaContext, type LumoStore } from '@lumo/redux/store.js';
+import { LumoApi } from '@lumo/remote/api.js';
 
-import { installFetchAdapter } from '../../shims/fetch-adapter.js';
 import { UpstreamConversationStore } from './adapter.js';
 
 export interface UpstreamStoreConfig {
     uid: string;
-    protonApi: ProtonApi;
     masterKey: string; // Base64-encoded master key
     spaceId: SpaceId;
     storeConfig: ConversationStoreConfig;
@@ -39,7 +36,6 @@ export interface UpstreamStoreResult {
     conversationStore: UpstreamConversationStore;
     dbApi: DbApi;
     spaceId: SpaceId;
-    cleanup: () => void;
 }
 
 /**
@@ -54,7 +50,7 @@ export interface UpstreamStoreResult {
 export async function initializeUpstreamStore(
     config: UpstreamStoreConfig
 ): Promise<UpstreamStoreResult> {
-    const { uid, protonApi, masterKey, spaceId, storeConfig } = config;
+    const { uid, masterKey, spaceId, storeConfig } = config;
 
     logger.info({ uid: uid.slice(0, 8) + '...' }, 'Initializing upstream storage');
 
@@ -67,9 +63,8 @@ export async function initializeUpstreamStore(
     await dbApi.initialize();
     logger.debug('DbApi initialized');
 
-    // 3. Install fetch adapter and create LumoApi for server communication
-    // The fetch adapter intercepts /api/ calls and routes through ProtonApi
-    const cleanupFetch = installFetchAdapter(protonApi);
+    // 3. Create LumoApi for server communication
+    // Note: fetch adapter is installed at Application level (app/index.ts)
     const lumoApi = new LumoApi(uid);
 
     // 4. Create saga middleware with context
@@ -101,7 +96,11 @@ export async function initializeUpstreamStore(
     // The initAppSaga (triggered by addMasterKey) handles loading from IDB
     await waitForReduxLoaded(store);
 
-    // 9. Create adapter
+    // 9. Ensure the space exists in Redux
+    // If the space wasn't loaded from IDB or server, create it
+    await ensureSpaceExists(store, spaceId);
+
+    // 10. Create adapter
     const conversationStore = new UpstreamConversationStore(
         store,
         spaceId,
@@ -115,7 +114,6 @@ export async function initializeUpstreamStore(
         conversationStore,
         dbApi,
         spaceId,
-        cleanup: cleanupFetch,
     };
 }
 
@@ -143,8 +141,7 @@ async function waitForReduxLoaded(
 /**
  * Cleanup upstream store resources
  */
-export async function cleanupUpstreamStore(result: UpstreamStoreResult): Promise<void> {
-    // Restore original fetch
-    result.cleanup();
+export async function cleanupUpstreamStore(_result: UpstreamStoreResult): Promise<void> {
+    // Fetch adapter cleanup is handled at Application level
     logger.debug('Upstream store cleaned up');
 }

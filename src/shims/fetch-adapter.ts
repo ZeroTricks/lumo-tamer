@@ -29,10 +29,14 @@ const originalFetch = globalThis.fetch;
  * Only intercepts relative URLs starting with '/api/' (used by upstream LumoApi).
  * All other requests (including absolute URLs) pass through to original fetch.
  *
- * @param api - The authenticated Api function from lumo-tamer
+ * @param protonApi - The authenticated Api function from lumo-tamer
+ * @param canUseLumoApi - Whether lumo API calls are allowed (requires lumo scope from browser auth)
  * @returns A fetch-compatible function
  */
-export function createFetchAdapter(protonApi: ProtonApi): typeof globalThis.fetch {
+export function createFetchAdapter(
+    protonApi: ProtonApi,
+    canUseLumoApi: boolean = true
+): typeof globalThis.fetch {
     return async function adaptedFetch(
         input: RequestInfo | URL,
         init?: RequestInit
@@ -49,6 +53,20 @@ export function createFetchAdapter(protonApi: ProtonApi): typeof globalThis.fetc
 
         // Strip '/api/' prefix - our Api adds the base URL
         const apiUrl = url.replace(/^\/api\//, '');
+
+        // Block lumo API calls when not available (login/rclone auth lacks lumo scope)
+        // Return 403 to trigger ClientError (no retry) while preserving dirty flags in IDB
+        if (!canUseLumoApi && apiUrl.startsWith('lumo/v1/')) {
+            logger.debug({ url: apiUrl }, 'Lumo API blocked - sync disabled');
+            return new Response(JSON.stringify({
+                Code: 403,
+                Error: 'Sync disabled - local only mode',
+            }), {
+                status: 403,
+                statusText: 'Forbidden',
+                headers: { 'content-type': 'application/json' },
+            });
+        }
 
         // Parse request body if present
         let data: unknown = undefined;
@@ -105,11 +123,15 @@ export function createFetchAdapter(protonApi: ProtonApi): typeof globalThis.fetc
  * Installs the fetch adapter globally.
  * Call this before creating LumoApi instances.
  *
- * @param api - The authenticated Api function from lumo-tamer
+ * @param protonApi - The authenticated Api function from lumo-tamer
+ * @param canUseLumoApi - Whether lumo API calls are allowed (requires lumo scope from browser auth)
  * @returns A cleanup function to restore the original fetch
  */
-export function installFetchAdapter(protonApi: ProtonApi): () => void {
-    globalThis.fetch = createFetchAdapter(protonApi);
+export function installFetchAdapter(
+    protonApi: ProtonApi,
+    canUseLumoApi: boolean = true
+): () => void {
+    globalThis.fetch = createFetchAdapter(protonApi, canUseLumoApi);
 
     return () => {
         globalThis.fetch = originalFetch;

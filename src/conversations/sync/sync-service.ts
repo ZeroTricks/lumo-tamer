@@ -6,13 +6,8 @@
  */
 
 import { logger } from '../../app/logger.js';
-import {
-    createLumoApi,
-    type LumoApi,
-    RoleInt,
-    StatusInt,
-} from './lumo-api.js';
-import type { ProtonApi } from '../../lumo-client/types.js';
+import { LumoApi } from '@lumo/remote/api.js';
+import { RoleInt, StatusInt } from '@lumo/remote/types.js';
 import { getConversationStore } from '../store.js';
 import type { KeyManager } from '../encryption/key-manager.js';
 import { Role, type Status } from '@lumo/types.js';
@@ -35,7 +30,6 @@ const StatusToInt: Record<Status, number> = {
 };
 
 export interface SyncServiceConfig {
-    protonApi: ProtonApi;
     keyManager: KeyManager;
     uid: string;
     spaceName?: string;
@@ -83,7 +77,7 @@ export class SyncService {
         if (!config.spaceId && !config.spaceName) {
             throw new Error('Either projectId or projectName must be provided in config');
         }
-        this.lumoApi = createLumoApi(config.protonApi, config.uid);
+        this.lumoApi = new LumoApi(config.uid);
         this.keyManager = config.keyManager;
         this.includeSystemMessages = config.includeSystemMessages ?? false;
 

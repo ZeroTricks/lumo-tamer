@@ -10,7 +10,8 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../../app/logger.js';
 import { exportKey, deriveKey } from '@proton/crypto/lib/subtle/aesGcm';
-import type { LumoApi, RemoteSpace } from './lumo-api.js';
+import type { LumoApi } from '@lumo/remote/api.js';
+import type { RemoteSpace } from '@lumo/remote/types.js';
 import type { KeyManager } from '../encryption/key-manager.js';
 import type { SpaceId, RemoteId, ProjectSpace } from '../types.js';
 import { EncryptionCodec } from './encryption-codec.js';

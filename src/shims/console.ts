@@ -13,7 +13,7 @@ const originalConsole = { ...console };
 // Since Proton/Lumo is ~ the only one using console, this is a good place to set their log levels:
 // Suppressed logs go to trace
 
-const suppressPatterns = [
+const suppressLogs = [
     'Saga triggered:',
     'Action triggered:',
     'waitForSpace:',
@@ -30,7 +30,18 @@ const suppressPatterns = [
     'API:',
     'deserializeMessageSaga',
 ];
-const suppressMatch = new RegExp(`^(?:${suppressPatterns.join('|')})`);
+const suppressLogRegex = new RegExp(`^(?:${suppressLogs.join('|')})`);
+
+const suppressErrors = [
+    // Sync-disabled errors (login/rclone auth without lumo scope)
+    'push conversation failure',
+    'push message failure',
+    'push space failure',
+    'push attachment failure',
+    'Error pulling spaces',
+    'Sync disabled',
+];
+const suppressErrorRegex = new RegExp(`^(?:${suppressErrors.join('|')})`);
 
 type EE = unknown[] & { error?: Error };
 
@@ -65,7 +76,9 @@ function log(levelOrLog: Level | 'log', args: unknown[]) {
 
     if (typeof first == 'string') {
         ee.shift()
-        if (levelOrLog == 'log' && suppressMatch.test(first))
+        if (    (levelOrLog == 'log' && suppressLogRegex.test(first))
+            ||  (levelOrLog == 'error' && suppressErrorRegex.test(first))
+        )
             level = 'trace';
         logger[level](minimal(ee), first);
     }

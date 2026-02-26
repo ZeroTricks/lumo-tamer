@@ -30,18 +30,18 @@ export {
     resetAutoSyncService,
 } from './auto-sync.js';
 
-// Re-export LumoApi adapter and types
+// Re-export LumoApi and types from upstream
+export { LumoApi } from '@lumo/remote/api.js';
+export type { Priority } from '@lumo/remote/scheduler.js';
 export {
-    LumoApi,
-    createLumoApi,
-    cleanupLumoApi,
     RoleInt,
     StatusInt,
-    type Priority,
-    type ListSpacesRemote,
-    type GetSpaceRemote,
-    type GetConversationRemote,
-    type RemoteMessage,
-    type RemoteSpace,
-    type RemoteConversation,
-} from './lumo-api.js';
+} from '@lumo/remote/types.js';
+export type {
+    ListSpacesRemote,
+    GetSpaceRemote,
+    GetConversationRemote,
+    RemoteMessage,
+    RemoteSpace,
+    RemoteConversation,
+} from '@lumo/remote/types.js';

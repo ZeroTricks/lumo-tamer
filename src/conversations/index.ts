@@ -66,13 +66,8 @@ export {
 } from './sync/index.js';
 
 // Re-export LumoApi types for consumers
-export {
-    LumoApi,
-    createLumoApi,
-    cleanupLumoApi,
-    RoleInt,
-    StatusInt,
-} from './sync/lumo-api.js';
+export { LumoApi } from '@lumo/remote/api.js';
+export { RoleInt, StatusInt } from '@lumo/remote/types.js';
 
 // ============================================================================
 // Persistence initialization
@@ -214,7 +209,6 @@ async function initializeUpstreamConversationStore(
     // Initialize upstream store
     const upstreamResult = await initializeUpstreamStore({
         uid,
-        protonApi,
         masterKey: masterKeyBase64,
         spaceId,
         storeConfig: {
@@ -316,7 +310,6 @@ export async function initializeSync(
 
         // Standard lumo-tamer sync initialization
         const syncService = getSyncService({
-            protonApi,
             uid,
             keyManager,
             spaceName: syncConfig.projectName,

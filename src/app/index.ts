@@ -12,6 +12,7 @@ import { LumoClient } from '../lumo-client/index.js';
 import { createAuthProvider, AuthManager, type AuthProvider, type ProtonApi } from '../auth/index.js';
 import { getConversationStore, type ConversationStore, initializeSync, initializeConversationStore } from '../conversations/index.js';
 import { createMockProtonApi } from '../mock/mock-api.js';
+import { installFetchAdapter } from '../shims/fetch-adapter.js';
 import type { AppContext } from './types.js';
 
 export class Application implements AppContext {
@@ -21,6 +22,7 @@ export class Application implements AppContext {
   private protonApi!: ProtonApi;
   private uid!: string;
   private syncInitialized = false;
+  private cleanupFetchAdapter?: () => void;
 
   /**
    * Create and initialize the application
@@ -74,6 +76,13 @@ export class Application implements AppContext {
     this.protonApi = this.authManager.createApi();
     this.uid = this.authProvider.getUid();
     this.lumoClient = new LumoClient(this.protonApi);
+
+    // Install fetch adapter for upstream LumoApi
+    // canUseLumoApi is false for login/rclone auth (no lumo scope)
+    this.cleanupFetchAdapter = installFetchAdapter(
+      this.protonApi,
+      this.authProvider.supportsSync()
+    );
 
     // Start scheduled auto-refresh
     this.authManager.startAutoRefresh();
@@ -135,6 +144,7 @@ export class Application implements AppContext {
    */
   destroy(): void {
     this.authManager?.destroy();
+    this.cleanupFetchAdapter?.();
   }
 }
 
