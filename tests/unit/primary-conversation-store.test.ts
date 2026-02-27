@@ -7,14 +7,20 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
-    createTestConversationStore,
-    type TestStoreContext,
-} from '../helpers/test-conversation-store.js';
+    initializeMockStore,
+    type MockStoreResult,
+} from '../../src/mock/mock-store.js';
 
-let ctx: TestStoreContext;
+let ctx: MockStoreResult;
 
 beforeEach(async () => {
-    ctx = await createTestConversationStore();
+    // Use unique userId per test for IDB isolation
+    const testUserId = 'test-user-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    ctx = await initializeMockStore({
+        maxInMemory: 50,
+        userId: testUserId,
+        spaceId: 'test-space-id',
+    });
 });
 
 afterEach(async () => {

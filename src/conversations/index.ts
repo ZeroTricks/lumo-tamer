@@ -240,6 +240,13 @@ export function getConversationStore(): ConversationStore | ReturnType<typeof ge
 }
 
 /**
+ * Set the active conversation store (for mock mode)
+ */
+export function setConversationStore(store: ConversationStore | ReturnType<typeof getFallbackStore>): void {
+    activeStore = store;
+}
+
+/**
  * Reset the conversation store (for testing)
  */
 export function resetConversationStore(): void {
