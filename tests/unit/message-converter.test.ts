@@ -7,11 +7,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { convertChatMessages, convertResponseInput, convertToolMessage } from '../../src/api/message-converter.js';
+import { convertOpenAIChatMessages, convertOpenAIResponseMessages, convertToolMessage } from '../../src/api/message-converter.js';
 
-describe('convertChatMessages', () => {
+describe('convertOpenAIChatMessages', () => {
   it('converts user and assistant messages', () => {
-    const turns = convertChatMessages([
+    const turns = convertOpenAIChatMessages([
       { role: 'user', content: 'Hello' },
       { role: 'assistant', content: 'Hi!' },
     ]);
@@ -24,7 +24,7 @@ describe('convertChatMessages', () => {
   });
 
   it('skips system messages from output', () => {
-    const turns = convertChatMessages([
+    const turns = convertOpenAIChatMessages([
       { role: 'system', content: 'Be helpful' },
       { role: 'user', content: 'Hello' },
     ]);
@@ -36,7 +36,7 @@ describe('convertChatMessages', () => {
   });
 
   it('returns clean turns without instruction injection', () => {
-    const turns = convertChatMessages([
+    const turns = convertOpenAIChatMessages([
       { role: 'system', content: 'Be concise' },
       { role: 'user', content: 'Hello' },
     ]);
@@ -47,7 +47,7 @@ describe('convertChatMessages', () => {
   });
 
   it('handles multi-turn conversations', () => {
-    const turns = convertChatMessages([
+    const turns = convertOpenAIChatMessages([
       { role: 'system', content: 'Be concise' },
       { role: 'user', content: 'First message' },
       { role: 'assistant', content: 'Response' },
@@ -61,7 +61,7 @@ describe('convertChatMessages', () => {
   });
 
   it('preserves command messages unchanged', () => {
-    const turns = convertChatMessages([
+    const turns = convertOpenAIChatMessages([
       { role: 'system', content: 'Instructions' },
       { role: 'user', content: '/help' },
     ]);
@@ -70,14 +70,14 @@ describe('convertChatMessages', () => {
   });
 
   it('handles empty messages array', () => {
-    const turns = convertChatMessages([]);
+    const turns = convertOpenAIChatMessages([]);
     expect(turns).toEqual([]);
   });
 });
 
-describe('convertResponseInput', () => {
+describe('convertOpenAIResponseMessages', () => {
   it('handles string input', () => {
-    const turns = convertResponseInput('Hello');
+    const turns = convertOpenAIResponseMessages('Hello');
 
     expect(turns).toHaveLength(1);
     expect(turns[0].role).toBe('user');
@@ -85,7 +85,7 @@ describe('convertResponseInput', () => {
   });
 
   it('returns clean turns for string input (no instruction injection)', () => {
-    const turns = convertResponseInput('Hello', 'Be concise');
+    const turns = convertOpenAIResponseMessages('Hello', 'Be concise');
 
     expect(turns).toHaveLength(1);
     expect(turns[0].content).toBe('Hello');
@@ -93,7 +93,7 @@ describe('convertResponseInput', () => {
   });
 
   it('handles message array input', () => {
-    const turns = convertResponseInput([
+    const turns = convertOpenAIResponseMessages([
       { role: 'user', content: 'Hello' },
       { role: 'assistant', content: 'Hi!' },
     ]);
@@ -106,7 +106,7 @@ describe('convertResponseInput', () => {
   });
 
   it('skips system messages from output', () => {
-    const turns = convertResponseInput([
+    const turns = convertOpenAIResponseMessages([
       { role: 'system', content: 'Custom system instructions here' },
       { role: 'user', content: 'Hello' },
     ]);
@@ -117,7 +117,7 @@ describe('convertResponseInput', () => {
   });
 
   it('handles function_call_output items', () => {
-    const turns = convertResponseInput([
+    const turns = convertOpenAIResponseMessages([
       { role: 'user', content: 'Call a tool' },
       { type: 'function_call_output', call_id: 'call_1', output: 'result' } as any,
       { role: 'user', content: 'Follow up' },
@@ -132,11 +132,11 @@ describe('convertResponseInput', () => {
   });
 
   it('returns empty array for undefined input', () => {
-    expect(convertResponseInput(undefined)).toEqual([]);
+    expect(convertOpenAIResponseMessages(undefined)).toEqual([]);
   });
 
   it('preserves command strings unchanged', () => {
-    const turns = convertResponseInput('/save');
+    const turns = convertOpenAIResponseMessages('/save');
 
     expect(turns).toHaveLength(1);
     expect(turns[0].content).toBe('/save');
@@ -267,9 +267,9 @@ describe('convertToolMessage', () => {
   });
 });
 
-describe('convertChatMessages with tool messages', () => {
+describe('convertOpenAIChatMessages with tool messages', () => {
   it('converts role: "tool" message to user turn with fenced JSON', () => {
-    const turns = convertChatMessages([
+    const turns = convertOpenAIChatMessages([
       { role: 'user', content: 'Call a tool' },
       { role: 'tool', tool_call_id: 'call_abc', content: 'Tool result' } as any,
     ]);
@@ -285,7 +285,7 @@ describe('convertChatMessages with tool messages', () => {
   });
 
   it('converts assistant with tool_calls to assistant turns with JSON', () => {
-    const turns = convertChatMessages([
+    const turns = convertOpenAIChatMessages([
       { role: 'user', content: 'Get the weather' },
       {
         role: 'assistant',
@@ -307,7 +307,7 @@ describe('convertChatMessages with tool messages', () => {
   });
 
   it('handles full tool call conversation flow', () => {
-    const turns = convertChatMessages([
+    const turns = convertOpenAIChatMessages([
       { role: 'user', content: 'What is the weather in NYC?' },
       {
         role: 'assistant',
