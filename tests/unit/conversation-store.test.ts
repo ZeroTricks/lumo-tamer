@@ -1,20 +1,20 @@
 /**
- * Unit tests for ConversationStore
+ * Unit tests for FallbackStore (in-memory conversation store)
  *
  * Tests in-memory conversation management, LRU eviction,
  * message deduplication, and Turn conversion.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ConversationStore } from '../../src/conversations/store.js';
+import { FallbackStore } from '../../src/conversations/fallback/store.js';
 
-let store: ConversationStore;
+let store: FallbackStore;
 
 beforeEach(() => {
-  store = new ConversationStore({ maxConversationsInMemory: 5 });
+  store = new FallbackStore({ maxConversationsInMemory: 5 });
 });
 
-describe('ConversationStore', () => {
+describe('FallbackStore', () => {
   describe('getOrCreate', () => {
     it('creates new conversation when none exists', () => {
       const state = store.getOrCreate('conv-1');

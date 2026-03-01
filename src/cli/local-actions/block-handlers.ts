@@ -7,7 +7,7 @@
  * Add new block types here (no changes needed in client.ts).
  */
 
-import { print } from 'app/terminal.js';
+import { print } from '../../app/terminal.js';
 import * as readline from 'readline';
 import { BlockHandler, HandledBlock, type CodeBlock } from './types.js';
 import { confirmAndApply } from './confirm.js';

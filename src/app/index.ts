@@ -10,8 +10,9 @@ import { logger } from './logger.js';
 import { resolveProjectPath } from './paths.js';
 import { LumoClient } from '../lumo-client/index.js';
 import { createAuthProvider, AuthManager, type AuthProvider, type ProtonApi } from '../auth/index.js';
-import { getConversationStore, type ConversationStore, initializeSync } from '../conversations/index.js';
+import { getConversationStore, getFallbackStore, setConversationStore, type ConversationStore, initializeSync, initializeConversationStore, FallbackStore } from '../conversations/index.js';
 import { createMockProtonApi } from '../mock/mock-api.js';
+import { installFetchAdapter } from '../shims/fetch-adapter.js';
 import type { AppContext } from './types.js';
 
 export class Application implements AppContext {
@@ -21,6 +22,7 @@ export class Application implements AppContext {
   private protonApi!: ProtonApi;
   private uid!: string;
   private syncInitialized = false;
+  private cleanupFetchAdapter?: () => void;
 
   /**
    * Create and initialize the application
@@ -28,9 +30,10 @@ export class Application implements AppContext {
   static async create(): Promise<Application> {
     const app = new Application();
     if (mockConfig.enabled) {
-      app.initializeMock();
+      await app.initializeMock();
     } else {
       await app.initializeAuth();
+      await app.initializeStore();
       await app.initializeSync();
     }
     return app;
@@ -39,24 +42,34 @@ export class Application implements AppContext {
   /**
    * Initialize mock mode - bypass auth, use simulated API responses
    */
-  private initializeMock(): void {
+  private async initializeMock(): Promise<void> {
     const conversationsConfig = getConversationsConfig();
-    getConversationStore({ maxConversationsInMemory: conversationsConfig.maxInMemory });
+
+    if (!conversationsConfig.useFallbackStore) {
+      // Use primary store with fake-indexeddb
+      const { initializeMockStore } = await import('../mock/mock-store.js');
+      const result = await initializeMockStore({
+        maxInMemory: conversationsConfig.maxInMemory,
+      });
+      setConversationStore(result.conversationStore);
+    } else {
+      // Use fallback in-memory store
+      getFallbackStore({ maxConversationsInMemory: conversationsConfig.maxInMemory });
+    }
 
     this.protonApi = createMockProtonApi(mockConfig.scenario);
     this.lumoClient = new LumoClient(this.protonApi, { enableEncryption: false });
 
-    logger.info({ scenario: mockConfig.scenario }, 'Mock mode active - auth and sync bypassed');
+    logger.info({
+      scenario: mockConfig.scenario,
+      useFallbackStore: conversationsConfig.useFallbackStore,
+    }, 'Mock mode active - auth and sync bypassed');
   }
 
   /**
    * Initialize authentication using AuthManager with auto-refresh
    */
   private async initializeAuth(): Promise<void> {
-    // Initialize conversation store with config (must happen before any getConversationStore() calls)
-    const conversationsConfig = getConversationsConfig();
-    getConversationStore({ maxConversationsInMemory: conversationsConfig.maxInMemory });
-
     this.authProvider = await createAuthProvider();
 
     // Create AuthManager with auto-refresh configuration
@@ -78,10 +91,30 @@ export class Application implements AppContext {
     this.uid = this.authProvider.getUid();
     this.lumoClient = new LumoClient(this.protonApi);
 
+    // Install fetch adapter for upstream LumoApi
+    // canUseLumoApi is false for login/rclone auth (no lumo scope)
+    this.cleanupFetchAdapter = installFetchAdapter(
+      this.protonApi,
+      this.authProvider.supportsSync()
+    );
+
     // Start scheduled auto-refresh
     this.authManager.startAutoRefresh();
 
     logger.info({ method: this.authProvider.method }, 'Authentication initialized with auto-refresh');
+  }
+
+  /**
+   * Initialize conversation store (upstream or fallback in-memory)
+   */
+  private async initializeStore(): Promise<void> {
+    const conversationsConfig = getConversationsConfig();
+    await initializeConversationStore({
+      protonApi: this.protonApi,
+      uid: this.uid,
+      authProvider: this.authProvider,
+      conversationsConfig,
+    });
   }
 
   /**
@@ -104,7 +137,7 @@ export class Application implements AppContext {
     return this.lumoClient;
   }
 
-  getConversationStore(): ConversationStore {
+  getConversationStore(): ConversationStore | FallbackStore {
     return getConversationStore();
   }
 
@@ -125,6 +158,7 @@ export class Application implements AppContext {
    */
   destroy(): void {
     this.authManager?.destroy();
+    this.cleanupFetchAdapter?.();
   }
 }
 

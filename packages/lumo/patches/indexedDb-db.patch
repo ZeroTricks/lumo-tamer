@@ -1,0 +1,285 @@
+Description: Fix IndexedDB transaction auto-commit issues for indexeddbshim
+ indexeddbshim (used for Node.js IndexedDB support via SQLite) auto-commits
+ transactions when awaiting promises that don't involve IDB operations.
+ This causes "transaction inactive" errors when upstream code uses shared
+ transactions across multiple async operations.
+ .
+ Changes:
+ - markAsSynced: Use separate read/write transactions instead of shared tx
+ - deleteAllData: Use Promise.all instead of sequential .then() chains
+ - addRemoteId: Use separate transactions for validation and write
+ - softDelete*: Return early (noop) if resource not found instead of throwing
+ - softDeleteSpaceCascade: Batch operations with Promise.all
+Origin: other
+---
+ indexedDb/db.ts | 135 +++++++++++++++++++++++-------------------------
+ 1 file changed, 65 insertions(+), 70 deletions(-)
+
+diff --git a/indexedDb/db.ts b/indexedDb/db.ts
+--- a/indexedDb/db.ts
++++ b/indexedDb/db.ts
+@@ -341,13 +341,16 @@
+         }
+     }
+ 
+-    async markAsSynced(snapshot: T, resourceType: ResourceType, tx?: IDBTransaction): Promise<boolean> {
++    // Rewritten to use separate transactions to avoid indexeddbshim auto-commit
++    // Read uses one transaction, write uses another - safe in single-threaded Node.js
++    async markAsSynced(snapshot: T, resourceType: ResourceType, _tx?: IDBTransaction): Promise<boolean> {
+         const id = snapshot.id;
+         console.log(`Marking ${resourceType} ${id} as synced`);
+-        if (!tx) tx = await this.getTransaction('readwrite');
+-        return this.getById(id, tx)
+-            .then((objectInDb) => ({ tx, objectInDb }))
+-            .then(({ tx, objectInDb }): Promise<boolean> => {
++
++            try {
++                // Read with one transaction
++                const objectInDb = await this.getById(id);
++
+                 if (!objectInDb) {
+                     throw new Error(`Error while marking ${resourceType} as synced: ${id} does not exist in db`);
+                 }
+@@ -361,21 +364,19 @@
+                     console.log(
+                         `${resourceType} ${id} has changed while we were persisting it remotely. Will try again soon`
+                     );
+-                    return Promise.resolve(false);
++                    return false;
+                 }
+ 
+-                const store = tx.objectStore(this.config.storeName);
+-
+-                return requestToPromise(store.put(cleanInDb))
+-                    .then(() => {
+-                        console.log(`Marked ${resourceType} ${id} as synced`);
+-                        return true;
+-                    })
+-                    .catch((e) => {
+-                        console.error(`Error while marking ${resourceType} ${id} as synced:`, e);
+-                        return false;
+-                    });
+-            });
++                // Write with a fresh transaction
++                const writeTx = await this.getTransaction('readwrite');
++                const store = writeTx.objectStore(this.config.storeName);
++                await requestToPromise(store.put(cleanInDb));
++                console.log(`Marked ${resourceType} ${id} as synced`);
++                return true;
++            } catch (e) {
++                console.error(`Error while marking ${resourceType} ${id} as synced:`, e);
++                return false;
++            }
+     }
+ }
+ 
+@@ -807,32 +808,28 @@
+             'readwrite'
+         );
+ 
+-        return Promise.resolve()
+-            .then(() =>
++            // Use Promise.all to avoid indexeddbshim transaction auto-commit issue
++            return Promise.all([
+                 requestToPromise(tx.objectStore(MESSAGE_STORE).clear()).catch((e) => {
+                     console.log(`cannot delete all messages: ${e}`);
+                 })
+-            )
+-            .then(() =>
++                ,
+                 requestToPromise(tx.objectStore(CONVERSATION_STORE).clear()).catch((e) => {
+                     console.log(`cannot delete all conversations: ${e}`);
+                 })
+-            )
+-            .then(() =>
++                ,
+                 requestToPromise(tx.objectStore(ATTACHMENT_STORE).clear()).catch((e) => {
+                     console.log(`cannot delete all attachments: ${e}`);
+                 })
+-            )
+-            .then(() =>
++                ,
+                 requestToPromise(tx.objectStore(SPACE_STORE).clear()).catch((e) => {
+                     console.log(`cannot delete all spaces: ${e}`);
+                 })
+-            )
+-            .then(() =>
++                ,
+                 requestToPromise(tx.objectStore(REMOTE_ID_STORE).clear()).catch((e) => {
+                     console.log(`cannot delete all id maps: ${e}`);
+                 })
+-            );
++            ]);
+     };
+ 
+     public softDeleteAllData = async ({ dirty }: { dirty: boolean }) => {
+@@ -840,70 +837,63 @@
+         return Promise.all(spaces.map((s) => this.softDeleteSpaceCascade(s.id, { dirty })));
+     };
+ 
+-    public addRemoteId = async (entry: IdMapEntry, tx?: IDBTransaction) => {
+-        return new Promise<void>(async (resolve, reject) => {
+-            try {
++    // Rewritten to use separate transactions to avoid indexeddbshim auto-commit
++    // Validation checks use readonly, the add uses readwrite - no shared transaction
++    public addRemoteId = async (entry: IdMapEntry, _tx?: IDBTransaction): Promise<void> => {
+                 console.log(`addRemoteId: `, entry);
+ 
+-                tx ??= (await this.db).transaction(REMOTE_ID_STORE, 'readwrite');
+                 const { type, localId, remoteId } = entry;
+ 
++                // Use separate readonly transactions for validation (parallel is fine)
++                const [existingRemoteId, existingLocalId] = await Promise.all([
++                    this.getRemoteIdFromLocalId(type, localId),
++                    this.getLocalIdFromRemoteId(type, remoteId),
++                ]);
++
+                 // Check if localId already exists and maps to a different remoteId
+-                const existingRemoteId = await this.getRemoteIdFromLocalId(type, localId, tx);
+                 if (existingRemoteId) {
+                     if (existingRemoteId === remoteId) {
+-                        // console.warn(`Remote ID mapping already exists and is the same for ${type} ${localId}`);
+-                        return resolve();
+-                    } else {
+-                        // prettier-ignore
+-                        return reject(
++                        return; // Already exists with same mapping
++                        }
++                        throw new Error(
+                             `Duplicate ID detected: ` +
+                             `${type} localId ${localId} already points ` +
+                             `to a different remoteId ${existingRemoteId}. ` +
+                             `Ignoring.`
+                         );
+-                    }
+                 }
+ 
+                 // Check if remoteId already exists and maps to a different localId
+-                const existingLocalId = await this.getLocalIdFromRemoteId(type, remoteId, tx);
+                 if (existingLocalId) {
+                     if (existingLocalId === localId) {
+-                        // console.warn(`Local ID mapping already exists and is the same for ${type} ${remoteId}`);
+-                        return resolve();
+-                    } else {
+-                        // prettier-ignore
+-                        return reject(
++                return; // Already exists with same mapping
++            }
++            throw new Error(
+                             `Duplicate ID detected: ` +
+                             `${type} remoteId ${remoteId} already points ` +
+-                            `to a different localId ${existingLocalId}. ` +
++                            `to a different localId ${existingLocalId}. `+
+                             `Ignoring.`
+                         );
+-                    }
+                 }
+ 
+-                // Add the new entry if no conflicts are found or if warnings have been logged
++                // Add the new entry using a fresh transaction
++                const db = await this.db;
++                const tx = db.transaction(REMOTE_ID_STORE, 'readwrite');
+                 const store = tx.objectStore(REMOTE_ID_STORE);
++
+                 console.log(`Adding Remote ID mapping for ${type} ${localId} -> ${remoteId}`);
+-                const request = store.add(entry);
+-                request.onsuccess = () => {
++        try {
++            await requestToPromise(store.add(entry));
+                     console.log(`Remote ID mapping added successfully for ${type} ${localId} -> ${remoteId}`);
+-                    resolve();
+-                };
+-                request.onerror = () => {
+-                    if (request.error?.name === 'ConstraintError') {
++                } catch (e: any) {
++                    if (e?.name === 'ConstraintError') {
+                         console.warn(
+                             `Remote ID mapping for ${type} ${localId} -> ${remoteId} already exists, ignoring`
+                         );
+-                        resolve();
+                     } else {
+-                        reject('Error adding remote ID mapping: ' + request.error?.toString());
++                        throw new Error('Error adding remote ID mapping: ' + e?.toString());
+                     }
+-                };
+-            } catch (error) {
+-                reject('Error: ' + error);
+             }
+-        });
+     };
+ 
+     public getRemoteIdFromLocalId = async (
+@@ -1033,7 +1023,11 @@
+     ): Promise<void> => {
+         tx ??= (await this.db).transaction(MESSAGE_STORE, 'readwrite');
+         const message = await this.getMessageById(id, tx);
+-        if (!message) throw new Error(`Message ${id} not found`);
++        // If message doesn't exist, it's already deleted or was never synced - noop
++        if (!message) {
++            console.log(`Soft delete skipped: Message ${id} not found in IDB`);
++            return;
++        }
+         // Remove content from the encrypted data for security purposes, but keep the encrypted field
+         // since the type requires it
+         const secureMessage = {
+@@ -1052,7 +1046,11 @@
+     ): Promise<void> => {
+         tx ??= (await this.db).transaction(CONVERSATION_STORE, 'readwrite');
+         const conversation = await this.getConversationById(id, tx);
+-        if (!conversation) throw new Error(`Conversation ${id} not found`);
++        // If conversation doesn't exist, it's already deleted or was never synced - noop
++        if (!conversation) {
++            console.log(`Soft delete skipped: Conversation ${id} not found in IDB`);
++            return;
++        }
+         // Remove content from the encrypted data for security purposes, but keep the encrypted field
+         // since the type requires it
+         const secureConversation = {
+@@ -1067,7 +1065,11 @@
+     public softDeleteSpace = async (id: SpaceId, { dirty }: { dirty: boolean }, tx?: IDBTransaction): Promise<void> => {
+         tx ??= (await this.db).transaction(SPACE_STORE, 'readwrite');
+         const space = await this.getSpaceById(id, tx);
+-        if (!space) throw new Error(`Space ${id} not found`);
++        // If space doesn't exist, it's already deleted or was never synced - noop
++        if (!space) {
++            console.log(`Soft delete skipped:: Space ${id} not found in IDB`);
++            return;
++        }
+         // Remove wrappedSpaceKey when deleting the space for security purposes
+         const { wrappedSpaceKey, ...spaceWithoutKey } = space;
+         const updatedSpace = {
+@@ -1113,22 +1115,27 @@
+             return;
+         }
+ 
+-        // Soft delete all conversations in the space
++        // Use Promise.all to batch operations and avoid indexeddbshim transaction auto-commit
++
++        // Collect all delete operations, then execute in parallel
+         const conversations = await this.getConversationsBySpaceId(spaceId, tx);
++        const messageDeletePromises: Promise<void>[] = [];
++        const convDeletePromises: Promise<void>[] = [];
++
+         for (const conversation of conversations) {
+-            // Soft delete all messages in the conversation
+             const messages = await this.getMessagesByConversationId(conversation.id, tx);
+             for (const message of messages) {
+-                await this.softDeleteMessage(message.id, { dirty }, tx);
++                messageDeletePromises.push(this.softDeleteMessage(message.id, { dirty }, tx));
+             }
+-            await this.softDeleteConversation(conversation.id, { dirty }, tx);
++            convDeletePromises.push(this.softDeleteConversation(conversation.id, { dirty }, tx));
+         }
+ 
++        await Promise.all(messageDeletePromises);
++        await Promise.all(convDeletePromises);
++
+         // Soft delete all attachments in the space
+         const attachments = await this.getAttachmentsBySpaceId(spaceId, tx);
+-        for (const attachment of attachments) {
+-            await this.softDeleteAttachment(attachment.id, { dirty }, tx);
+-        }
++        await Promise.all(attachments.map((a) => this.softDeleteAttachment(a.id, { dirty }, tx)));
+ 
+         // Finally soft delete the space itself
+         await this.softDeleteSpace(spaceId, { dirty }, tx);

@@ -2,7 +2,9 @@
  * Auth providers index
  */
 
-export { BaseAuthProvider } from './base.js';
-export { LoginAuthProvider } from './login.js';
 export { BrowserAuthProvider } from './browser.js';
-export { RcloneAuthProvider } from './rclone.js';
+export { AuthProvider, getProviderConfig, type  ProviderConfig } from './provider.js';
+
+// Import browser to register its factory (side effect)
+import './browser.js';
+

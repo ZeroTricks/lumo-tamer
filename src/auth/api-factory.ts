@@ -5,7 +5,7 @@
  */
 
 import type { ProtonApi, ProtonApiOptions } from '../lumo-client/types.js';
-import { APP_VERSION_HEADER } from '../proton-upstream/config.js';
+import { APP_VERSION_HEADER } from '@lumo/config.js';
 import { PROTON_URLS } from '../app/urls.js';
 import { logger } from '../app/logger.js';
 import { getMetrics } from '../app/metrics.js';

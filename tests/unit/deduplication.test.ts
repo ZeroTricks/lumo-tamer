@@ -8,7 +8,7 @@ import {
     findNewMessages,
     isValidContinuation,
     detectBranching,
-    type IncomingMessage,
+    type MessageForStore,
 } from '../../src/conversations/deduplication.js';
 import type { Message } from '../../src/conversations/types.js';
 
@@ -52,7 +52,7 @@ describe('hashMessage', () => {
 
 describe('findNewMessages', () => {
     it('should return all messages when stored is empty', () => {
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Hello' },
             { role: 'assistant', content: 'Hi there!' },
         ];
@@ -63,7 +63,7 @@ describe('findNewMessages', () => {
     });
 
     it('should return empty array when no new messages', () => {
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Hello' },
         ];
         const stored: Message[] = [
@@ -75,7 +75,7 @@ describe('findNewMessages', () => {
     });
 
     it('should return only new messages at the end', () => {
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Hello' },
             { role: 'assistant', content: 'Hi there!' },
             { role: 'user', content: 'How are you?' },
@@ -91,7 +91,7 @@ describe('findNewMessages', () => {
     });
 
     it('should handle multiple new messages', () => {
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Hello' },
             { role: 'assistant', content: 'Hi!' },
             { role: 'user', content: 'Question 1' },
@@ -111,7 +111,7 @@ describe('findNewMessages', () => {
 
 describe('isValidContinuation', () => {
     it('should be valid when stored is empty', () => {
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Hello' },
         ];
 
@@ -120,7 +120,7 @@ describe('isValidContinuation', () => {
     });
 
     it('should be valid when incoming continues stored', () => {
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Hello' },
             { role: 'assistant', content: 'Hi!' },
             { role: 'user', content: 'New message' },
@@ -135,7 +135,7 @@ describe('isValidContinuation', () => {
     });
 
     it('should be invalid when incoming has fewer messages', () => {
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Hello' },
         ];
         const stored: Message[] = [
@@ -149,7 +149,7 @@ describe('isValidContinuation', () => {
     });
 
     it('should be invalid when history is modified', () => {
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Hello MODIFIED' },
             { role: 'assistant', content: 'Hi!' },
         ];
@@ -176,7 +176,7 @@ describe('ID-based deduplication', () => {
         ];
 
         // Incoming message has modified content (Home Assistant added speech.plain)
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Turn on the light' },
             {
                 role: 'user',
@@ -199,7 +199,7 @@ describe('ID-based deduplication', () => {
             createStoredMessage('assistant', '{"type":"function_call","call_id":"fc-456","name":"get_time","arguments":"{}"}', 1, callId),
         ];
 
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'What time is it?' },
             { role: 'assistant', content: '{"type":"function_call","call_id":"fc-456","name":"get_time","arguments":"{}"}', id: callId },
             { role: 'user', content: '{"type":"function_call_output","call_id":"fc-456","output":"10:30 AM"}', id: callId },
@@ -216,7 +216,7 @@ describe('ID-based deduplication', () => {
             createStoredMessage('assistant', 'Hi there!', 1),
         ];
 
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Hello' },  // No id, uses hash
             { role: 'assistant', content: 'Hi there!' },  // No id, uses hash
             { role: 'user', content: 'New message' },
@@ -235,7 +235,7 @@ describe('ID-based deduplication', () => {
         ];
 
         // Different content but same ID - should be valid
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Modified content', id: callId },
             { role: 'user', content: 'New message' },
         ];
@@ -252,7 +252,7 @@ describe('detectBranching', () => {
     });
 
     it('should not detect branching for simple continuation', () => {
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Hello' },
             { role: 'assistant', content: 'Hi!' },
             { role: 'user', content: 'New' },
@@ -267,7 +267,7 @@ describe('detectBranching', () => {
     });
 
     it('should detect branching when history diverges', () => {
-        const incoming: IncomingMessage[] = [
+        const incoming: MessageForStore[] = [
             { role: 'user', content: 'Hello' },
             { role: 'assistant', content: 'Different response' },
         ];

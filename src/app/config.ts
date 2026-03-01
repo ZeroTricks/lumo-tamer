@@ -27,6 +27,8 @@ const logConfigSchema = z.object({
 const conversationsConfigSchema = z.object({
   maxInMemory: z.number(),
   deriveIdFromUser: z.boolean(),
+  databasePath: z.string(),
+  useFallbackStore: z.boolean(),
   sync: z.object({
     enabled: z.boolean(),
     projectId: z.string().uuid().optional(),

@@ -5,7 +5,7 @@
     "lib": ["ES2022", "DOM"],
     "moduleResolution": "node",
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,19 +14,25 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "baseUrl": "./src",
+    "baseUrl": ".",
     "paths": {
-      "@proton/crypto": ["./proton-shims/crypto.ts"],
-      "@proton/crypto/lib/subtle/aesGcm": ["./proton-shims/aesGcm.ts"],
-      "@proton/crypto/lib/subtle/hash": ["./proton-shims/hash.ts"],
-      "@proton/crypto/lib/utils": ["./proton-shims/crypto-lib-utils.ts"],
-      "@proton/shared/lib/apps/helper": ["./proton-shims/apps-helper.ts"],
-      "@proton/shared/lib/fetch/headers": ["./proton-shims/fetch-headers.ts"],
-      "lodash/isNil": ["./proton-shims/lodash-isNil.ts"]
+      "@lumo/*": ["packages/lumo/src/*"],
+      "@proton/*": ["packages/proton/src/*"],
+      "@proton/crypto": ["packages/proton/src/crypto/index.ts"],
+      "@proton/crypto/lib": ["packages/proton/src/crypto/index.ts"],
+      "@proton/crypto/lib/*": ["packages/proton/src/crypto/lib/*"],
+      "lodash/isNil": ["src/shims/lodash-isNil.ts"],
+      "lodash/isEqual": ["src/shims/lodash-isEqual.ts"],
+      "lodash/isObject": ["src/shims/lodash-isObject.ts"],
+      "json-stable-stringify": ["src/shims/json-stable-stringify.ts"],
+      "toposort": ["src/shims/toposort.ts"]
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"],
+  "include": ["src/**/*", "packages/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
   "tsc-alias": {
     "resolveFullPaths": true,
     "verbose": false

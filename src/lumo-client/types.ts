@@ -6,12 +6,14 @@
 // Re-export upstream types
 export type {
     AesGcmCryptoKey,
-    GenerationToFrontendMessage,
+    GenerationResponseMessage,
     LumoApiGenerationRequest,
     RequestId,
     ToolName,
     Turn,
-} from '../proton-upstream/lib/lumo-api-client/core/types.js';
+} from '@lumo/lib/lumo-api-client/core/types.js';
+
+export { Role } from '@lumo/types-api.js';
 
 // Local-only types
 
@@ -33,6 +35,9 @@ export interface CachedUserKey {
     PrivateKey: string;     // Armored PGP private key
     Primary: number;        // 1 = primary
     Active: number;         // 1 = active
+    // Local-only fields (not from Proton)
+    isLocalOnly?: boolean;  // true if generated locally (cannot sync)
+    createdAt?: string;     // ISO timestamp of key generation
 }
 
 // Cached master key structure (for persistence without lumo/v1/masterkeys scope)
@@ -41,21 +46,25 @@ export interface CachedMasterKey {
     MasterKey: string;      // PGP-encrypted master key (base64)
     IsLatest: boolean;
     Version: number;
+    // Local-only fields (not from Proton)
+    isLocalOnly?: boolean;  // true if generated locally (cannot sync)
+    createdAt?: string;     // ISO timestamp of key generation
 }
 
-// Persisted session structure (from Proton localStorage ps-{localID})
+// Persisted session metadata (from Proton localStorage ps-{localID})
+// Note: keyPassword is now stored directly in StoredTokens, not encrypted here
 export interface PersistedSessionData {
     localID: number;
     UserID: string;
     UID: string;
-    blob?: string;              // Encrypted blob containing keyPassword (base64)
-    payloadVersion: 1 | 2;      // Encryption version
     persistedAt: number;
-    // ClientKey fetched from API, used to decrypt blob
+    // Legacy fields - only present in old vaults that need re-auth
+    blob?: string;
+    payloadVersion?: 1 | 2;
     clientKey?: string;
 }
 
-// Decrypted session blob structure
+// Decrypted session blob structure (used during extraction only)
 export interface DecryptedSessionBlob {
     keyPassword: string;        // The mailbox password
     type: 'default' | 'offline';

@@ -6,21 +6,28 @@
  */
 
 import { createHash } from 'crypto';
-import type { Message, MessageFingerprint, MessageRole } from './types.js';
+import { Role } from '@lumo/types.js';
+import type { Message, MessageForStore } from './types.js';
 
 /**
  * Compute hash for a message (role + content)
  */
-export function hashMessage(role: string, content: string): string {
+export function hashMessage(role: Role, content: string): string {
     const data = `${role}:${content}`;
     return createHash('sha256').update(data, 'utf8').digest('hex');
+}
+
+interface MessageFingerprint {
+    hash: string;               // SHA-256 of role + content
+    role: Role;
+    index: number;              // Position in conversation
 }
 
 /**
  * Create fingerprint for a message
  */
 export function createFingerprint(
-    role: MessageRole,
+    role: Role,
     content: string,
     index: number
 ): MessageFingerprint {
@@ -43,15 +50,6 @@ export function fingerprintMessages(messages: Message[]): MessageFingerprint[] {
 }
 
 /**
- * Incoming message format from API
- */
-export interface IncomingMessage {
-    role: string;
-    content?: string;
-    id?: string;  // Semantic ID for deduplication (call_id for tools)
-}
-
-/**
  * Find new messages that aren't already stored
  *
  * Strategy:
@@ -60,9 +58,9 @@ export interface IncomingMessage {
  * 3. Return incoming messages after the matching prefix
  */
 export function findNewMessages(
-    incoming: IncomingMessage[],
+    incoming: MessageForStore[],
     stored: Message[]
-): IncomingMessage[] {
+): MessageForStore[] {
     if (stored.length === 0) {
         return incoming;
     }
@@ -105,7 +103,7 @@ export function findNewMessages(
  * - Or incoming is entirely new (stored is empty)
  */
 export function isValidContinuation(
-    incoming: IncomingMessage[],
+    incoming: MessageForStore[],
     stored: Message[]
 ): { valid: boolean; reason?: string; debugInfo?: { storedMsg?: string; incomingMsg?: string } } {
     if (stored.length === 0) {
@@ -147,7 +145,7 @@ export function isValidContinuation(
  * - But then diverges (different message at some index)
  */
 export function detectBranching(
-    incoming: IncomingMessage[],
+    incoming: MessageForStore[],
     stored: Message[]
 ): { isBranching: boolean; branchPoint?: number } {
     if (stored.length === 0 || incoming.length === 0) {

@@ -8,11 +8,11 @@
  *        Interactive mode: no argv
  */
 
-import { executeCommand, isCommand, type CommandContext } from 'app/commands.js';
-import { getCliInstructionsConfig, getCommandsConfig, getLocalActionsConfig } from 'app/config.js';
-import logger from 'app/logger.js';
-import { BUSY_INDICATOR, clearBusyIndicator, print } from 'app/terminal.js';
-import type { AppContext } from 'app/types.js';
+import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
+import { getCliInstructionsConfig, getCommandsConfig, getLocalActionsConfig } from '../app/config.js';
+import logger from '../app/logger.js';
+import { BUSY_INDICATOR, clearBusyIndicator, print } from '../app/terminal.js';
+import type { AppContext } from '../app/types.js';
 import { randomUUID } from 'crypto';
 import * as readline from 'readline';
 import type { AssistantMessageData } from '../lumo-client/index.js';

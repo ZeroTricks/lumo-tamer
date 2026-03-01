@@ -1,8 +1,12 @@
 #!/usr/bin/env node
+// Polyfill Uint8Array.fromBase64/toBase64 for upstream Proton code compatibility
+// TODO: move down
+import './shims/uint8array-base64-polyfill.js';
+
 import arg from 'arg';
 import { initConfig, getLogConfig } from './app/config.js';
 import { initLogger, logger } from './app/logger.js';
-import { printAuthHelp, printHelp, printServerHelp } from 'app/terminal.js';
+import { printAuthHelp, printHelp, printServerHelp } from './app/terminal.js';
 
 // stopAtPositional ensures --help after a subcommand is passed to the subcommand
 const args = arg({

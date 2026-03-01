@@ -1,12 +1,12 @@
 import { RequestQueue } from './queue.js';
 import { LumoClient } from '../lumo-client/index.js';
-import type { ConversationStore } from '../conversations/index.js';
+import type { ConversationStore, FallbackStore } from '../conversations/index.js';
 import type { AuthManager } from '../auth/index.js';
 
 export interface EndpointDependencies {
   queue: RequestQueue;
   lumoClient: LumoClient;
-  conversationStore?: ConversationStore;
+  conversationStore?: ConversationStore | FallbackStore;
   syncInitialized?: boolean;
   authManager?: AuthManager;
   vaultPath?: string;
@@ -35,7 +35,7 @@ export interface StandardChatMessage {
 }
 
 // Union type for all possible chat messages in requests
-export type ChatMessage =
+export type OpenAIChatMessage =
   | StandardChatMessage
   | AssistantMessageWithToolCalls
   | ToolResultMessage;
@@ -62,7 +62,7 @@ export interface OpenAIToolCall {
 
 export interface OpenAIChatRequest {
   model?: string;
-  messages: ChatMessage[];
+  messages: OpenAIChatMessage[];
   stream?: boolean;
   temperature?: number;
   max_tokens?: number;
@@ -133,13 +133,13 @@ export interface FunctionCallOutput {
   output: string;
 }
 
-export type ResponseInputItem =
+export type OpenAIResponseMessage =
   | { role: string; content: string }
   | FunctionCallOutput;
 
 export interface OpenAIResponseRequest {
   model?: string;
-  input?: string | Array<ResponseInputItem>;
+  input?: string | Array<OpenAIResponseMessage>;
   instructions?: string;
   stream?: boolean;
   temperature?: number;

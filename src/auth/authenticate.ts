@@ -22,13 +22,11 @@ import { logger } from '../app/logger.js';
 import { runBrowserAuthentication } from './browser/authenticate.js';
 import { runRcloneAuthentication } from './rclone/authenticate.js';
 import { runLoginAuthentication } from './login/authenticate.js';
-import { BrowserAuthProvider } from './providers/browser.js';
-import { RcloneAuthProvider } from './providers/rclone.js';
-import { LoginAuthProvider } from './providers/login.js';
+import { AuthProvider } from './providers/index.js';
 import { printStatus, printSummary, runStatus } from './status.js';
 import { updateAuthConfig } from './update-config.js';
-import type { AuthMethod, AuthProvider } from './types.js';
-import { print } from 'app/terminal.js';
+import type { AuthMethod } from './types.js';
+import { print } from '../app/terminal.js';
 
 const numToMethod: Record<string, AuthMethod> = { '1': 'login', '2': 'browser', '3': 'rclone' };
 const methodToNum: Record<AuthMethod, string> = { login: '1', browser: '2', rclone: '3' };
@@ -75,10 +73,8 @@ async function authenticateBrowser(): Promise<BrowserAuthResult> {
   const syncEnabled = getConversationsConfig().sync.enabled;
   if (!syncEnabled) {
     logger.info('Sync disabled - encryption keys not fetched');
-  } else if (result.tokens.persistedSession?.blob && result.tokens.persistedSession?.clientKey) {
+  } else if (result.tokens.keyPassword) {
     logger.info('Extended auth data extracted - conversation persistence enabled');
-  } else if (result.tokens.persistedSession?.blob) {
-    logger.warn('Conversation persistence may not work without ClientKey');
   } else {
     logger.warn('Conversation persistence will use local-only encryption');
   }
@@ -136,24 +132,14 @@ export async function runAuthCommand(argv: string[]): Promise<void> {
       cdpEndpoint,
     });
 
-    // Show status after extraction
-    // Create provider directly based on selected method (not from config, which hasn't reloaded)
-    let provider: AuthProvider;
-    switch (method) {
-      case 'login':
-        provider = new LoginAuthProvider();
-        break;
-      case 'rclone':
-        provider = new RcloneAuthProvider();
-        break;
-      default:
-        provider = new BrowserAuthProvider();
-        break;
-    }
-    await provider.initialize();
+    // Show status after extraction - reload from vault
+    const provider = await AuthProvider.create();
     const status = provider.getStatus();
     printStatus(status);
-    printSummary(status, provider.supportsPersistence());
+    printSummary(status, {
+        supportsPersistence: provider.supportsPersistence(),
+        supportsSync: provider.supportsSync(),
+    });
 
     print('\nYou can now run: tamer or tamer server');
   } catch (error) {

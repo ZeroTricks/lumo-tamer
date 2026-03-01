@@ -12,7 +12,7 @@ import { promises as dns, ADDRCONFIG } from 'dns';
 import type { PersistedSessionData } from '../../lumo-client/types.js';
 import type { StoredTokens } from '../types.js';
 import { authConfig, getConversationsConfig } from '../../app/config.js';
-import { APP_VERSION_HEADER } from '../../proton-upstream/config.js';
+import { APP_VERSION_HEADER } from '@lumo/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { logger } from '../../app/logger.js';
 import { decryptPersistedSession } from '../session-keys.js';
@@ -533,11 +533,12 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
         // Fetch persistence keys if requested
         let userKeys: StoredTokens['userKeys'];
         let masterKeys: StoredTokens['masterKeys'];
+        let keyPassword: string | undefined;
 
         if (fetchPersistenceKeys) {
             logger.info('Fetching encryption keys for persistence...');
 
-            // Fetch ClientKey if we have a persisted session with a blob
+            // Fetch ClientKey and decrypt blob to get keyPassword
             if (persistedSession?.blob) {
                 const matchingAuthCookie = relevantCookies.find(
                     c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('account.proton.me')
@@ -554,23 +555,29 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
                     const clientKey = await fetchClientKey(page, uid, accessToken, appVersion);
 
                     if (clientKey) {
+                        // Temporarily set clientKey to decrypt blob
                         persistedSession.clientKey = clientKey;
 
-                        // Verify decryption works
                         try {
                             const decrypted = await decryptPersistedSession(persistedSession);
-                            logger.info({ type: decrypted.type }, 'Successfully verified keyPassword extraction');
+                            keyPassword = decrypted.keyPassword;
+                            logger.info({ type: decrypted.type }, 'Successfully extracted keyPassword');
+                            // Clear encryption artifacts - keyPassword is stored directly in vault
+                            delete persistedSession.blob;
+                            delete persistedSession.clientKey;
+                            delete persistedSession.payloadVersion;
                         } catch (err) {
                             logger.error({ err }, 'ClientKey fetch succeeded but decryption failed');
-                            persistedSession.clientKey = undefined;
+                            delete persistedSession.clientKey;
                             warnings.push('ClientKey fetch succeeded but decryption failed');
                         }
                     }
                 }
             }
 
-            // Fetch user keys
-            if (persistedSession?.clientKey) {
+            // Fetch user keys (only if we got keyPassword)
+            // Note: keyPassword being set implies persistedSession exists (it came from the blob)
+            if (keyPassword && persistedSession) {
                 const matchingAuthCookie = relevantCookies.find(
                     c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('account.proton.me')
                 ) || relevantCookies.find(
@@ -594,8 +601,8 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
                 }
             }
 
-            // Fetch master keys
-            if (persistedSession?.clientKey) {
+            // Fetch master keys (only if we got keyPassword)
+            if (keyPassword && persistedSession) {
                 const lumoAuthForMasterKeys = relevantCookies.find(
                     c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
                 ) || primaryLumoAuthCookie;
@@ -655,24 +662,23 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
         }
 
         // Build result
+        const extractedAt = new Date().toISOString();
         const tokens: StoredTokens = {
             method: 'browser',
             uid: outputUid,
             accessToken: outputAccessToken,
             refreshToken,
-            extractedAt: new Date().toISOString(),
-            persistedSession,
+            keyPassword,
+            extractedAt,
+            // Set expiresAt for unified validity checking (browser tokens valid ~24h)
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
             userKeys,
             masterKeys,
         };
 
         // Add warnings for missing data (only if persistence was requested)
-        if (fetchPersistenceKeys) {
-            if (persistedSession?.blob && !persistedSession?.clientKey) {
-                warnings.push('Persisted session blob found but ClientKey fetch failed');
-            } else if (!persistedSession?.blob) {
-                warnings.push('No persisted session blob found - local-only encryption will be used');
-            }
+        if (fetchPersistenceKeys && !keyPassword) {
+            warnings.push('No keyPassword available - local-only encryption will be used');
         }
 
         return { tokens, warnings, cdpEndpoint };

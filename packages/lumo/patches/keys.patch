@@ -1,0 +1,28 @@
+Description: Simplify LUMO_GPG_PUB_KEY export for Node.js
+ Upstream uses webpack DefinePlugin to optionally override the key at
+ build time via LUMO_CUSTOM_PUB_KEY. Node.js doesn't have webpack, so
+ we replace the conditional export with a direct assignment.
+---
+ keys.ts | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/keys.ts b/keys.ts
+--- a/keys.ts
++++ b/keys.ts
+@@ -33,9 +33,6 @@ export const LUMO_GPG_PUB_KEY_PROD_2 = `-----BEGIN PGP PUBLIC KEY BLOCK-----
+ =h/mc
+ -----END PGP PUBLIC KEY BLOCK-----`;
+
+-// Webpack DefinePlugin will replace this at build time if LUMO_PUB_KEY_PATH is set
+-declare const LUMO_CUSTOM_PUB_KEY: string | undefined;
+-
+ /**
+  * Lumo public key - defaults to production key, but can be overridden at build time
+  *
+@@ -47,5 +44,4 @@ declare const LUMO_CUSTOM_PUB_KEY: string | undefined;
+  * The custom key is loaded by webpack at build time and injected as a compile-time constant.
+  * No key material needs to be committed to the repository.
+  */
+-export const LUMO_GPG_PUB_KEY =
+-    typeof LUMO_CUSTOM_PUB_KEY !== 'undefined' ? LUMO_CUSTOM_PUB_KEY : LUMO_GPG_PUB_KEY_PROD_2;
++export const LUMO_GPG_PUB_KEY = LUMO_GPG_PUB_KEY_PROD_2;

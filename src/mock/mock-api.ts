@@ -1,29 +1,32 @@
 /**
  * Mock ProtonApi - returns simulated SSE streams for development/testing
  *
- * Scenario generators adapted from:
- *   Proton WebClients applications/lumo/src/app/mocks/handlers.ts
- *
- * The upstream file can't be pulled 1:1 into proton-upstream/ because:
- * - It depends on MSW (Mock Service Worker) for HTTP interception (`{ HttpResponse, http }` from 'msw')
- * - Handler registration targets a browser-specific URL (https://ml-labs.protontech.ch/...)
- * - Its mockConfig.ts uses browser `window` global for runtime scenario switching
- *
- * We only reuse the scenario logic (the async generators and SSE message format),
- * wrapped in a ProtonApi-compatible function. LumoClient doesn't care whether the
+ * Wraps upstream scenario generators from proton-upstream/mocks/handlers.ts
+ * in a ProtonApi-compatible function. LumoClient doesn't care whether the
  * ProtonApi is real or mock - it just reads the returned ReadableStream.
  */
 
 import type { ProtonApi, ProtonApiOptions } from '../lumo-client/types.js';
 import type { MockConfig } from '../app/config.js';
 import { logger } from '../app/logger.js';
+
+// Import upstream scenarios and helpers
+import {
+    scenarios as upstreamScenarios,
+    formatSSEMessage,
+    delay,
+} from '@lumo/mocks/handlers.js';
+
+// Import custom scenarios (lumo-tamer-specific)
 import { customScenarios } from './custom-scenarios.js';
 
-type Scenario = MockConfig['scenario'];
+// Re-export for custom-scenarios.ts to use
+export { formatSSEMessage, delay };
+
+// Extended generator type that can access request options
 export type ScenarioGenerator = (options: ProtonApiOptions) => AsyncGenerator<string>;
 
-const formatSSEMessage = (data: unknown) => `data: ${JSON.stringify(data)}\n\n`;
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+type Scenario = MockConfig['scenario'];
 
 /**
  * Mock-wide call counter - safety net against infinite loops.
@@ -60,82 +63,17 @@ function createStream(scenario: string, generator: ScenarioGenerator, options: P
     });
 }
 
-// Upstream scenario generators (adapted from Proton WebClients handlers.ts)
-const upstreamScenarios: Record<string, ScenarioGenerator> = {
-    success: async function* () {
-        yield formatSSEMessage({ type: 'ingesting', target: 'message' });
-        await delay(300);
-
-        for (let i = 0; i < 5; i++) {
-            yield formatSSEMessage({ type: 'token_data', target: 'message', count: i, content: '' });
-            await delay(40);
-        }
-
-        const tokens = [
-            '(Mocked) ', 'Why ', "don't ", 'prog', 'rammers ', 'like ',
-            'nat', 'ure', '? ', 'They ', 'have ', 'too ', 'many ', 'bu', 'gs!',
-        ];
-
-        for (let i = 0; i < tokens.length; i++) {
-            yield formatSSEMessage({ type: 'token_data', target: 'message', count: i + 5, content: tokens[i] });
-            await delay(40);
-        }
-
-        yield formatSSEMessage({ type: 'done' });
-    },
-
-    error: async function* () {
-        await delay(400);
-        yield formatSSEMessage({ type: 'error', message: 'Test error message' });
-    },
-
-    timeout: async function* () {
-        await delay(400);
-        yield formatSSEMessage({ type: 'timeout', message: 'High demand error' });
-    },
-
-    rejected: async function* () {
-        await delay(400);
-        yield formatSSEMessage({ type: 'rejected' });
-    },
-
-    toolCall: async function* () {
-        yield formatSSEMessage({ type: 'ingesting', target: 'message' });
-        await delay(400);
-
-        yield formatSSEMessage({
-            type: 'token_data',
-            target: 'tool_call',
-            count: 0,
-            content: '{"name": "web_search", "parameters": {"query": "test search"}}',
-        });
-        await delay(500);
-
-        // Tool result must be valid JSON (matching Proton's format)
-        yield formatSSEMessage({
-            type: 'token_data',
-            target: 'tool_result',
-            count: 1,
-            content: '{"results":[{"title":"Mock Result","url":"https://example.com","description":"Mock search result data"}],"total_count":1}',
-        });
-        await delay(300);
-
-        const tokens = [
-            'Based ', 'on ', 'the ', 'search ', 'results', ', ',
-            'here ', 'is ', 'what ', 'I ', 'found', '.',
-        ];
-
-        for (let i = 0; i < tokens.length; i++) {
-            yield formatSSEMessage({ type: 'token_data', target: 'message', count: i, content: tokens[i] });
-            await delay(40);
-        }
-
-        yield formatSSEMessage({ type: 'done' });
-    },
-};
-
 // Merged: upstream + custom scenarios
-const scenarios: Record<string, ScenarioGenerator> = { ...upstreamScenarios, ...customScenarios };
+// Upstream scenarios don't use options, so wrap them to match ScenarioGenerator signature
+const scenarios: Record<string, ScenarioGenerator> = {
+    ...Object.fromEntries(
+        Object.entries(upstreamScenarios).map(([name, gen]) => [
+            name,
+            (_options: ProtonApiOptions) => gen(),
+        ])
+    ),
+    ...customScenarios,
+};
 
 // List of scenarios to cycle through (excludes 'cycle' itself)
 const cycleScenarioNames = Object.keys(scenarios);
@@ -161,6 +99,7 @@ export function createMockProtonApi(scenario: Scenario): ProtonApi {
                 logger.debug({ cycleIndex, activeScenario }, 'Mock API: cycle mode');
             }
 
+            // weeklyLimit is special: HTTP 429 error, not a stream
             if (activeScenario === 'weeklyLimit') {
                 const error = new Error('Too many requests. Please try again later.');
                 (error as any).status = 429;

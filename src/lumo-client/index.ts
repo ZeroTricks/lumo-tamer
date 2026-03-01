@@ -3,6 +3,7 @@
  */
 
 export { LumoClient } from './client.js';
+export { Role } from './types.js';
 export type {
     ProtonApi,
     ProtonApiOptions,

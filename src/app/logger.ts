@@ -1,7 +1,7 @@
 import pino from 'pino';
 import type { LogConfig } from './config.js';
 import { resolveProjectPath } from './paths.js';
-import { installConsoleShim } from '../proton-shims/console.js';
+import { installConsoleShim } from '../shims/console.js';
 
 // Determine transport based on config
 function getTransport(config: LogConfig): pino.TransportSingleOptions | pino.TransportMultiOptions {

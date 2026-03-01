@@ -11,11 +11,11 @@
 import { logger } from '../app/logger.js';
 import { createProtonApi, type ProtonApiWithRefresh } from './api-factory.js';
 import { logout as performLogout } from './logout.js';
-import type { AuthProvider, ProtonApi } from './types.js';
+import type { IAuthProvider, ProtonApi } from './types.js';
 
 export interface AuthManagerOptions {
     /** Auth provider instance */
-    provider: AuthProvider;
+    provider: IAuthProvider;
     /** Path to the encrypted vault file */
     vaultPath: string;
     /** Auto-refresh configuration */
@@ -30,7 +30,7 @@ export interface AuthManagerOptions {
 }
 
 export class AuthManager {
-    private provider: AuthProvider;
+    private provider: IAuthProvider;
     private vaultPath: string;
     private autoRefreshConfig: NonNullable<AuthManagerOptions['autoRefresh']>;
     private refreshTimer?: NodeJS.Timeout;
@@ -50,7 +50,7 @@ export class AuthManager {
     /**
      * Get the underlying auth provider
      */
-    getProvider(): AuthProvider {
+    getProvider(): IAuthProvider {
         return this.provider;
     }
 
@@ -169,13 +169,6 @@ export class AuthManager {
      */
     private getAccessToken(): string {
         return this.provider.getAccessToken();
-    }
-
-    /**
-     * Check if tokens should be refreshed proactively
-     */
-    shouldRefresh(): boolean {
-        return this.provider.isNearExpiry() || !this.provider.isValid();
     }
 
     /**

@@ -1,54 +1,150 @@
 /**
- * In-memory conversation store with LRU eviction
+ * Conversation Store
  *
- * Manages active conversations and provides methods for:
- * - Creating/retrieving conversations
- * - Appending messages with deduplication
- * - Converting to Lumo Turn format
- * - Tracking dirty state for sync
+ * Primary conversation storage using Redux + IndexedDB for persistence.
+ *
+ * Architecture:
+ * - Redux store holds in-memory state (conversations, messages)
+ * - IndexedDB provides local persistence (via indexeddbshim -> SQLite)
+ * - Sagas handle async operations (sync to server, load from IDB)
+ *
+ * Type mapping:
+ * - lumo-tamer's Message -> upstream's Message (similar structure, different createdAt type)
+ * - lumo-tamer's ConversationState -> upstream's Conversation + messages
  */
 
 import { randomUUID } from 'crypto';
-import { logger } from '../app/logger.js';
+
 import { deterministicUUID } from '../app/id-generator.js';
-import type { Turn, AssistantMessageData } from '../lumo-client/types.js';
+import { logger } from '../app/logger.js';
+import { getMetrics } from '../app/metrics.js';
+import type { AssistantMessageData, Turn } from '../lumo-client/types.js';
 import {
     findNewMessages,
     hashMessage,
     isValidContinuation,
-    type IncomingMessage,
 } from './deduplication.js';
 import type {
     ConversationId,
     ConversationState,
+    ConversationStoreConfig,
     Message,
     MessageId,
-    MessageRole,
-    ConversationStoreConfig,
+    MessageForStore,
     SpaceId,
 } from './types.js';
-import { getLogConfig } from 'app/config.js';
-import { getMetrics } from '../app/metrics.js';
+
+// Upstream imports
+import {
+    selectConversationById,
+    selectMessagesByConversationId,
+} from '@lumo/redux/selectors.js';
+import {
+    addConversation,
+    changeConversationTitle,
+    locallyDeleteConversationFromLocalRequest,
+    pushConversationRequest,
+    updateConversationStatus,
+} from '@lumo/redux/slices/core/conversations.js';
+import {
+    addMessage,
+    finishMessage,
+    pushMessageRequest
+} from '@lumo/redux/slices/core/messages.js';
+import type { LumoStore } from '@lumo/redux/store.js';
+import type {
+    Conversation as UpstreamConversation,
+    Message as UpstreamMessage
+} from '@lumo/types.js';
+import { ConversationStatus, Role } from '@lumo/types.js';
 
 /**
- * In-memory conversation store
+ * Convert upstream Message to lumo-tamer Message
+ *
+ * @param semanticIdMap - Optional map of messageId -> semanticId for deduplication.
+ *   If not provided or missing entry, falls back to hash of role+content.
+ */
+function fromUpstreamMessage(
+    msg: UpstreamMessage,
+    conversationId: ConversationId,
+    semanticIdMap?: Map<string, string>
+): Message {
+    // Use cached semanticId if available, otherwise compute from content
+    const semanticId = semanticIdMap?.get(msg.id)
+        ?? hashMessage(msg.role, msg.content ?? '').slice(0, 16);
+
+    return {
+        ...msg,
+        semanticId,
+    };
+}
+
+/**
+ * Convert lumo-tamer ConversationState from upstream Conversation + messages
+ *
+ * @param semanticIdMap - Optional map of messageId -> semanticId for deduplication
+ */
+function toConversationState(
+    conv: UpstreamConversation,
+    messages: UpstreamMessage[],
+    semanticIdMap?: Map<string, string>
+): ConversationState {
+    return {
+        metadata: {
+            id: conv.id,
+            spaceId: conv.spaceId,
+            createdAt: conv.createdAt,
+            updatedAt: conv.updatedAt,
+            starred: conv.starred ?? false,
+        },
+        title: conv.title,
+        status: conv.status === ConversationStatus.GENERATING ? ConversationStatus.GENERATING : ConversationStatus.COMPLETED,
+        messages: messages.map(m => fromUpstreamMessage(m, conv.id, semanticIdMap)),
+        dirty: false, // Upstream uses IDB dirty flag, not in-memory
+    };
+}
+
+/**
+ * Upstream-backed ConversationStore
+ *
+ * Implements the same interface as the in-memory ConversationStore but uses
+ * Redux + IndexedDB for persistence.
  */
 export class ConversationStore {
-    private conversations = new Map<ConversationId, ConversationState>();
-    private accessOrder: ConversationId[] = [];  // LRU tracking
-    private maxConversations: number;
-    private defaultSpaceId: SpaceId;
+    private store: LumoStore;
+    private spaceId: SpaceId;
     private onDirtyCallback?: () => void;
 
-    constructor(config: ConversationStoreConfig) {
-        this.maxConversations = config.maxConversationsInMemory;
-        this.defaultSpaceId = randomUUID();
-        logger.info({ spaceId: this.defaultSpaceId }, 'ConversationStore initialized');
+    /**
+     * Map of messageId (UUID) -> semanticId for deduplication.
+     *
+     * SemanticIds are used to deduplicate messages across requests:
+     * - For tool messages: semanticId = call_id (provided by client)
+     * - For regular messages: semanticId = hash(role + content)
+     *
+     * This map is needed because:
+     * - Upstream Redux messages don't store semanticId (not in WebClient schema)
+     * - Tool message call_ids can't be recovered from content
+     * - Regular messages could be recomputed, but map is simpler and consistent
+     *
+     * The map is in-memory only (not persisted). After restart:
+     * - Fresh requests provide fresh call_ids for tool messages
+     * - Regular message hashes can be recomputed from content
+     */
+    private semanticIdMap: Map<string, string> = new Map();
+
+    constructor(
+        store: LumoStore,
+        spaceId: SpaceId,
+        _config: ConversationStoreConfig
+    ) {
+        this.store = store;
+        this.spaceId = spaceId;
+        logger.info({ spaceId }, 'ConversationStore initialized');
     }
 
     /**
      * Set callback to be called when a conversation becomes dirty
-     * Used by AutoSyncService to trigger sync scheduling
      */
     setOnDirtyCallback(callback: () => void): void {
         this.onDirtyCallback = callback;
@@ -58,109 +154,151 @@ export class ConversationStore {
      * Get or create a conversation by ID
      */
     getOrCreate(id: ConversationId): ConversationState {
-        let state = this.conversations.get(id);
+        const state = this.store.getState();
+        let conv = selectConversationById(id)(state);
 
-        if (!state) {
-            state = this.createEmptyState(id);
-            this.conversations.set(id, state);
+        if (!conv) {
+            // Create new conversation
+            const now = new Date().toISOString();
+            const newConv: UpstreamConversation = {
+                id,
+                spaceId: this.spaceId,
+                createdAt: now,
+                updatedAt: now,
+                title: 'New Conversation',
+                status: ConversationStatus.COMPLETED,
+            };
+
+            this.store.dispatch(addConversation(newConv));
+            // Request push to server/IDB
+            this.store.dispatch(pushConversationRequest({ id }));
+            conv = newConv;
+
             getMetrics()?.conversationsCreatedTotal.inc();
             logger.debug({ conversationId: id }, 'Created new conversation');
         }
 
-        this.touchLRU(id);
-        this.evictIfNeeded();
+        // Get messages for this conversation
+        const messages = Object.values(
+            selectMessagesByConversationId(id)(this.store.getState())
+        );
 
-        return state;
+        return toConversationState(conv, messages, this.semanticIdMap);
     }
 
     /**
      * Get a conversation by ID (returns undefined if not found)
      */
     get(id: ConversationId): ConversationState | undefined {
-        const state = this.conversations.get(id);
-        if (state) {
-            this.touchLRU(id);
+        const state = this.store.getState();
+        const conv = selectConversationById(id)(state);
+
+        if (!conv) {
+            return undefined;
         }
-        return state;
+
+        const messages = Object.values(
+            selectMessagesByConversationId(id)(state)
+        );
+
+        return toConversationState(conv, messages, this.semanticIdMap);
     }
 
     /**
      * Check if a conversation exists
      */
     has(id: ConversationId): boolean {
-        return this.conversations.has(id);
+        const state = this.store.getState();
+        return selectConversationById(id)(state) !== undefined;
     }
 
     /**
      * Append messages from API request (with deduplication)
-     *
-     * @param id - Conversation ID
-     * @param incoming - Messages from API request
-     * @returns Array of newly added messages
-     * @todo Refactor to share code with appendAssistantResponse()
      */
     appendMessages(
         id: ConversationId,
-        incoming: IncomingMessage[]
+        incoming: MessageForStore[]
     ): Message[] {
-        const state = this.getOrCreate(id);
+        const convState = this.getOrCreate(id);
 
         // Validate continuation
-        const validation = isValidContinuation(incoming, state.messages);
+        const validation = isValidContinuation(incoming, convState.messages);
         if (!validation.valid) {
             getMetrics()?.invalidContinuationsTotal.inc();
             logger.warn({
                 conversationId: id,
                 reason: validation.reason,
                 incomingCount: incoming.length,
-                storedCount: state.messages.length,
+                storedCount: convState.messages.length,
                 ...validation.debugInfo,
             }, 'Invalid conversation continuation');
-            // For now, we continue anyway but log the warning
         }
 
         // Find new messages
-        const newMessages = findNewMessages(incoming, state.messages);
+        const newMessages = findNewMessages(incoming, convState.messages);
 
         if (newMessages.length === 0) {
             logger.debug({ conversationId: id }, 'No new messages to append');
             return [];
         }
 
-        // Convert to Message format and append
-        const now = Date.now();
-        const lastMessageId = state.messages.length > 0
-            ? state.messages[state.messages.length - 1].id
-            : undefined;
+        // Convert to Message format and dispatch to Redux
+        const now = new Date();
+        const lastMessage = convState.messages[convState.messages.length - 1];
+        let parentId = lastMessage?.id;
 
         const addedMessages: Message[] = [];
-        let parentId = lastMessageId;
 
         for (const msg of newMessages) {
-            // Use provided ID (for tool messages) or compute hash (for regular messages)
+            const messageId = randomUUID();
             const semanticId = msg.id ?? hashMessage(msg.role, msg.content ?? '').slice(0, 16);
 
-            const message: Message = {
-                id: randomUUID(),
+            // Store semanticId in map for later retrieval
+            this.semanticIdMap.set(messageId, semanticId);
+
+            // Dispatch to Redux
+            this.store.dispatch(addMessage({
+                id: messageId,
                 conversationId: id,
-                createdAt: now,
-                role: msg.role as MessageRole,
+                createdAt: now.toISOString(),
+                role: msg.role ,
+                parentId,
+                status: 'succeeded',
+            }));
+
+            // If there's content, finish the message with it
+            if (msg.content) {
+                this.store.dispatch(finishMessage({
+                    messageId,
+                    conversationId: id,
+                    spaceId: this.spaceId,
+                    content: msg.content,
+                    status: 'succeeded',
+                    role: msg.role ,
+                }));
+            }
+
+            // Request push to server
+            this.store.dispatch(pushMessageRequest({ id: messageId }));
+
+            const message: Message = {
+                id: messageId,
+                conversationId: id,
+                createdAt: now.toISOString(),
+                role: msg.role ,
                 parentId,
                 status: 'succeeded',
                 content: msg.content,
                 semanticId,
             };
 
-            state.messages.push(message);
             addedMessages.push(message);
-            parentId = message.id;
+            parentId = messageId;
         }
 
-        // Mark as dirty
-        this.markDirty(state);
-        state.metadata.updatedAt = now;
+        this.notifyDirty();
 
-        // Track metrics for new messages only
+        // Track metrics
         const metrics = getMetrics();
         if (metrics) {
             for (const msg of addedMessages) {
@@ -171,20 +309,14 @@ export class ConversationStore {
         logger.debug({
             conversationId: id,
             addedCount: addedMessages.length,
-            totalCount: state.messages.length,
+            totalCount: convState.messages.length + addedMessages.length,
         }, 'Appended messages');
 
         return addedMessages;
     }
 
     /**
-     * Append an assistant response to a conversation.
-     *
-     * @param id - Conversation ID
-     * @param messageData - Assistant message data (content, optional toolCall/toolResult)
-     * @param status - Message status (default: succeeded)
-     * @param semanticId - Optional semantic ID for deduplication
-     * @returns The created message
+     * Append an assistant response to a conversation
      */
     appendAssistantResponse(
         id: ConversationId,
@@ -192,36 +324,65 @@ export class ConversationStore {
         status: 'succeeded' | 'failed' = 'succeeded',
         semanticId?: string
     ): Message {
-        const state = this.getOrCreate(id);
-        const now = Date.now();
+        const convState = this.getOrCreate(id);
+        const now = new Date();
+        const messageId = randomUUID();
+        const effectiveSemanticId = semanticId ?? hashMessage(Role.Assistant, messageData.content).slice(0, 16);
 
-        const parentId = state.messages.length > 0
-            ? state.messages[state.messages.length - 1].id
-            : undefined;
+        // Store semanticId in map for later retrieval
+        this.semanticIdMap.set(messageId, effectiveSemanticId);
+
+        const lastMessage = convState.messages[convState.messages.length - 1];
+        const parentId = lastMessage?.id;
+
+        // Dispatch to Redux
+        this.store.dispatch(addMessage({
+            id: messageId,
+            conversationId: id,
+            createdAt: now.toISOString(),
+            role: Role.Assistant,
+            parentId,
+            status,
+        }));
+
+        this.store.dispatch(finishMessage({
+            messageId,
+            conversationId: id,
+            spaceId: this.spaceId,
+            content: messageData.content,
+            status,
+            role: Role.Assistant,
+        }));
+
+        // Request push to server
+        this.store.dispatch(pushMessageRequest({ id: messageId }));
+
+        this.notifyDirty();
+
+        // Update conversation status
+        this.store.dispatch(updateConversationStatus({
+            id,
+            status: ConversationStatus.COMPLETED,
+        }));
 
         const message: Message = {
-            id: randomUUID(),
+            id: messageId,
             conversationId: id,
-            createdAt: now,
-            role: 'assistant',
+            createdAt: now.toISOString(),
+            role: Role.Assistant,
             parentId,
             status,
             content: messageData.content,
             toolCall: messageData.toolCall,
             toolResult: messageData.toolResult,
-            semanticId: semanticId ?? hashMessage('assistant', messageData.content).slice(0, 16),
+            semanticId: effectiveSemanticId,
         };
 
-        state.messages.push(message);
-        this.markDirty(state);
-        state.metadata.updatedAt = now;
-        state.status = 'completed';
-
-        getMetrics()?.messagesTotal.inc({ role: 'assistant' });
+        getMetrics()?.messagesTotal.inc({ role: Role.Assistant });
 
         logger.debug({
             conversationId: id,
-            messageId: message.id,
+            messageId,
             contentLength: messageData.content.length,
             hasToolCall: !!messageData.toolCall,
             hasToolResult: !!messageData.toolResult,
@@ -231,15 +392,7 @@ export class ConversationStore {
     }
 
     /**
-     * Append tool calls as assistant messages.
-     * Each tool call stored as separate message with JSON content.
-     * Arguments are expected to already be normalized (via streaming-processor).
-     *
-     * NOTE: Currently unused. persistAssistantTurn() skips persistence when tool calls
-     * are present, relying on the client returning the assistant message when responding with tool output.
-     * (More robust as order of tool_calls & text may change)
-     * Kept for potential future use if we change the persistence strategy.
-     * (streaming tool processor should then return text & tool call blocks in order)
+     * Append tool calls as assistant messages (currently unused)
      */
     appendAssistantToolCalls(
         id: ConversationId,
@@ -257,34 +410,58 @@ export class ConversationStore {
     }
 
     /**
-     * Append a single user message (CLI mode - no deduplication needed)
+     * Append a single user message (CLI mode)
      */
     appendUserMessage(id: ConversationId, content: string): Message {
-        const state = this.getOrCreate(id);
-        const now = Date.now();
+        const convState = this.getOrCreate(id);
+        const now = new Date();
+        const messageId = randomUUID();
+        const semanticId = hashMessage(Role.User, content).slice(0, 16);
 
-        const parentId = state.messages.length > 0
-            ? state.messages[state.messages.length - 1].id
-            : undefined;
+        // Store semanticId in map for later retrieval
+        this.semanticIdMap.set(messageId, semanticId);
+
+        const lastMessage = convState.messages[convState.messages.length - 1];
+        const parentId = lastMessage?.id;
+
+        // Dispatch to Redux
+        this.store.dispatch(addMessage({
+            id: messageId,
+            conversationId: id,
+            createdAt: now.toISOString(),
+            role: Role.User,
+            parentId,
+            status: 'succeeded',
+        }));
+
+        this.store.dispatch(finishMessage({
+            messageId,
+            conversationId: id,
+            spaceId: this.spaceId,
+            content,
+            status: 'succeeded',
+            role: Role.User,
+        }));
+
+        // Request push to server
+        this.store.dispatch(pushMessageRequest({ id: messageId }));
+
+        this.notifyDirty();
 
         const message: Message = {
-            id: randomUUID(),
+            id: messageId,
             conversationId: id,
-            createdAt: now,
-            role: 'user',
+            createdAt: now.toISOString(),
+            role: Role.User,
             parentId,
             status: 'succeeded',
             content,
-            semanticId: hashMessage('user', content).slice(0, 16),
+            semanticId,
         };
-
-        state.messages.push(message);
-        this.markDirty(state);
-        state.metadata.updatedAt = now;
 
         logger.debug({
             conversationId: id,
-            messageId: message.id,
+            messageId,
             contentLength: content.length,
         }, 'Appended user message');
 
@@ -292,20 +469,13 @@ export class ConversationStore {
     }
 
     /**
-     * Create a conversation from turns (for stateless /save commands).
-     *
-     * Generates a deterministic conversation ID from the title to allow
-     * re-saving the same conversation without creating duplicates.
-     *
-     * @param turns - Turns to populate the conversation
-     * @param title - Optional title (auto-generated if not provided)
-     * @returns The created conversation ID and title
+     * Create a conversation from turns
      */
     createFromTurns(
         turns: Turn[],
         title?: string
     ): { conversationId: ConversationId; title: string } {
-        const effectiveTitle = title?.trim().substring(0, 100) || generateAutoTitle(turns);
+        const effectiveTitle = title?.trim().substring(0, 100) || this.generateAutoTitle(turns);
         const conversationId = deterministicUUID(`save:${effectiveTitle}`);
 
         this.getOrCreate(conversationId);
@@ -318,12 +488,15 @@ export class ConversationStore {
     }
 
     /**
-     * Mark conversation as generating (for streaming)
+     * Mark conversation as generating
      */
     setGenerating(id: ConversationId): void {
-        const state = this.get(id);
-        if (state) {
-            state.status = 'generating';
+        if (this.has(id)) {
+            this.store.dispatch(updateConversationStatus({
+                id,
+                status: ConversationStatus.GENERATING,
+            }));
+            this.store.dispatch(pushConversationRequest({ id }));
         }
     }
 
@@ -331,83 +504,101 @@ export class ConversationStore {
      * Update conversation title
      */
     setTitle(id: ConversationId, title: string): void {
-        const state = this.get(id);
-        if (state) {
-            state.title = title;
-            this.markDirty(state);
-            state.metadata.updatedAt = Date.now();
+        if (this.has(id)) {
+            this.store.dispatch(changeConversationTitle({
+                id,
+                spaceId: this.spaceId,
+                title,
+                persist: true,
+            }));
+            this.store.dispatch(pushConversationRequest({ id }));
+            this.notifyDirty();
         }
-        logger.debug(`Set title for ${id}${getLogConfig().messageContent ? `: ${title}` : ''}`);
+        logger.debug({ conversationId: id }, 'Set title');
     }
 
     /**
-     * Convert conversation to Lumo Turn[] format for API call
+     * Convert conversation to Lumo Turn[] format
      */
     toTurns(id: ConversationId): Turn[] {
-        return this.getMessages(id).map(({role, content}) => ({role, content}));
+        return this.getMessages(id).map(({ role, content }) => ({
+            role,
+            content,
+        }));
     }
 
     /**
      * Get all messages in a conversation
      */
     getMessages(id: ConversationId): Message[] {
-        const state = this.conversations.get(id);
-        return state?.messages ?? [];
+        const state = this.store.getState();
+        const messages = selectMessagesByConversationId(id)(state);
+        return Object.values(messages)
+            .map(m => fromUpstreamMessage(m, id, this.semanticIdMap))
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
 
     /**
      * Get message by ID
      */
     getMessage(conversationId: ConversationId, messageId: MessageId): Message | undefined {
-        const state = this.conversations.get(conversationId);
-        return state?.messages.find(m => m.id === messageId);
+        const state = this.store.getState();
+        const msg = state.messages[messageId];
+        if (msg && msg.conversationId === conversationId) {
+            return fromUpstreamMessage(msg, conversationId, this.semanticIdMap);
+        }
+        return undefined;
     }
 
     /**
      * Delete a conversation
      */
     delete(id: ConversationId): boolean {
-        const existed = this.conversations.delete(id);
-        if (existed) {
-            this.accessOrder = this.accessOrder.filter(cid => cid !== id);
+        if (this.has(id)) {
+            // Use saga action to handle Redux + IDB + remote sync
+            this.store.dispatch(locallyDeleteConversationFromLocalRequest(id));
             logger.debug({ conversationId: id }, 'Deleted conversation');
+            return true;
         }
-        return existed;
+        return false;
     }
 
     /**
      * Get all conversations (for iteration)
      */
-    entries(): IterableIterator<[ConversationId, ConversationState]> {
-        return this.conversations.entries();
+    *entries(): IterableIterator<[ConversationId, ConversationState]> {
+        const state = this.store.getState();
+        for (const [id, conv] of Object.entries(state.conversations)) {
+            const messages = Object.values(selectMessagesByConversationId(id)(state));
+            yield [id, toConversationState(conv, messages)];
+        }
     }
 
     /**
-     * Get all dirty conversations (need sync)
+     * Get all dirty conversations
+     *
+     * Note: Upstream uses IDB dirty flag, not in-memory. This returns empty
+     * since sagas handle sync automatically.
      */
     getDirty(): ConversationState[] {
-        return Array.from(this.conversations.values()).filter(c => c.dirty);
+        // Upstream sagas handle dirty tracking via IDB
+        // Return empty array since we don't track dirty in-memory
+        return [];
     }
 
     /**
-     * Mark a conversation as synced
+     * Mark a conversation as synced (no-op for upstream)
      */
-    markSynced(id: ConversationId): void {
-        const state = this.conversations.get(id);
-        if (state) {
-            state.dirty = false;
-            state.lastSyncedAt = Date.now();
-        }
+    markSynced(_id: ConversationId): void {
+        // Upstream sagas handle sync marking via IDB
     }
 
     /**
-     * Mark a conversation as dirty (needs sync)
+     * Mark a conversation as dirty
      */
-    markDirtyById(id: ConversationId): void {
-        const state = this.conversations.get(id);
-        if (state) {
-            this.markDirty(state);
-        }
+    markDirtyById(_id: ConversationId): void {
+        // Upstream sagas handle dirty tracking via IDB
+        this.notifyDirty();
     }
 
     /**
@@ -416,122 +607,33 @@ export class ConversationStore {
     getStats(): {
         total: number;
         dirty: number;
-        maxSize: number;
     } {
+        const state = this.store.getState();
         return {
-            total: this.conversations.size,
-            dirty: this.getDirty().length,
-            maxSize: this.maxConversations,
+            total: Object.keys(state.conversations).length,
+            dirty: 0, // Upstream uses IDB dirty flag
         };
     }
 
     // Private methods
 
-    /**
-     * Mark a conversation as dirty and notify callback
-     */
-    private markDirty(state: ConversationState): void {
-        state.dirty = true;
+    private notifyDirty(): void {
         this.onDirtyCallback?.();
     }
 
-    private createEmptyState(id: ConversationId): ConversationState {
-        const now = Date.now();
-        return {
-            metadata: {
-                id,
-                spaceId: this.defaultSpaceId,
-                createdAt: now,
-                updatedAt: now,
-                starred: false,
-            },
-            title: 'New Conversation',
-            status: 'completed',
-            messages: [],
-            dirty: true,  // New conversations need sync
-        };
-    }
-
-    private touchLRU(id: ConversationId): void {
-        // Remove from current position
-        const index = this.accessOrder.indexOf(id);
-        if (index !== -1) {
-            this.accessOrder.splice(index, 1);
+    private generateAutoTitle(turns: Turn[]): string {
+        const firstUserTurn = turns.find(t => t.role === Role.User);
+        if (firstUserTurn?.content) {
+            const content = firstUserTurn.content.trim();
+            return content.length > 50 ? content.slice(0, 47) + '...' : content;
         }
-        // Add to end (most recently used)
-        this.accessOrder.push(id);
+        const timestamp = new Date().toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        });
+        return `Chat (${timestamp})`;
     }
-
-    private evictIfNeeded(): void {
-        while (this.conversations.size > this.maxConversations) {
-            // Evict least recently used
-            const toEvict = this.accessOrder.shift();
-            if (toEvict) {
-                const state = this.conversations.get(toEvict);
-                if (state?.dirty) {
-                    // Don't evict dirty conversations, move to end
-                    this.accessOrder.push(toEvict);
-                    logger.warn({
-                        conversationId: toEvict,
-                        size: this.conversations.size,
-                    }, 'Skipping eviction of dirty conversation');
-
-                    // If all are dirty, we have to evict anyway
-                    if (this.accessOrder.every(id => this.conversations.get(id)?.dirty)) {
-                        const forced = this.accessOrder.shift();
-                        if (forced) {
-                            this.conversations.delete(forced);
-                            logger.warn({ conversationId: forced }, 'Force-evicted dirty conversation');
-                        }
-                        break;
-                    }
-                } else {
-                    this.conversations.delete(toEvict);
-                    logger.debug({ conversationId: toEvict }, 'Evicted conversation from cache');
-                }
-            }
-        }
-    }
-}
-
-/**
- * Generate an auto-title from turns.
- *
- * Unlike other auto-title generation (which uses Lumo to summarize),
- * this uses the first user message truncated to 50 chars.
- * Used for stateless /save where we don't have a Lumo-generated title.
- */
-function generateAutoTitle(turns: Turn[]): string {
-    const firstUserTurn = turns.find(t => t.role === 'user');
-    if (firstUserTurn?.content) {
-        const content = firstUserTurn.content.trim();
-        return content.length > 50 ? content.slice(0, 47) + '...' : content;
-    }
-    // Fallback to timestamp if no user message
-    const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-    return `Chat (${timestamp})`;
-}
-
-// Singleton instance
-let storeInstance: ConversationStore | null = null;
-
-/**
- * Get the global ConversationStore instance
- * Config is required on first call to initialize the store
- */
-export function getConversationStore(config?: ConversationStoreConfig): ConversationStore {
-    if (!storeInstance) {
-        if (!config) {
-            throw new Error('ConversationStore not initialized - config required on first call');
-        }
-        storeInstance = new ConversationStore(config);
-    }
-    return storeInstance;
-}
-
-/**
- * Reset the store (for testing)
- */
-export function resetConversationStore(): void {
-    storeInstance = null;
 }

@@ -23,7 +23,7 @@ export async function runProtonAuth(
     if (!existsSync(binaryPath)) {
         throw new Error(
             `proton-auth binary not found at ${binaryPath}. ` +
-            `Build it with: make auth-build`
+            `Build it with: npm run build:login`
         );
     }
 

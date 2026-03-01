@@ -1,17 +1,13 @@
 /**
  * Custom mock scenarios for lumo-tamer testing
  *
- * Unlike the upstream-adapted scenarios in mock-api.ts (from Proton WebClients handlers.ts),
+ * Unlike the upstream scenarios in proton-upstream/mocks/handlers.ts,
  * these are lumo-tamer-specific scenarios for features we built on top.
  */
 
-import type { Turn } from '../lumo-client/types.js';
-import type { ProtonApiOptions } from '../lumo-client/types.js';
-import type { ScenarioGenerator } from './mock-api.js';
+import { Role, type Turn, type ProtonApiOptions } from '../lumo-client/types.js';
+import { formatSSEMessage, delay, type ScenarioGenerator } from './mock-api.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
-
-const formatSSEMessage = (data: unknown) => `data: ${JSON.stringify(data)}\n\n`;
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Extract turns from the mock request payload (unencrypted only). */
 function getTurns(options: ProtonApiOptions): Turn[] {
@@ -37,10 +33,10 @@ export const customScenarios: Record<string, ScenarioGenerator> = {
         //   Misrouted: everything else (simple first user message)
 
         const turns = getTurns(options);
-        const lastUserTurn = lastTurnWithRole(turns, 'user');
+        const lastUserTurn = lastTurnWithRole(turns, Role.User);
         const bounceText = getServerInstructionsConfig().forToolBounce;
         const isBounce = !!lastUserTurn?.content?.includes(bounceText.trim());
-        const hasAssistantTurn = turns.some(t => t.role === 'assistant');
+        const hasAssistantTurn = turns.some(t => t.role === Role.Assistant);
 
         if (isBounce) {
             // Bounce response: output the tool call as JSON text (what Lumo should have done)

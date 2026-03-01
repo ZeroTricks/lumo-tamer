@@ -3,71 +3,20 @@
  * Compatible with Proton Lumo webclient format
  */
 
-// Unique identifiers
-export type ConversationId = string;   // UUID format
-export type MessageId = string;        // UUID format
-export type SpaceId = string;          // UUID format
-export type RemoteId = string;         // Server-assigned ID
+// Import types from upstream @lumo
+import type { ConversationId, MessageId, SpaceId, ProjectSpace, ConversationPriv, MessagePub, ConversationPub, Role } from '@lumo/types.js';
+import { ConversationStatus } from '@lumo/types.js';
+import type { RemoteId } from '@lumo/remote/types.ts';
 
-// Message roles matching Lumo format
-export type MessageRole = 'user' | 'assistant' | 'system' | 'tool_call' | 'tool_result';
-
-// Message status (matches Proton's Status type)
-export type MessageStatus = 'succeeded' | 'failed';
-
-// Conversation status
-export type ConversationStatus = 'generating' | 'completed';
-
-/**
- * Conversation metadata
- * Public fields that can be stored unencrypted
- */
-export interface ConversationMetadata {
-    id: ConversationId;
-    spaceId: SpaceId;
-    createdAt: number;          // Unix timestamp (local tracking, server generates its own)
-    updatedAt: number;          // Unix timestamp (local tracking, server generates its own)
-    starred: boolean;
-}
-
-/**
- * Space private data (encrypted)
- * Matches Lumo WebClient's ProjectSpace type
- */
-export interface SpacePrivate {
-    isProject: true;
-    projectName?: string;
-    projectInstructions?: string;
-    projectIcon?: string;
-}
-
-/**
- * Conversation private data (encrypted)
- */
-export interface ConversationPrivate {
-    title: string;
-}
+// Re-export types for consumers
+export type { ConversationId, MessageId, SpaceId, RemoteId, ProjectSpace, ConversationPriv, MessagePub, ConversationPub };
 
 /**
  * Full conversation record
  */
-export interface Conversation extends ConversationMetadata {
+export interface Conversation extends ConversationPub {
     title: string;              // Decrypted
     status: ConversationStatus;
-}
-
-/**
- * Message public fields
- *
- * WebClient also has: placeholder?: boolean (we don't use it)
- */
-export interface MessagePublic {
-    id: MessageId;
-    conversationId: ConversationId;
-    createdAt: number;          // Unix timestamp (local tracking, server generates its own)
-    role: MessageRole;
-    parentId?: MessageId;       // For branching conversations
-    status?: MessageStatus;     // Optional to match WebClient
 }
 
 /**
@@ -100,13 +49,13 @@ export interface MessagePrivate {
 /**
  * Full message record
  */
-export interface Message extends MessagePublic, MessagePrivate {}
+export interface Message extends MessagePub, MessagePrivate { }
 
 /**
  * In-memory conversation state
  */
 export interface ConversationState {
-    metadata: ConversationMetadata;
+    metadata: ConversationPub;
     title: string;
     status: ConversationStatus;
     messages: Message[];
@@ -117,28 +66,10 @@ export interface ConversationState {
 }
 
 /**
- * Pending change for sync queue
- */
-export type PendingChange =
-    | { type: 'create_conversation'; conversation: ConversationState }
-    | { type: 'update_conversation'; conversationId: ConversationId; updates: Partial<ConversationMetadata & ConversationPrivate> }
-    | { type: 'create_message'; message: Message }
-    | { type: 'delete_conversation'; conversationId: ConversationId };
-
-/**
  * Conversation store configuration (internal)
  */
 export interface ConversationStoreConfig {
     maxConversationsInMemory: number;
-}
-
-/**
- * Message fingerprint for deduplication
- */
-export interface MessageFingerprint {
-    hash: string;               // SHA-256 of role + content
-    role: MessageRole;
-    index: number;              // Position in conversation
 }
 
 /**
@@ -148,4 +79,13 @@ export interface IdMapEntry {
     localId: string;
     remoteId: RemoteId;
     type: 'space' | 'conversation' | 'message';
+}
+/**
+ * Incoming message format from API
+ */
+
+export interface MessageForStore {
+    role: Role;
+    content?: string;
+    id?: string; // Semantic ID for deduplication (call_id for tools)
 }

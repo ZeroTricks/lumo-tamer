@@ -17,23 +17,23 @@ This project creates an OpenAI-compatible API on top of Proton's conversation ag
 - **Auth** (`src/auth/`): Three providers (login/Go SRP, browser token extraction, rclone). `AuthManager` handles auto-refresh + 401 retries.
 - **Sync** (`src/conversations/sync/`, `encryption/`): Optional Proton-native storage. KeyManager for user keys, SyncService for push/pull.
 
-**Proton integration**:
-- `src/proton-upstream/`: Unmodified files from WebClients monorepo (see `docs/upstream.md`)
-- `src/proton-shims/`: Reimplements `@proton/crypto/*` and others for Node.js, without large dependency trees.
+**Proton integration** (see `docs/upstream.md`):
+- `packages/lumo/` (`@lumo/*`): From `WebClients/applications/lumo/src/app/` - **do not edit**, use `npm run sync-upstream`
+- `packages/proton/` (`@proton/*`): From `WebClients/packages` - **do not edit**
+- `src/shims/`: Non-Proton polyfills (IndexedDB, lodash, etc.)
 
-
-  ## Coding guidelines:
-  - Try to reuse as much from Proton's WebClients as possible, which is tested and actively maintained. To do this:
-    - Pull files in src/proton-upstream without modifications.
-    - Use TS aliases and shims to make them work.
-    - Update src/proton-upstream/sync-upstream.sh when pulling new files.
-    - Always mention sources/inspiration when you write code in src/proton-shims or src/lumo-client .
+## Coding guidelines:
+- Reuse Proton's WebClients code when possible:
+  - Prefer syncing files unchanged over writing shims
+  - Use tsconfig aliases and polyfills to make upstream code work
+  - Update `scripts/upstream/sync.sh` when adding files
+  - Document source URLs in shim file headers
   - Write modular code, reuse common logic between:
     - different authentication methods
     - /v1/responses and /v1/chat/completions endpoints
     - API and CLI calls
   - Use config.ts, config.yaml and config.defaults.yaml to add configuration parameters. Don't put defaults in config.ts or other code; config.defaults.yaml is the single source of truth.
-  - Use src/logger.ts for logging. Use print() to force printing to stdout. Don't use console.log().
+  - Use src/logger.ts for logging. Use print() to force printing to stdout. Don't use console.log(). Log errors like this: logger.error({error}, "Can't do that").
 
   ## Testing:
   - Framework: Vitest. Run `npm test` (all) or `npm run test:unit` / `npm run test:integration`.

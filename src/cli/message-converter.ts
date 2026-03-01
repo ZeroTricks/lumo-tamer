@@ -6,7 +6,7 @@
  */
 
 import { getCliInstructionsConfig, getLocalActionsConfig } from '../app/config.js';
-import { interpolateTemplate } from 'app/template.js';
+import { interpolateTemplate } from '../app/template.js';
 
 /**
  * Build effective instructions for CLI using template system.
