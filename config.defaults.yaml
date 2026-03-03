@@ -1,3 +1,12 @@
+# User data directory for vault, conversations, etc.
+# Platform defaults (when empty ""):
+#   Linux: $XDG_DATA_HOME/lumo-tamer or ~/.local/share/lumo-tamer
+#   macOS: ~/Library/Application Support/lumo-tamer
+#   Windows: %APPDATA%/lumo-tamer
+#   Docker (/.dockerenv exists): /data
+# Supports: absolute paths, ~ for home, relative to project root
+dataDir: ""
+
 # Authentication configuration
 auth:
   # - login: enter Proton credentials via go-proton-api
@@ -8,8 +17,8 @@ auth:
 
   # Encrypted vault for secure token storage (AES-256-GCM)
   # Key is stored in OS keychain (desktop) or Docker secret (containers)
+  # Vault file is stored at <dataDir>/vault.enc
   vault:
-    path: "sessions/vault.enc"
     keychain:
       service: "lumo-tamer"
       account: "vault-key"
@@ -63,8 +72,6 @@ log:
 
 # Shared Conversations Configuration (can be overridden in server/cli sections)
 conversations:
-  # Path for IndexedDB SQLite files
-  databasePath: "sessions/"
 
   # WORKAROUND for API clients without conversation_id support (e.g., Home Assistant).
   # Derives conversation ID from the `user` field in the request.

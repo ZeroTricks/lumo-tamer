@@ -1,6 +1,6 @@
 import express from 'express';
-import { getServerConfig, getMetricsConfig, authConfig } from '../app/config.js';
-import { resolveProjectPath } from '../app/paths.js';
+import { getServerConfig, getMetricsConfig } from '../app/config.js';
+import { getVaultPath } from '../app/paths.js';
 import { logger } from '../app/logger.js';
 import { setupAuthMiddleware, setupLoggingMiddleware, setupMetricsMiddleware } from './middleware.js';
 import { setupApiErrorHandler } from './error-handler.js';
@@ -59,15 +59,13 @@ export class APIServer {
   }
 
   private getDependencies(): EndpointDependencies {
-    const vaultPath = resolveProjectPath(authConfig.vault.path);
-
     return {
       queue: this.queue,
       lumoClient: this.app.getLumoClient(),
       conversationStore: this.app.getConversationStore(),
       syncInitialized: this.app.isSyncInitialized(),
       authManager: this.app.getAuthManager(),
-      vaultPath,
+      vaultPath: getVaultPath(),
     };
   }
 
