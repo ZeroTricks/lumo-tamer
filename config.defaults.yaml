@@ -90,9 +90,6 @@ conversations:
     enabled: false
     # Project name for conversations (created if doesn't exist)
     projectName: lumo-tamer
-    # Auto-sync vs manual /save command
-    # DEPRECATED
-    autoSync: true
 
 # Shared Commands Configuration (can be overridden in server/cli sections)
 commands:

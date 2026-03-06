@@ -100,13 +100,8 @@ export async function executeCommand(
       case 'help':
         return getHelpText();
 
-      // TODO: test with new store
       case 'save':
         return await handleSaveCommand(params, context);
-
-      // TODO: test with new store
-      case 'sync':
-        return await handleSyncCommand(context);
 
       case 'load':
         return await handleLoadCommand(params, context);
@@ -146,8 +141,7 @@ function getHelpText(): string {
   return `Available commands:
   /help              - Show this help message
   /title <text>      - Set conversation title
-  /save [title]      - Save current conversation (optionally set title) to Proton
-  /sync              - Sync all conversations to Proton
+  /save [title]      - Save stateless request to conversation (optionally set title)
   /load <id>         - Load a conversation from Proton by ID
   /refreshtokens     - Manually refresh auth tokens
   /logout            - Revoke session and delete tokens
@@ -261,29 +255,6 @@ async function handleLoadCommand(params: string, context?: CommandContext): Prom
   } catch (error) {
     logger.error({ error }, 'Failed to execute /load command');
     return `Load failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-  }
-}
-
-/**
- * Handle /sync command - sync all conversations to server
- */
-async function handleSyncCommand(context?: CommandContext): Promise<string> {
-  try {
-    if (!context?.syncInitialized) {
-      return 'Sync not initialized. Persistence may be disabled or KeyManager not ready.';
-    }
-
-    const syncService = getSyncService();
-    const syncedCount = await syncService.sync();
-
-    const stats = syncService.getStats();
-    return `Synced ${syncedCount} conversation(s) to server.\n` +
-           `Project: ${stats.spaceId ?? 'none'}\n` +
-           `Mapped conversations: ${stats.mappedConversations}\n` +
-           `Mapped messages: ${stats.mappedMessages}`;
-  } catch (error) {
-    logger.error({ error }, 'Failed to execute /sync command');
-    return `Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
   }
 }
 

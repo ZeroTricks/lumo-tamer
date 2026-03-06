@@ -306,7 +306,7 @@ export async function initializeSync(
         // Primary store: sync is handled by sagas
         if (primaryStoreResult) {
             logger.info(
-                { method: authProvider.method, autoSync: syncConfig.autoSync },
+                { method: authProvider.method },
                 'Sync initialized (handled by sagas)'
             );
             return {
@@ -353,16 +353,14 @@ export async function initializeSync(
             logger.warn({ error: msg }, 'getOrCreateSpace failed');
         }
 
-        // Initialize auto-sync if enabled
-        if (syncConfig.autoSync) {
-            const autoSync = getAutoSyncService(syncService, true);
+        // Initialize auto-sync
+        const autoSync = getAutoSyncService(syncService, true);
 
-            // Connect to fallback store
-            const store = getFallbackStore();
-            store.setOnDirtyCallback(() => autoSync.notifyDirty());
+        // Connect to fallback store
+        const store = getFallbackStore();
+        store.setOnDirtyCallback(() => autoSync.notifyDirty());
 
-            logger.info('Auto-sync enabled for fallback store');
-        }
+        logger.info('Auto-sync enabled for fallback store');
 
         return { initialized: true };
     } catch (error) {

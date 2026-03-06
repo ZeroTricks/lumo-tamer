@@ -32,7 +32,6 @@ const conversationsConfigSchema = z.object({
   sync: z.object({
     enabled: z.boolean(),
     projectName: z.string().min(1),
-    autoSync: z.boolean(),
   }),
 });
 
