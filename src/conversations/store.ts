@@ -368,8 +368,7 @@ export class ConversationStore {
             parentId,
             status,
             content: messageData.content,
-            toolCall: messageData.toolCall,
-            toolResult: messageData.toolResult,
+            blocks: messageData.blocks,
             semanticId: effectiveSemanticId,
         };
 
@@ -379,8 +378,7 @@ export class ConversationStore {
             conversationId: id,
             messageId,
             contentLength: messageData.content.length,
-            hasToolCall: !!messageData.toolCall,
-            hasToolResult: !!messageData.toolResult,
+            hasBlocks: !!messageData.blocks?.length,
         }, 'Appended assistant response');
 
         return message;

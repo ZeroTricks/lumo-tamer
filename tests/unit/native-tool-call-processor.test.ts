@@ -74,7 +74,7 @@ describe('NativeToolCallProcessor', () => {
   });
 
   describe('feedToolResult', () => {
-    it('captures tool result JSON', () => {
+    it('captures tool result in blocks', () => {
       const processor = new NativeToolCallProcessor();
 
       processor.feedToolCall('{"name":"web_search","parameters":{"query":"test"}}');
@@ -82,7 +82,10 @@ describe('NativeToolCallProcessor', () => {
       processor.finalize();
 
       const result = processor.getResult();
-      expect(result.toolResult).toBe('{"results":[{"title":"Test"}],"total_count":1}');
+      expect(result.blocks).toHaveLength(2);
+      expect(result.blocks[0].type).toBe('tool_call');
+      expect(result.blocks[1].type).toBe('tool_result');
+      expect(result.blocks[1].content).toBe('{"results":[{"title":"Test"}],"total_count":1}');
     });
 
     it('detects error results', () => {

@@ -134,21 +134,24 @@ describe('ConversationStore', () => {
             expect(assistantMsg.parentId).toBe(userMsg.id);
         });
 
-        it('stores native tool call data', () => {
+        it('stores native tool call data in blocks', () => {
             ctx.conversationStore.appendMessages('conv-1', [
                 { role: 'user', content: 'Search for news' },
             ]);
             const msg = ctx.conversationStore.appendAssistantResponse('conv-1', {
                 content: 'Here are the results...',
-                toolCall: '{"name":"web_search","arguments":{"query":"news"}}',
-                toolResult: '{"results":[]}',
+                blocks: [
+                    { type: 'tool_call', content: '{"name":"web_search","arguments":{"query":"news"}}' },
+                    { type: 'tool_result', content: '{"results":[]}' },
+                    { type: 'text', content: 'Here are the results...' },
+                ],
             });
 
             expect(msg.content).toBe('Here are the results...');
-            expect(msg.toolCall).toBe(
-                '{"name":"web_search","arguments":{"query":"news"}}'
-            );
-            expect(msg.toolResult).toBe('{"results":[]}');
+            expect(msg.blocks).toHaveLength(3);
+            expect(msg.blocks![0].type).toBe('tool_call');
+            expect(msg.blocks![1].type).toBe('tool_result');
+            expect(msg.blocks![2].type).toBe('text');
         });
     });
 

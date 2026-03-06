@@ -263,8 +263,7 @@ export class SyncService {
         const messagePrivate: MessagePrivate = {
             content: contentToStore,
             context: message.context,
-            toolCall: message.toolCall,
-            toolResult: message.toolResult,
+            blocks: message.blocks,
         };
 
         const encryptedPrivate = await codec.encryptMessage(messagePrivate, message, effectiveParentId);
@@ -375,8 +374,7 @@ export class SyncService {
                     status: msg.status as Status | undefined,
                     content: messagePrivate?.content,
                     context: messagePrivate?.context,
-                    toolCall: messagePrivate?.toolCall,
-                    toolResult: messagePrivate?.toolResult,
+                    blocks: messagePrivate?.blocks,
                 });
             }
 

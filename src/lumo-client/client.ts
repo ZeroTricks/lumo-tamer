@@ -14,6 +14,7 @@ import {
     RequestEncryptionParams,
 } from '@lumo/lib/lumo-api-client/core/encryptionParams.js';
 import { StreamProcessor } from '@lumo/lib/lumo-api-client/core/streaming.js';
+import { appendTextToBlocks } from '@lumo/messageHelpers.js';
 import { logger } from '../app/logger.js';
 import {
     Role,
@@ -28,6 +29,7 @@ import {
     type AssistantMessageData,
     type LumoClientOptions,
     type ChatResult,
+    type ContentBlock,
 } from './types.js';
 import { getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
 import { injectInstructionsIntoTurns } from './instructions.js';
@@ -40,6 +42,20 @@ export type { LumoClientOptions, ChatResult };
 const DEFAULT_INTERNAL_TOOLS: ToolName[] = ['proton_info'];
 const DEFAULT_EXTERNAL_TOOLS: ToolName[] = ['web_search', 'weather', 'stock', 'cryptocurrency'];
 const DEFAULT_ENDPOINT = 'ai/v1/chat';
+
+/**
+ * Merge text blocks with tool blocks.
+ * Text blocks come first (accumulated during streaming), then tool blocks.
+ * If there are no tool blocks, returns text blocks as-is.
+ */
+function mergeBlocks(textBlocks: ContentBlock[], toolBlocks: ContentBlock[]): ContentBlock[] {
+    if (toolBlocks.length === 0) {
+        return textBlocks;
+    }
+    // For now, simple concatenation. The upstream helpers handle
+    // proper interleaving during streaming; here we just combine final results.
+    return [...textBlocks, ...toolBlocks];
+}
 
 /** Build the bounce instruction: config text + the misrouted tool call as JSON example.
  *  Includes the prefix in the example JSON so Lumo outputs it correctly. */
@@ -105,6 +121,7 @@ export class LumoClient {
         const processor = new StreamProcessor();
         let fullResponse = '';
         let fullTitle = '';
+        let blocks: ContentBlock[] = [];
 
         // Native tool call processing (SSE tool_call/tool_result targets)
         const nativeToolProcessor = new NativeToolCallProcessor(isBounce);
@@ -137,6 +154,7 @@ export class LumoClient {
 
                 if (msg.target === 'message') {
                     fullResponse += content;
+                    blocks = appendTextToBlocks(blocks, content);
                     if (!suppressChunks) {
                         onChunk?.(content);
                     }
@@ -186,18 +204,15 @@ export class LumoClient {
             nativeToolProcessor.finalize();
             const nativeResult = nativeToolProcessor.getResult();
 
+            // Merge text blocks with native tool blocks
+            // Native tool blocks come from processor, text blocks accumulated here
+            const finalBlocks = mergeBlocks(blocks, nativeResult.blocks);
+
             // Build message data for persistence
-            // Only include native tool data if not misrouted (misrouted calls are bounced)
-            const message: AssistantMessageData = { content: fullResponse };
-            if (nativeResult.toolCall && !nativeResult.misrouted) {
-                message.toolCall = JSON.stringify({
-                    name: nativeResult.toolCall.name,
-                    arguments: nativeResult.toolCall.arguments,
-                });
-                if (nativeResult.toolResult) {
-                    message.toolResult = nativeResult.toolResult;
-                }
-            }
+            const message: AssistantMessageData = {
+                content: fullResponse,
+                blocks: finalBlocks.length > 0 ? finalBlocks : undefined,
+            };
 
             return {
                 message,

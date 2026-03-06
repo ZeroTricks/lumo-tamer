@@ -187,7 +187,7 @@ export class FallbackStore {
      * Append an assistant response to a conversation.
      *
      * @param id - Conversation ID
-     * @param messageData - Assistant message data (content, optional toolCall/toolResult)
+     * @param messageData - Assistant message data (content, optional blocks)
      * @param status - Message status (default: succeeded)
      * @param semanticId - Optional semantic ID for deduplication
      * @returns The created message
@@ -213,8 +213,7 @@ export class FallbackStore {
             parentId,
             status,
             content: messageData.content,
-            toolCall: messageData.toolCall,
-            toolResult: messageData.toolResult,
+            blocks: messageData.blocks,
             semanticId: semanticId ?? hashMessage(Role.Assistant, messageData.content).slice(0, 16),
         };
 
@@ -229,8 +228,7 @@ export class FallbackStore {
             conversationId: id,
             messageId: message.id,
             contentLength: messageData.content.length,
-            hasToolCall: !!messageData.toolCall,
-            hasToolResult: !!messageData.toolResult,
+            hasBlocks: !!messageData.blocks?.length,
         }, 'Appended assistant response');
 
         return message;

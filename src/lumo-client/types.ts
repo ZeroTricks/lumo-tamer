@@ -13,6 +13,8 @@ export type {
     Turn,
 } from '@lumo/lib/lumo-api-client/core/types.js';
 
+import type { ContentBlock } from '@lumo/types.js';
+export type { ContentBlock };
 export { Role } from '@lumo/types-api.js';
 
 // Local-only types
@@ -91,10 +93,8 @@ export interface NativeToolData {
  */
 export interface AssistantMessageData {
     content: string;
-    /** JSON string of tool call (native tools only) */
-    toolCall?: string;
-    /** JSON string of tool result (native tools only) */
-    toolResult?: string;
+    /** Interleaved text/tool_call/tool_result blocks (native tools) */
+    blocks?: ContentBlock[];
 }
 
 // LumoClient types
