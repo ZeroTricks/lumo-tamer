@@ -100,9 +100,11 @@ export async function executeCommand(
       case 'help':
         return getHelpText();
 
+      // TODO: test with new store
       case 'save':
         return await handleSaveCommand(params, context);
 
+      // TODO: test with new store
       case 'sync':
         return await handleSyncCommand(context);
 

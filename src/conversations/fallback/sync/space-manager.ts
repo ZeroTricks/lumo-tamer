@@ -93,9 +93,9 @@ export class SpaceManager {
      * Called lazily on first sync
      *
      * Matching logic:
-     * 1. If spaceId is configured, use that space directly (by UUID)
-     * 2. Otherwise, find a space with matching spaceName (projectName)
-     * 3. If no match found, create a new space
+     * 1. If spaceName is configured, find a space with matching projectName
+     * 2. If no match found by name, fall back to spaceId (UUID) if configured
+     * 3. If still no match, create a new space with spaceName
      */
     async getOrCreateSpace(): Promise<SpaceContext> {
         // Already have a space
@@ -103,9 +103,9 @@ export class SpaceManager {
             return { spaceId: this._spaceId, remoteId: this._spaceRemoteId };
         }
 
-        const searchCriteria = this.configuredSpaceId
-            ? { spaceId: this.configuredSpaceId }
-            : { spaceName: this.spaceName };
+        const searchCriteria = this.spaceName
+            ? { spaceName: this.spaceName, fallbackSpaceId: this.configuredSpaceId }
+            : { spaceId: this.configuredSpaceId };
         logger.info(searchCriteria, 'Checking for existing project...');
 
         const listResult = await this.lumoApi.listSpaces();
@@ -118,13 +118,17 @@ export class SpaceManager {
             spaceTags: existingSpaces.map(s => s.id),
         }, 'Available projects');
 
-        // If spaceId is configured, find that specific space by UUID
+        // Primary: find by name if configured
+        if (this.spaceName) {
+            return this.findSpaceByName(existingSpaces);
+        }
+
+        // Fallback: find by spaceId (UUID) if configured (legacy/deprecated)
         if (this.configuredSpaceId) {
             return this.findSpaceById(existingSpaces);
         }
 
-        // Otherwise, find by name
-        return this.findSpaceByName(existingSpaces);
+        throw new Error('Either projectName or projectId must be configured');
     }
 
     private async findSpaceById(existingSpaces: RemoteSpace[]): Promise<SpaceContext> {

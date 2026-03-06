@@ -209,15 +209,12 @@ async function initializePrimaryStore(
     // Get master key as base64 for crypto layer
     const masterKeyBase64 = keyManager.getMasterKeyBase64();
 
-    // Generate or use configured space ID
-    const spaceId = syncConfig.projectId ?? crypto.randomUUID();
-
-    // Initialize store
     const result = await initializeStore({
         sessionUid: uid,
         userId: authProvider.getUserId() ?? uid,
         masterKey: masterKeyBase64,
-        spaceId,
+        projectName: syncConfig.projectName,
+        projectId: syncConfig.projectId,
         storeConfig: {
             maxConversationsInMemory: conversationsConfig.maxInMemory,
         },
