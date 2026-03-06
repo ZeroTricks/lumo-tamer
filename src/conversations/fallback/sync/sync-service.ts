@@ -10,8 +10,8 @@ import { LumoApi } from '@lumo/remote/api.js';
 import { RoleInt, StatusInt } from '@lumo/remote/types.js';
 import { getFallbackStore } from '../store.js';
 import type { KeyManager } from '../../key-manager.js';
-import { Role, type Status } from '@lumo/types.js';
-import type { ConversationState, Message, SpaceId, RemoteId, MessagePrivate } from '../../types.js';
+import { Role, type Status, type MessagePriv } from '@lumo/types.js';
+import type { ConversationState, Message, SpaceId, RemoteId } from '../../types.js';
 import { SpaceManager } from './space-manager.js';
 
 // Role mapping: our internal roles to API integer values
@@ -260,7 +260,7 @@ export class SyncService {
             this.messageIdMap
         );
 
-        const messagePrivate: MessagePrivate = {
+        const messagePrivate: MessagePriv = {
             content: contentToStore,
             context: message.context,
             blocks: message.blocks,
@@ -354,7 +354,7 @@ export class SyncService {
                     remoteId
                 );
 
-                let messagePrivate: MessagePrivate | null = null;
+                let messagePrivate: MessagePriv | null = null;
                 if (fullMsg?.encrypted && typeof fullMsg.encrypted === 'string') {
                     messagePrivate = await codec.decryptMessage(
                         fullMsg.encrypted,

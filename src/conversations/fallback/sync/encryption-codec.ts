@@ -10,12 +10,11 @@
 import stableStringify from 'json-stable-stringify';
 import { logger } from '../../../app/logger.js';
 import { encryptData, decryptData } from '@proton/crypto/lib/subtle/aesGcm';
-import { Role } from '@lumo/types.js';
+import { Role, type MessagePriv } from '@lumo/types.js';
 import type {
     Message,
     ProjectSpace,
     ConversationPriv,
-    MessagePrivate,
 } from '../../types.js';
 
 // Role mapping for AD construction
@@ -142,7 +141,7 @@ export class EncryptionCodec {
      * the WebClient will reconstruct from the Role integer field, NOT our internal role names.
      */
     async encryptMessage(
-        data: MessagePrivate,
+        data: MessagePriv,
         message: Message,
         effectiveParentId?: string
     ): Promise<string> {
@@ -171,8 +170,8 @@ export class EncryptionCodec {
         conversationId: string,
         role: string,
         parentId?: string
-    ): Promise<MessagePrivate | null> {
-        return this.decrypt<MessagePrivate>(
+    ): Promise<MessagePriv | null> {
+        return this.decrypt<MessagePriv>(
             encryptedBase64,
             {
                 app: 'lumo',

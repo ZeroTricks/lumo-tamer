@@ -16,7 +16,7 @@ export type {
     ConversationState,
     Message,
     MessageId,
-    MessagePrivate,
+    MessagePriv,
     SpaceId,
     RemoteId,
     IdMapEntry,
