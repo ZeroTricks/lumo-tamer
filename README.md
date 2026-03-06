@@ -157,7 +157,7 @@ Both CLI and API accept a few in-chat commands. Realistically, you'll only use `
 |---------|-------------|
 | `/help` | Show available commands |
 | `/title <text>` | Set conversation title |
-| `/save`, `/sync` | Sync conversations to Proton server (not needed when `conversations.sync.autoSync: true`)|
+| `/save [title]` | Save stateless request to conversation (optionally set title) |
 | `/refreshtokens` | Manually refresh auth tokens  (not needed when `auth.autoRefresh.enabled: true`) |
 | `/logout` | Revoke session and delete tokens |
 | `/quit` | Exit the app (CLI only) |

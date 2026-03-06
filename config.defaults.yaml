@@ -84,12 +84,10 @@ conversations:
   # When false (default), uses the primary Redux + IndexedDB store.
   useFallbackStore: true
 
-  # Sync: persist conversations to Proton servers (requires browser auth)
-  sync:
-    # Enable syncing to Proton servers
-    enabled: false
-    # Project name for conversations (created if doesn't exist)
-    projectName: lumo-tamer
+  # Enable syncing conversations to Proton servers (requires browser auth)
+  enableSync: false
+  # Project name for conversations (created if doesn't exist)
+  projectName: lumo-tamer
 
 # Shared Commands Configuration (can be overridden in server/cli sections)
 commands:

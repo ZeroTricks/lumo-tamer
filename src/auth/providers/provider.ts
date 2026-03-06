@@ -159,7 +159,7 @@ export class AuthProvider implements IAuthProvider {
         }
 
         // keyPassword warning - only if sync is enabled
-        const syncEnabled = getConversationsConfig().sync.enabled;
+        const syncEnabled = getConversationsConfig().enableSync;
         if (!this.tokens.keyPassword && syncEnabled) {
             status.warnings.push('keyPassword missing - conversation persistence disabled');
         }

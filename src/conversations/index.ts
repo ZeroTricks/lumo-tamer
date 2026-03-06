@@ -183,7 +183,6 @@ async function initializePrimaryStore(
     keyPassword: string
 ): Promise<StoreResult | null> {
     const { protonApi, uid, authProvider, conversationsConfig } = options;
-    const syncConfig = conversationsConfig.sync;
 
     // Get cached keys from browser provider if available
     const cachedUserKeys = authProvider.getCachedUserKeys?.();
@@ -213,7 +212,7 @@ async function initializePrimaryStore(
         sessionUid: uid,
         userId: authProvider.getUserId() ?? uid,
         masterKey: masterKeyBase64,
-        projectName: syncConfig.projectName,
+        projectName: conversationsConfig.projectName,
         storeConfig: {
             maxConversationsInMemory: conversationsConfig.maxInMemory,
         },
@@ -277,9 +276,8 @@ export async function initializeSync(
     options: InitializeSyncOptions
 ): Promise<InitializeSyncResult> {
     const { protonApi, uid, authProvider, conversationsConfig } = options;
-    const syncConfig = conversationsConfig?.sync;
 
-    if (!syncConfig?.enabled) {
+    if (!conversationsConfig?.enableSync) {
         logger.info('Sync is disabled, skipping sync initialization');
         return { initialized: false };
     }
@@ -341,7 +339,7 @@ export async function initializeSync(
         const syncService = getSyncService({
             uid,
             keyManager,
-            spaceName: syncConfig.projectName,
+            spaceName: conversationsConfig.projectName,
         });
 
         // Eagerly fetch/create space

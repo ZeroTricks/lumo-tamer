@@ -59,7 +59,7 @@ export function printSummary(status: AuthProviderStatus, options: SummaryOptions
         }
 
         // Sync status (Proton server sync)
-        if (conversationsConfig.sync.enabled) {
+        if (conversationsConfig.enableSync) {
             if (!supportsFullApi) {
                 print('Conversation sync: \x1b[33mdisabled\x1b[0m (requires browser auth for lumo scope)');
             } else if (!status.details.hasKeyPassword) {

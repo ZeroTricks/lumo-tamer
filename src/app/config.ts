@@ -29,10 +29,8 @@ const conversationsConfigSchema = z.object({
   deriveIdFromUser: z.boolean(),
   databasePath: z.string(),
   useFallbackStore: z.boolean(),
-  sync: z.object({
-    enabled: z.boolean(),
-    projectName: z.string().min(1),
-  }),
+  enableSync: z.boolean(),
+  projectName: z.string().min(1),
 });
 
 // Replace pattern entry schema
