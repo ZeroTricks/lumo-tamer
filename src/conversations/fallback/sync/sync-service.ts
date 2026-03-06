@@ -32,8 +32,7 @@ const StatusToInt: Record<Status, number> = {
 export interface SyncServiceConfig {
     keyManager: KeyManager;
     uid: string;
-    spaceName?: string;
-    spaceId?: string;
+    spaceName: string;
     includeSystemMessages?: boolean;
 }
 
@@ -74,9 +73,6 @@ export class SyncService {
     private messageIdMap = new Map<string, RemoteId>();
 
     constructor(config: SyncServiceConfig) {
-        if (!config.spaceId && !config.spaceName) {
-            throw new Error('Either projectId or projectName must be provided in config');
-        }
         this.lumoApi = new LumoApi(config.uid);
         this.keyManager = config.keyManager;
         this.includeSystemMessages = config.includeSystemMessages ?? false;
@@ -85,7 +81,6 @@ export class SyncService {
             lumoApi: this.lumoApi,
             keyManager: config.keyManager,
             spaceName: config.spaceName,
-            configuredSpaceId: config.spaceId,
         });
     }
 

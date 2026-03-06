@@ -15,7 +15,6 @@ conversations:
   sync:
     enabled: true
     projectName: lumo-tamer     # Project name (created if doesn't exist)
-    # projectId: "uuid"         # Or use specific project UUID
     includeSystemMessages: false  # Only sync user/assistant messages
     autoSync: false             # Or use /save command
 ```

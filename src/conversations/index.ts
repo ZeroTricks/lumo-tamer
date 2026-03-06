@@ -214,7 +214,6 @@ async function initializePrimaryStore(
         userId: authProvider.getUserId() ?? uid,
         masterKey: masterKeyBase64,
         projectName: syncConfig.projectName,
-        projectId: syncConfig.projectId,
         storeConfig: {
             maxConversationsInMemory: conversationsConfig.maxInMemory,
         },
@@ -343,7 +342,6 @@ export async function initializeSync(
             uid,
             keyManager,
             spaceName: syncConfig.projectName,
-            spaceId: syncConfig.projectId,
             includeSystemMessages: syncConfig.includeSystemMessages,
         });
 

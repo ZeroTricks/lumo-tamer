@@ -90,9 +90,6 @@ conversations:
     enabled: false
     # Project name for conversations (created if doesn't exist)
     projectName: lumo-tamer
-    # DEPRECATED: projectId is legacy. Use projectName instead.
-    # Only used as fallback if projectName lookup fails.
-    # projectId: "uuid"
     # Include system/tool messages in sync
     # WARNING: Setting this to false is experimental:
     # - this may break saved conversation flow (conversations get split or become trees)
