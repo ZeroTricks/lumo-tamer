@@ -12,7 +12,6 @@ export type {
     CachedUserKey,
     CachedMasterKey,
     ParsedToolCall,
-    NativeToolData,
     AssistantMessageData,
     LumoClientOptions,
     ChatResult,
