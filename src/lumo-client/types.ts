@@ -81,15 +81,12 @@ export interface ParsedToolCall {
     arguments: Record<string, unknown>;
 }
 
-/** Native tool call with optional result (for persistence). */
-export interface NativeToolData {
-    toolCall: ParsedToolCall;
-    toolResult?: string;
-}
-
 /**
  * Assistant message data ready for persistence.
- * Matches MessagePrivate fields for assistant messages.
+ *
+ * Subset of upstream MessagePriv with required content (LumoClient always provides it).
+ * Could be typed as `Required<Pick<MessagePriv, 'content'>> & Pick<MessagePriv, 'blocks'>`
+ * but a named interface is clearer for the LumoClient contract.
  */
 export interface AssistantMessageData {
     content: string;
