@@ -34,7 +34,7 @@ export class Application {
     } else {
       await app.initializeAuth();
       await app.initializeStore();
-      await app.initializeSync();
+      app.initializeSync();
     }
     return app;
   }
@@ -109,15 +109,14 @@ export class Application {
   /**
    * Initialize sync service for conversation persistence
    */
-  private async initializeSync(): Promise<void> {
+  private initializeSync(): void {
     const conversationsConfig = getConversationsConfig();
-    const result = await initializeSync({
+    this.syncInitialized = initializeSync({
       protonApi: this.protonApi,
       uid: this.uid,
       authProvider: this.authProvider,
       conversationsConfig,
     });
-    this.syncInitialized = result.initialized;
   }
 
   // AppContext implementation

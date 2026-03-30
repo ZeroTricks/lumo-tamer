@@ -218,39 +218,29 @@ export interface InitializeSyncOptions {
     conversationsConfig: ConversationsConfig;
 }
 
-export interface InitializeSyncResult {
-    initialized: boolean;
-    /** Store result, only set when primary store is used */
-    storeResult?: StoreResult;
-}
-
 /**
  * Initialize sync services
  *
  * Sync is handled automatically by Redux sagas when primary store is active.
- * Returns initialized: false if no primary store or sync is disabled.
+ * Returns false if no primary store or sync is disabled.
  */
-export async function initializeSync(
-    options: InitializeSyncOptions
-): Promise<InitializeSyncResult> {
+export function initializeSync(options: InitializeSyncOptions): boolean {
     const { authProvider, conversationsConfig } = options;
 
     if (!conversationsConfig?.enableSync) {
         logger.info('Sync is disabled, skipping sync initialization');
-        return { initialized: false };
+        return false;
     }
 
     const syncWarning = authProvider.getSyncWarning();
     if (syncWarning) {
         logger.warn({ method: authProvider.method }, syncWarning);
-        return { initialized: false };
+        return false;
     }
 
     logger.info(
         { method: authProvider.method },
         'Sync initialized (handled by sagas)'
     );
-    return {
-        initialized: true,
-    };
+    return true;
 }
