@@ -69,7 +69,7 @@ import { logger } from '../app/logger.js';
 import type { AuthProvider, ProtonApi } from '../auth/index.js';
 import type { ConversationsConfig } from '../app/config.js';
 import { getKeyManager } from './key-manager.js';
-import { initializeStore, type StoreResult } from './init.js';
+import { initializeStore, pullIncompleteConversations, type StoreResult } from './init.js';
 import type { IConversationStore } from './store-interface.js';
 
 // ============================================================================
@@ -129,6 +129,13 @@ export async function initializeConversationStore(
             activeStore = result.conversationStore;
             primaryStoreResult = result;
             logger.info('Using primary conversation store');
+
+            // Pull incomplete conversations in background when sync is enabled
+            if (options.conversationsConfig.enableSync) {
+                pullIncompleteConversations(result.store, result.spaceId)
+                    .catch(err => logger.error({ error: err }, 'Failed to pull incomplete conversations'));
+            }
+
             return { isPrimary: true, storeResult: result };
         }
     } catch (error) {

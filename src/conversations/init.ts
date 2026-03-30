@@ -26,6 +26,11 @@ import {
     pullSpacesSuccess,
     pullSpacesFailure,
 } from '@lumo/redux/slices/core/spaces.js';
+import { pullConversationRequest } from '@lumo/redux/slices/core/conversations.js';
+import {
+    selectConversationsBySpaceId,
+    selectMessagesByConversationId,
+} from '@lumo/redux/selectors.js';
 import { setupStore, type LumoSagaContext, type LumoStore } from '@lumo/redux/store.js';
 import { LumoApi } from '@lumo/remote/api.js';
 import type { Space } from '@lumo/types.js';
@@ -261,4 +266,41 @@ function findOrCreateSpace(
     store.dispatch(pushSpaceRequest({ id: spaceId, priority: 'urgent' }));
 
     return spaceId;
+}
+
+/**
+ * Pull conversations that have no messages loaded.
+ *
+ * After pullSpaces, conversations exist in Redux but may have no messages yet.
+ * This dispatches pullConversationRequest for each empty conversation to fetch
+ * full content from the server.
+ *
+ * Note: This does NOT handle messages that fail to decrypt (e.g., key mismatch
+ * or corruption). Those remain in IDB but are skipped during loadReduxFromIdb.
+ */
+export async function pullIncompleteConversations(
+    store: LumoStore,
+    spaceId: SpaceId
+): Promise<void> {
+    const state = store.getState();
+
+    // Get conversations for this space from Redux
+    const conversations = selectConversationsBySpaceId(spaceId)(state);
+
+    // Find conversations with no messages in Redux
+    const emptyConversationIds = Object.values(conversations)
+        .filter(c => Object.keys(selectMessagesByConversationId(c.id)(state)).length === 0)
+        .map(c => c.id);
+
+    if (emptyConversationIds.length === 0) {
+        return;
+    }
+
+    logger.info({ count: emptyConversationIds.length }, 'Pulling incomplete conversations');
+
+    // Dispatch pulls with rate limiting to avoid request bursts
+    for (const id of emptyConversationIds) {
+        store.dispatch(pullConversationRequest({ id }));
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
 }
