@@ -9,3 +9,4 @@ secrets/
 browser-data/
 coverage/
 *.pid
+.npmrc
