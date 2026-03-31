@@ -21,12 +21,15 @@ import { setupMetricsMiddleware } from '../../src/api/middleware.js';
 import { createMetricsRouter } from '../../src/api/routes/metrics.js';
 import type { EndpointDependencies } from '../../src/api/types.js';
 import type { MockConfig } from '../../src/app/config.js';
+import { initializeServerTools, clearServerTools } from '../../src/api/tools/server-tools/index.js';
 
 type Scenario = MockConfig['scenario'];
 
 export interface TestServerOptions {
   /** Enable metrics collection and /metrics endpoint */
   metrics?: boolean;
+  /** Enable ServerTools (search, etc.) */
+  serverTools?: boolean;
 }
 
 export interface TestServer {
@@ -69,6 +72,12 @@ export async function createTestServer(
     setMetrics(metrics);
   }
 
+  // Set up ServerTools if requested
+  if (options.serverTools) {
+    clearServerTools(); // Ensure clean state
+    initializeServerTools();
+  }
+
   const app = express();
   app.use(express.json());
   // No auth middleware - tests focus on route logic
@@ -96,6 +105,7 @@ export async function createTestServer(
     metrics,
     close: () => new Promise((resolve) => {
       if (metrics) setMetrics(null);
+      if (options.serverTools) clearServerTools();
       server.close(() => resolve());
     }),
   };

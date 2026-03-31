@@ -1,5 +1,5 @@
 import express from 'express';
-import { getServerConfig, getMetricsConfig, authConfig } from '../app/config.js';
+import { getServerConfig, getMetricsConfig, getServerToolsEnabled, authConfig } from '../app/config.js';
 import { resolveProjectPath } from '../app/paths.js';
 import { logger } from '../app/logger.js';
 import { setupAuthMiddleware, setupLoggingMiddleware, setupMetricsMiddleware } from './middleware.js';
@@ -72,6 +72,13 @@ export class APIServer {
   }
 
   async start(): Promise<void> {
+    // Initialize ServerTools if enabled
+    if (getServerToolsEnabled()) {
+      const { initializeServerTools } = await import('./tools/server-tools/index.js');
+      initializeServerTools();
+      logger.info('ServerTools initialized');
+    }
+
     const { validateTemplateOnce } = await import('./instructions.js');
     validateTemplateOnce(this.serverConfig.instructions.template);
 

@@ -47,7 +47,7 @@ test:
   mock:
     # Enable mock mode: bypass authentication, return simulated Lumo responses
     enabled: false
-    # Scenario: success, error, timeout, rejected, toolCall, misroutedToolCall, weeklyLimit, cycle
+    # Scenario: success, error, timeout, rejected, toolCall, misroutedToolCall, weeklyLimit, cycle, serverToolCall
     scenario: "success"
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
@@ -113,6 +113,10 @@ server:
 
   # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
   enableWebSearch: false
+
+  # Server-side tools callable by Lumo (search, etc.)
+  # When enabled, Lumo can call these tools and the server executes them directly.
+  enableServerTools: false
 
   # Custom tool detection for API clients
   # Enable detection of JSON tool calls in Lumo's responses

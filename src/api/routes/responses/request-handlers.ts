@@ -13,7 +13,7 @@ import { ResponseEventEmitter } from './events.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/index.js';
 import { generateCallId } from '../../tools/call-id.js';
-import { createStreamingToolProcessor } from '../../tools/streaming-processor.js';
+import { runServerToolLoop } from '../../tools/server-tools/index.js';
 import {
   buildRequestContext,
   persistTitle,
@@ -142,7 +142,7 @@ export async function handleRequest(
   const itemId = generateItemId();
   const createdAt = Math.floor(Date.now() / 1000);
   const model = request.model || getServerConfig().apiModelName;
-  const ctx = buildRequestContext(deps, conversationId, request.tools);
+  const context = buildRequestContext(deps, conversationId, request.tools);
 
   // Streaming setup
   const emitter = streaming ? new ResponseEventEmitter(res) : null;
@@ -157,44 +157,43 @@ export async function handleRequest(
     emitter.emitContentPartAdded(itemId, 0, 0);
   }
 
-  logger.debug({ hasCustomTools: ctx.hasCustomTools, toolCount: request.tools?.length }, '[Server] Tool detector state');
+  logger.debug({ hasCustomTools: context.hasCustomTools, toolCount: request.tools?.length }, '[Server] Tool detector state');
 
   let accumulatedText = '';
   let toolCallsForPersist: ToolCallForPersistence[] | undefined;
 
   // Check for command before calling Lumo
-  const commandResult = await tryExecuteCommand(turns, ctx.commandContext);
+  const commandResult = await tryExecuteCommand(turns, context.commandContext);
   if (commandResult) {
     accumulatedText = commandResult.response;
     emitter?.emitOutputTextDelta(itemId, 0, 0, accumulatedText);
   } else {
-    // Normal flow: call Lumo
+    // Normal flow: call Lumo with TamerTool loop
     let nextOutputIndex = 1;
-    const processor = createStreamingToolProcessor(ctx.hasCustomTools, {
-      emitTextDelta(text) {
-        accumulatedText += text;
-        emitter?.emitOutputTextDelta(itemId, 0, 0, text);
-      },
-      emitToolCall(callId, tc) {
-        emitter?.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
-      },
-    });
 
     try {
-      const result = await deps.queue.add(async () =>
-        deps.lumoClient.chatWithHistory(turns, processor.onChunk, {
-          requestTitle: ctx.requestTitle,
-          instructions,
-          injectInstructionsInto,
-        })
-      );
+      const loopResult = await runServerToolLoop({
+        deps,
+        context,
+        turns,
+        conversationId,
+        instructions,
+        injectInstructionsInto,
+        onTextDelta(text) {
+          accumulatedText += text;
+          emitter?.emitOutputTextDelta(itemId, 0, 0, text);
+        },
+        onToolCall(callId, tc) {
+          // Only CustomTool calls reach here (ServerTools filtered by loop)
+          emitter?.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
+        },
+      });
 
       logger.debug('[Server] Stream completed');
-      processor.finalize();
-      persistTitle(result, deps, conversationId);
-      toolCallsForPersist = mapToolCallsForPersistence(processor.toolCallsEmitted);
+      persistTitle(loopResult.chatResult, deps, conversationId);
+      toolCallsForPersist = mapToolCallsForPersistence(loopResult.customToolCalls);
 
-      persistAssistantTurn(deps, conversationId, result.message, toolCallsForPersist);
+      persistAssistantTurn(deps, conversationId, loopResult.chatResult.message, toolCallsForPersist);
     } catch (error) {
       logger.error({ error: String(error) }, 'Response error');
       if (emitter) {

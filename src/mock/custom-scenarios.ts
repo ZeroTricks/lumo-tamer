@@ -8,6 +8,7 @@
 import { Role, type Turn, type ProtonApiOptions } from '../lumo-client/types.js';
 import { formatSSEMessage, delay, type ScenarioGenerator } from './mock-api.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
+import { serverToolPrefix } from '../api/tools/server-tools/registry.js';
 
 /** Extract turns from the mock request payload (unencrypted only). */
 function getTurns(options: ProtonApiOptions): Turn[] {
@@ -111,6 +112,50 @@ export const customScenarios: Record<string, ScenarioGenerator> = {
             await delay(30);
         }
 
+        yield formatSSEMessage({ type: 'done' });
+    },
+
+    serverToolCall: async function* (options) {
+        // Simulates Lumo calling the `search` ServerTool.
+        // The server should execute the tool and loop back with results.
+        //
+        // Phase detection:
+        //   Initial call: output a search tool call
+        //   Follow-up (tool result in turns): respond using the search results
+
+        const turns = getTurns(options);
+        const lastUserTurn = lastTurnWithRole(turns, Role.User);
+        const hasToolResult = lastUserTurn?.content?.includes('"type":"function_call_output"');
+
+        if (hasToolResult) {
+            // Follow-up: Lumo has received search results, respond naturally
+            yield formatSSEMessage({ type: 'ingesting', target: 'message' });
+            await delay(100);
+            const tokens = [
+                'Based on the search results, ',
+                'I found some relevant conversations. ',
+                'Let me summarize what I found for you.',
+            ];
+            for (let i = 0; i < tokens.length; i++) {
+                yield formatSSEMessage({ type: 'token_data', target: 'message', count: i, content: tokens[i] });
+                await delay(20);
+            }
+            yield formatSSEMessage({ type: 'done' });
+            return;
+        }
+
+        // Initial call: output a search tool call as JSON text
+        yield formatSSEMessage({ type: 'ingesting', target: 'message' });
+        await delay(100);
+
+        // Include the prefix so the tool call is detected
+        const prefix = getCustomToolsConfig().prefix + serverToolPrefix;
+        const toolName = `${prefix}search`;
+        const json = `\`\`\`json\n{"name":"${toolName}","arguments":{"query":"weather forecast"}}\n\`\`\``;
+        const tokens = json.split('');
+        for (let i = 0; i < tokens.length; i++) {
+            yield formatSSEMessage({ type: 'token_data', target: 'message', count: i, content: tokens[i] });
+        }
         yield formatSSEMessage({ type: 'done' });
     },
 };

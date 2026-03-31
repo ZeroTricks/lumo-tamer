@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse } from '../../types.js';
+import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse, OpenAIToolCall } from '../../types.js';
 import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig } from '../../../app/config.js';
 import { logger } from '../../../app/logger.js';
 import { convertOpenAIChatMessages, extractSystemMessage } from '../../message-converter.js';
@@ -9,7 +9,7 @@ import { ChatCompletionEventEmitter } from './events.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/types.js';
 import { trackCustomToolCompletion } from '../../tools/call-id.js';
-import { createStreamingToolProcessor } from '../../tools/streaming-processor.js';
+import { runServerToolLoop } from '../../tools/server-tools/index.js';
 import {
   buildRequestContext,
   persistTitle,
@@ -141,7 +141,7 @@ async function handleChatRequest(
   const id = generateChatCompletionId();
   const created = Math.floor(Date.now() / 1000);
   const model = request.model || getServerConfig().apiModelName;
-  const ctx = buildRequestContext(deps, conversationId, request.tools);
+  const context = buildRequestContext(deps, conversationId, request.tools);
 
   // Streaming setup
   const emitter = streaming ? new ChatCompletionEventEmitter(res, id, created, model) : null;
@@ -150,44 +150,42 @@ async function handleChatRequest(
   }
 
   let accumulatedText = '';
-  let toolCalls: typeof processor.toolCallsEmitted | undefined;
-
-  const processor = createStreamingToolProcessor(ctx.hasCustomTools, {
-    emitTextDelta(text) {
-      accumulatedText += text;
-      emitter?.emitContentDelta(text);
-    },
-    emitToolCall(callId, tc) {
-      emitter?.emitToolCallDelta(callId, tc.name, tc.arguments);
-    },
-  });
+  let toolCalls: OpenAIToolCall[] | undefined;
 
   // Check for command before calling Lumo
-  const commandResult = await tryExecuteCommand(turns, ctx.commandContext);
+  const commandResult = await tryExecuteCommand(turns, context.commandContext);
   if (commandResult) {
     accumulatedText = commandResult.response;
     emitter?.emitContentDelta(accumulatedText);
   } else {
-    // Normal flow: call Lumo
+    // Normal flow: call Lumo with TamerTool loop
     try {
-      const result = await deps.queue.add(async () =>
-        deps.lumoClient.chatWithHistory(turns, processor.onChunk, {
-          requestTitle: ctx.requestTitle,
-          instructions,
-          injectInstructionsInto,
-        })
-      );
+      const loopResult = await runServerToolLoop({
+        deps,
+        context,
+        turns,
+        conversationId,
+        instructions,
+        injectInstructionsInto,
+        onTextDelta(text) {
+          accumulatedText += text;
+          emitter?.emitContentDelta(text);
+        },
+        onToolCall(callId, tc) {
+          // Only CustomTool calls reach here (ServerTools filtered by loop)
+          emitter?.emitToolCallDelta(callId, tc.name, tc.arguments);
+        },
+      });
 
       logger.debug('[Server] Stream completed');
-      processor.finalize();
-      persistTitle(result, deps, conversationId);
-      toolCalls = processor.toolCallsEmitted.length > 0 ? processor.toolCallsEmitted : undefined;
+      persistTitle(loopResult.chatResult, deps, conversationId);
+      toolCalls = loopResult.customToolCalls.length > 0 ? loopResult.customToolCalls : undefined;
 
       persistAssistantTurn(
         deps,
         conversationId,
-        result.message,
-        mapToolCallsForPersistence(processor.toolCallsEmitted)
+        loopResult.chatResult.message,
+        mapToolCallsForPersistence(loopResult.customToolCalls)
       );
     } catch (error) {
       logger.error({ error: String(error) }, 'Chat completion error');
