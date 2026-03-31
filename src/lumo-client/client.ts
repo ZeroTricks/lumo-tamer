@@ -31,7 +31,7 @@ import {
     type ChatResult,
     type ContentBlock,
 } from './types.js';
-import { getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
+import { getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolPrefix, getNativeToolsEnabled } from '../app/config.js';
 import { injectInstructionsIntoTurns } from './instructions.js';
 import { NativeToolCallProcessor } from '../api/tools/native-tool-call-processor.js';
 import { postProcessTitle } from '@lumo/lib/lumo-api-client/utils.js';
@@ -66,7 +66,7 @@ function buildBounceInstruction(toolCall: ParsedToolCall): string {
     // (the tool name in toolCall has already been stripped, so we re-add it)
     let toolName = toolCall.name;
     if (getConfigMode() === 'server') {
-        const prefix = getCustomToolsConfig().prefix;
+        const prefix = getCustomToolPrefix();
         if (prefix && !toolName.startsWith(prefix)) {
             toolName = `${prefix}${toolName}`;
         }
@@ -258,7 +258,7 @@ export class LumoClient {
         }
 
         // Read from config - applies to both server and CLI modes
-        const tools: ToolName[] = getEnableWebSearch()
+        const tools: ToolName[] = getNativeToolsEnabled()
             ? [...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]
             : DEFAULT_INTERNAL_TOOLS;
 

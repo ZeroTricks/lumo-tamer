@@ -9,7 +9,7 @@
  */
 
 import { executeCommand, isCommand, type CommandContext } from '../app/commands.js';
-import { getCliInstructionsConfig, getCommandsConfig, getLocalActionsConfig } from '../app/config.js';
+import { getCliInstructionsConfig, getCommandsConfig, getLocalToolsConfig } from '../app/config.js';
 import logger from '../app/logger.js';
 import { BUSY_INDICATOR, clearBusyIndicator, print } from '../app/terminal.js';
 import type { Application } from '../app/index.js';
@@ -53,7 +53,7 @@ export class CLIClient {
    * Handles streaming, detection, and display.
    */
   private async sendToLumo(options: { requestTitle?: boolean } = {}): Promise<LumoResponse> {
-    const localActionsConfig = getLocalActionsConfig();
+    const localActionsConfig = getLocalToolsConfig();
     const detector = localActionsConfig.enabled
       ? new CodeBlockDetector((lang) =>
         blockHandlers.some(h => h.matches({ language: lang, content: '' }))

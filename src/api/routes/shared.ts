@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { Response } from 'express';
-import { getCustomToolsConfig, getServerToolsEnabled } from '../../app/config.js';
+import { getClientToolsConfig, getServerToolsEnabled } from '../../app/config.js';
 import { getMetrics } from '../../app/metrics';
 import type { CommandContext } from '../../app/commands.js';
 import type { EndpointDependencies, OpenAITool, OpenAIToolCall } from '../types.js';
@@ -51,11 +51,11 @@ export function buildRequestContext(
   conversationId: ConversationId | undefined,
   tools?: OpenAITool[]
 ): RequestContext {
-  const customToolsConfig = getCustomToolsConfig();
+  const clientToolsConfig = getClientToolsConfig();
   const serverToolsEnabled = getServerToolsEnabled();
 
-  // Enable tool detection if either CustomTools or ServerTools are active
-  const hasClientTools = customToolsConfig.enabled && !!tools && tools.length > 0;
+  // Enable tool detection if either client tools or server tools are active
+  const hasClientTools = clientToolsConfig.enabled && !!tools && tools.length > 0;
   const hasServerTools = serverToolsEnabled;
 
   return {

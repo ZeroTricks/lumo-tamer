@@ -7,7 +7,7 @@
  */
 
 import { logger } from '../app/logger.js';
-import { getServerInstructionsConfig, getCustomToolsConfig, getServerToolsEnabled } from '../app/config.js';
+import { getServerInstructionsConfig, getClientToolsConfig, getCustomToolPrefix, getServerToolsEnabled } from '../app/config.js';
 import { interpolateTemplate } from '../app/template.js';
 import { applyToolPrefix, applyToolNamePrefix } from './tools/prefix.js';
 import { getAllServerToolDefinitions } from './tools/server-tools/index.js';
@@ -119,9 +119,9 @@ function extractToolNames(tools?: OpenAITool[]): string[] {
  */
 export function buildInstructions(tools?: OpenAITool[], clientInstructions?: string): string {
   const instructionsConfig = getServerInstructionsConfig();
-  const toolsConfig = getCustomToolsConfig();
+  const clientToolsConfig = getClientToolsConfig();
   const serverToolsEnabled = getServerToolsEnabled();
-  const { prefix } = toolsConfig;
+  const prefix = getCustomToolPrefix();
   const { replacePatterns } = instructionsConfig;
 
   // Merge TamerTool definitions if enabled
@@ -132,10 +132,10 @@ export function buildInstructions(tools?: OpenAITool[], clientInstructions?: str
   }
 
   // Determine if we should include tools
-  // Include if either CustomTools are enabled with client tools, or ServerTools are enabled
-  const hasCustomTools = toolsConfig.enabled && tools && tools.length > 0;
+  // Include if either client tools are enabled with tools, or server tools are enabled
+  const hasClientTools = clientToolsConfig.enabled && tools && tools.length > 0;
   const hasServerTools = serverToolsEnabled && getAllServerToolDefinitions().length > 0;
-  const includeTools = hasCustomTools || hasServerTools;
+  const includeTools = hasClientTools || hasServerTools;
 
   // Pre-interpolate forTools block (it can use {{prefix}})
   const forTools = interpolateTemplate(instructionsConfig.forTools, { prefix });
@@ -152,7 +152,7 @@ export function buildInstructions(tools?: OpenAITool[], clientInstructions?: str
   if (clientInstructions) {
     cleanedClientInstructions = applyReplacePatterns(clientInstructions, replacePatterns);
     if (includeTools) {
-      // Only prefix client tool names, not TamerTool names
+      // Only prefix client tool names, not server tool names
       const toolNames = extractToolNames(tools);
       cleanedClientInstructions = applyToolNamePrefix(cleanedClientInstructions, toolNames, prefix);
     }

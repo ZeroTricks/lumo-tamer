@@ -7,7 +7,7 @@
 
 import { Role, type Turn, type ProtonApiOptions } from '../lumo-client/types.js';
 import { formatSSEMessage, delay, type ScenarioGenerator } from './mock-api.js';
-import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
+import { getServerInstructionsConfig, getCustomToolPrefix } from '../app/config.js';
 import { serverToolPrefix } from '../api/tools/server-tools/registry.js';
 
 /** Extract turns from the mock request payload (unencrypted only). */
@@ -44,7 +44,7 @@ export const customScenarios: Record<string, ScenarioGenerator> = {
             // Include the prefix so the tool call matches what we instructed Lumo to output
             yield formatSSEMessage({ type: 'ingesting', target: 'message' });
             await delay(200);
-            const prefix = getCustomToolsConfig().prefix;
+            const prefix = getCustomToolPrefix();
             const toolName = prefix ? `${prefix}GetLiveContext` : 'GetLiveContext';
             const json = `\`\`\`json\n{"name":"${toolName}","arguments":{}}\n\`\`\``;
             const tokens = json.split('');
@@ -149,7 +149,7 @@ export const customScenarios: Record<string, ScenarioGenerator> = {
         await delay(100);
 
         // Include the prefix so the tool call is detected
-        const prefix = getCustomToolsConfig().prefix + serverToolPrefix;
+        const prefix = getCustomToolPrefix() + serverToolPrefix;
         const toolName = `${prefix}search`;
         const json = `\`\`\`json\n{"name":"${toolName}","arguments":{"query":"weather forecast"}}\n\`\`\``;
         const tokens = json.split('');

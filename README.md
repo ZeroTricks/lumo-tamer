@@ -146,7 +146,7 @@ tamer                   # use Lumo interactively
 tamer "make me laugh"   # one-time prompt
 ```
 
-To give Lumo access to your files and let it execute commands locally, set `cli.localActions.enabled: true` in `config.yaml` (see [Local Actions](#local-actions-cli)).  
+To give Lumo access to your files and let it execute commands locally, set `cli.tools.local.enabled: true` in `config.yaml` (see [Local Tools](#local-tools-cli)).  
 You can ask Lumo to give you a demo of its capabilities, or see this [demo chat](docs/demo-cli-chat.md).
 
 ### In-chat commands
@@ -186,14 +186,13 @@ cli:
 
 ### Web Search
 
-Enable Lumo's native web search (and other external tools: weather, stock, cryptocurrency):
+Enable Lumo's web search (and other native tools: weather, stock, cryptocurrency):
 
 ```yaml
-server:
-  enableWebSearch: true
-
-cli:
-  enableWebSearch: true
+server: # or cli:
+  tools:
+    native:
+      enabled: true
 ```
 
 ### Instructions
@@ -205,37 +204,39 @@ Instructions from API clients will be inserted in the main template. If you can,
 
 > **Note:** Under the hood, lumo-tamer injects instructions into normal messages (the same way it is done in Lumo's webclient). Instructions set in the webclient's personal or project settings will be ignored and left unchanged.
 
-### Custom Tools (Server)
+### Client Tools (API)
 
 Let Lumo use tools provided by your OpenAI-compatible client.
 
 ```yaml
 server:
-  customTools:
-    enabled: true
+  tools:
+    client:
+      enabled: true
 ```
 
-> **Warning:** Custom tool support is experimental and can fail in various ways. Experiment with `server.instructions` settings to improve results. See [Custom Tools](docs/custom-tools.md) for details, tweaking, and troubleshooting. 
+> **Tip:** See [Tools](docs/tools.md) for details, tweaking, and troubleshooting. 
 
 
-### Local Actions (CLI)
+### Local Tools (CLI)
 
 Let Lumo read, create and edit files, and execute commands on your machine:
 
 ```yaml
 cli:
-  localActions:
-    enabled: true
-    fileReads:
+  tools:
+    local:
       enabled: true
-    executors:
-      bash: ["bash", "-c"]
-      python: ["python", "-c"]
+      fileReads:
+        enabled: true
+      executors:
+        bash: ["bash", "-c"]
+        python: ["python", "-c"]
 ```
 
-The CLI always asks for confirmation before executing commands or applying file changes. File reads are automatic.  
-Configure available languages for your system in `executors`. By default, `bash`, `python`, and `sh` are enabled.  
-See [Local Actions](docs/local-actions.md) for further configuration and troubleshooting.
+The CLI always asks for confirmation before executing commands or applying file changes. File reads are automatic.
+Configure available languages for your system in `executors`. By default, `bash`, `python`, and `sh` are enabled.
+See [Tools](docs/tools.md#local-tools-cli) for further configuration and troubleshooting.
 
 ### Conversation Sync
 
@@ -269,7 +270,7 @@ See the [full guide](docs/howto-home-assistant.md). TLDR:
 
 - Pass the environment variable `OPENAI_BASE_URL=http://yourhost:3003/v1` to Home Assistant.
 - Add the OpenAI integration and create a new Voice Assistant that uses it.
-- To let Lumo control your devices, set `server.customTools.enabled: true` in `config.yaml` (Experimental, see [Custom Tools](docs/custom-tools.md)).
+- To let Lumo control your devices, set `server.tools.client.enabled: true` in `config.yaml` (Experimental, see [Tools](docs/tools.md#client-tools-api)).
 - Open HA Assist in your dashboard or phone and chat away.
 
 ### OpenClaw
@@ -302,7 +303,7 @@ curl http://localhost:3003/v1/chat/completions \
 
 ### Other API clients
 
-Many clients are untested with lumo-tamer but should work if they only use the `/v1/responses` or `/v1/chat/completions` endpoints. As a rule of thumb: basic chatting will most likely work, but the more a client relies on custom tools, the more the experience is degraded.  
+Many clients are untested with lumo-tamer but should work if they only use the `/v1/responses` or `/v1/chat/completions` endpoints. As a rule of thumb: basic chatting will most likely work, but the more a client relies on tools, the more the experience is degraded.  
 To test an API client, increase log levels on both the client and lumo-tamer: `server.log.level: debug` and check for errors.
 
 Please share your experiences with new API clients (both issues and successes) in [the project discussions](https://github.com/ZeroTricks/lumo-tamer/discussions/new?category=general)!
@@ -367,7 +368,7 @@ docker compose run --rm -it -v ./some-dir:/dir/ tamer cli
 
 > **Note:** Running the CLI within Docker may not be very useful:
 > - Lumo will not have access to your files unless you mount a directory.
-> - The image is Alpine-based, so your system may not have the commands Lumo tries to run. You can change config options `cli.localActions.executors` and `cli.instructions.forLocalActions` to be more explicit what commands Lumo should use, or you can rebase the `Dockerfile`.
+> - The image is Alpine-based, so your system may not have the commands Lumo tries to run. You can change config options `cli.tools.local.executors` and `cli.instructions.forLocalTools` to be more explicit what commands Lumo should use, or you can rebase the `Dockerfile`.
 
 
 
@@ -377,9 +378,8 @@ See [docs/](docs/) for detailed documentation:
 
 - [Authentication](docs/authentication.md): Auth methods, setup and troubleshooting
 - [Conversations](docs/conversations.md): Conversation persistence and sync
-- [Custom Tools](docs/custom-tools.md): Tool support for API clients
+- [Tools](docs/tools.md): Native, client, server, and local tools
 - [Home Assistant Guide](docs/howto-home-assistant.md): Use Lumo as your Voice Assistant
-- [Local Actions](docs/local-actions.md): CLI file operations and code execution
 - [Development](docs/development.md): Development setup and workflow
 - [Upstream Files](docs/upstream.md): Proton WebClients files, shims and path aliases
 

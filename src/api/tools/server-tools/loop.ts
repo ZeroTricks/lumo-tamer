@@ -6,7 +6,7 @@
  */
 
 import { logger } from '../../../app/logger.js';
-import { getCustomToolsConfig } from '../../../app/config.js';
+import { getCustomToolPrefix } from '../../../app/config.js';
 import { createStreamingToolProcessor, type StreamingToolEmitter } from '../streaming-processor.js';
 import { isServerTool, type ServerToolContext } from './registry.js';
 import { partitionToolCalls, buildServerToolContinuation } from './executor.js';
@@ -56,7 +56,7 @@ const MAX_SERVER_TOOL_LOOPS = 5;
  */
 export async function runServerToolLoop(options: ServerToolLoopOptions): Promise<ServerToolLoopResult> {
   const { deps, context, instructions, injectInstructionsInto, onTextDelta, onToolCall } = options;
-  const { prefix } = getCustomToolsConfig();
+  const prefix = getCustomToolPrefix();
 
   let currentTurns = [...options.turns];
   let loopCount = 0;

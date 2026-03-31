@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestServer, parseSSEEvents, type TestServer } from '../helpers/test-server.js';
-import { getCustomToolsConfig, getServerConfig } from '../../src/app/config.js';
+import { getClientToolsConfig, getServerConfig } from '../../src/app/config.js';
 
 /** POST /v1/responses with JSON body, returning the raw Response. */
 function postResponses(ts: TestServer, body: Record<string, unknown>): Promise<Response> {
@@ -188,11 +188,11 @@ describe('/v1/responses', () => {
 
     beforeAll(async () => {
       ts = await createTestServer('misroutedToolCall', { metrics: true });
-      // Enable custom tool detection so the bounce response JSON is parsed
-      (getCustomToolsConfig() as any).enabled = true;
+      // Enable client tool detection so the bounce response JSON is parsed
+      (getClientToolsConfig() as any).enabled = true;
     });
     afterAll(async () => {
-      (getCustomToolsConfig() as any).enabled = false;
+      (getClientToolsConfig() as any).enabled = false;
       await ts.close();
     });
 
@@ -249,13 +249,13 @@ describe('/v1/responses', () => {
 
     beforeAll(async () => {
       // Enable ServerTools for this test
-      originalEnableServerTools = (getServerConfig() as any).enableServerTools;
-      (getServerConfig() as any).enableServerTools = true;
+      originalEnableServerTools = (getServerConfig() as any).tools.server.enabled;
+      (getServerConfig() as any).tools.server.enabled = true;
 
       ts = await createTestServer('serverToolCall', { serverTools: true });
     });
     afterAll(async () => {
-      (getServerConfig() as any).enableServerTools = originalEnableServerTools;
+      (getServerConfig() as any).tools.server.enabled = originalEnableServerTools;
       await ts.close();
     });
 

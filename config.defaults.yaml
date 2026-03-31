@@ -111,23 +111,28 @@ server:
     # Prefix for all metric names
     prefix: "lumo_"
 
-  # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
-  enableWebSearch: false
+  # Tool configuration
+  tools:
+    # Enable Lumo's native external tools (web_search, weather, stock, cryptocurrency)
+    # Internal native tools (proton_info) are always enabled.
+    native:
+      enabled: false
 
-  # Server-side tools callable by Lumo (search, etc.)
-  # When enabled, Lumo can call these tools and the server executes them directly.
-  enableServerTools: false
-
-  # Custom tool detection for API clients
-  # Enable detection of JSON tool calls in Lumo's responses
-  # WARNING: When enabled, Lumo can trigger actions via API clients!
-  customTools:
-    enabled: false
-
-    # Prefix added to custom tool names to distinguish from Lumo's native tools.
+    # Prefix added to custom tool names (client + server tools) to distinguish from native tools.
     # Applied to tool definitions sent to Lumo, stripped from tool calls returned to client.
     # Set to "" to disable prefixing.
     prefix: "user:"
+
+    # Server-side tools callable by Lumo (search, etc.)
+    # When enabled, Lumo can call these tools and the server executes them directly.
+    server:
+      enabled: true
+
+    # Client tool detection for API clients
+    # Enable detection of JSON tool calls in Lumo's responses
+    # WARNING: When enabled, Lumo can trigger actions via API clients!
+    client:
+      enabled: false
 
 
   instructions:
@@ -139,7 +144,7 @@ server:
     #   - clientInstructions: system/developer message from request
     #   - forTools: the forTools block below (pre-interpolated with {{prefix}})
     #   - fallback: the fallback block below
-    #   - prefix: tool prefix from customTools.prefix
+    #   - prefix: tool prefix from tools.prefix
     template: |
       {{#if tools}}
       {{forTools}}
@@ -208,50 +213,54 @@ cli:
     target: "file"
     filePath: "lumo-tamer-cli.log"
 
-  # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
-  enableWebSearch: false
+  # Tool configuration
+  tools:
+    # Enable Lumo's native external tools (web_search, weather, stock, cryptocurrency)
+    # Internal native tools (proton_info) are always enabled.
+    native:
+      enabled: false
 
-  # Local actions: code block detection and execution
-  localActions:
-    # Enable code block detection (```bash, ```read, ```edit, etc.)
-    # WARNING: When enabled, Lumo can trigger actions on your machine!
-    enabled: false
+    # Local tools: code block detection and execution
+    local:
+      # Enable code block detection (```bash, ```read, ```edit, etc.)
+      # WARNING: When enabled, Lumo can trigger actions on your machine!
+      enabled: false
 
-    # ```read blocks: Lumo can read local files without user confirmation
-    fileReads:
-      # Enable ```read blocks
-      # Note that if this is false, Lumo can still ask to read a file using shell tools (ie. cat)
-      enabled: true
-      # Max file size. Reading files larger than this fail with an error.
-      # 512kb translates to roughly 32K tokens (Lumo's "warning level" on context size).
-      maxFileSize: "360kb"
+      # ```read blocks: Lumo can read local files without user confirmation
+      fileReads:
+        # Enable ```read blocks
+        # Note that if this is false, Lumo can still ask to read a file using shell tools (ie. cat)
+        enabled: true
+        # Max file size. Reading files larger than this fail with an error.
+        # 512kb translates to roughly 32K tokens (Lumo's "warning level" on context size).
+        maxFileSize: "360kb"
 
-    # Executors for code block execution
-    # Maps language tag -> [command, ...args]. Code is appended as last arg.
-    # Override to restrict or extend
-    executors:
-      bash: ["bash", "-c"]
-      python: ["python", "-c"]
-      sh: ["sh", "-c"]
-      # zsh: ["zsh", "-c"]
-      # powershell: ["powershell", "-Command"]
-      # ps1: ["powershell", "-Command"]
-      # cmd: ["cmd", "/c"]
-      # node: ["node", "-e"]
-      # javascript: ["node", "-e"]
-      # js: ["node", "-e"]
-      # perl: ["perl", "-e"]
+      # Executors for code block execution
+      # Maps language tag -> [command, ...args]. Code is appended as last arg.
+      # Override to restrict or extend
+      executors:
+        bash: ["bash", "-c"]
+        python: ["python", "-c"]
+        sh: ["sh", "-c"]
+        # zsh: ["zsh", "-c"]
+        # powershell: ["powershell", "-Command"]
+        # ps1: ["powershell", "-Command"]
+        # cmd: ["cmd", "/c"]
+        # node: ["node", "-e"]
+        # javascript: ["node", "-e"]
+        # js: ["node", "-e"]
+        # perl: ["perl", "-e"]
 
   instructions:
     template: |
       You are a command line assistant. Your output will be read in a terminal. Keep the formatting to a minimum and be concise.
 
-      {{#if localActions}}
-      {{forLocalActions}}
+      {{#if localTools}}
+      {{forLocalTools}}
       {{/if}}
 
-    # Injected as {{forLocalActions}} when localActions.enabled=true
-    forLocalActions: |
+    # Injected as {{forLocalTools}} when tools.local.enabled=true
+    forLocalTools: |
       You can read, edit and create files, and you can execute {{executors}} commands on the user's machine.
       To execute code, use a code block like ```python. The user will be prompted to execute it and the result will be returned to you. Don't explain the user can execute commands, it will be handled automatically. Keep commands simple and safe.
       To read files, use a ```read block with one file path per line. Contents will be returned to you automatically without prompting the user. Example:
