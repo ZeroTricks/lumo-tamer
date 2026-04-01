@@ -8,8 +8,8 @@
 import { logger } from '../../../app/logger.js';
 import { getServerTool, isServerTool, type ServerToolContext } from './registry.js';
 import type { OpenAIToolCall } from '../../types.js';
-import type { Turn } from '../../../lumo-client/types.js';
 import { Role } from '../../../lumo-client/types.js';
+import type { MessageForStore } from 'src/conversations/types.js';
 
 export interface ServerToolExecutionResult {
   /** Whether the tool name matched a registered ServerTool */
@@ -54,7 +54,7 @@ export async function executeServerTool(
 
 export interface PartitionedToolCalls {
   serverToolCalls: OpenAIToolCall[];
-  customToolCalls: OpenAIToolCall[];
+  clientToolCalls: OpenAIToolCall[];
 }
 
 /**
@@ -63,17 +63,17 @@ export interface PartitionedToolCalls {
  */
 export function partitionToolCalls(toolCalls: OpenAIToolCall[]): PartitionedToolCalls {
   const serverToolCalls: OpenAIToolCall[] = [];
-  const customToolCalls: OpenAIToolCall[] = [];
+  const clientToolCalls: OpenAIToolCall[] = [];
 
   for (const tc of toolCalls) {
     if (isServerTool(tc.function.name)) {
       serverToolCalls.push(tc);
     } else {
-      customToolCalls.push(tc);
+      clientToolCalls.push(tc);
     }
   }
 
-  return { serverToolCalls, customToolCalls };
+  return { serverToolCalls, clientToolCalls };
 }
 
 // ── Continuation ──────────────────────────────────────────────────────
@@ -89,15 +89,15 @@ export function partitionToolCalls(toolCalls: OpenAIToolCall[]): PartitionedTool
  * @param assistantText - Text from the current iteration (includes tool call JSON)
  * @param context - ServerTool execution context
  * @param prefix - CustomTools prefix for tool result formatting
- * @returns Turn[] ready to append for next Lumo call
+ * @returns MessageForStore[] ready to append for next Lumo call
  */
 export async function buildServerToolContinuation(
   serverToolCalls: OpenAIToolCall[],
   assistantText: string,
   context: ServerToolContext,
   prefix: string
-): Promise<Turn[]> {
-  const continuationTurns: Turn[] = [];
+): Promise<MessageForStore[]> {
+  const continuationTurns: MessageForStore[] = [];
 
   // Add assistant turn with the text (which includes tool call JSON)
   continuationTurns.push({
@@ -126,6 +126,7 @@ export async function buildServerToolContinuation(
     continuationTurns.push({
       role: Role.User,
       content: `\`\`\`json\n${toolResultJson}\n\`\`\``,
+      id: tc.id,
     });
   }
 

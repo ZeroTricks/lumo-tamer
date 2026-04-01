@@ -16,15 +16,11 @@ import { generateCallId } from '../../tools/call-id.js';
 import { chatAndExecute } from '../../tools/server-tools/index.js';
 import {
   buildRequestContext,
-  persistTitle,
-  persistAssistantTurn,
   generateResponseId,
   generateItemId,
   generateFunctionCallId,
-  mapToolCallsForPersistence,
   tryExecuteCommand,
   setSSEHeaders,
-  type ToolCallForPersistence,
 } from '../shared.js';
 import { sendServerError } from '../../error-handler.js';
 
@@ -33,6 +29,7 @@ import { sendServerError } from '../../error-handler.js';
 interface ToolCall {
   name: string;
   arguments: string | object;
+  id?: string; // call_id for tool calls from chatAndExecute
 }
 
 interface BuildOutputOptions {
@@ -67,7 +64,7 @@ function buildOutputItems(options: BuildOutputOptions): OutputItem[] {
         : JSON.stringify(toolCall.arguments);
 
       // Use pre-generated call_id if available, otherwise generate new one
-      const callId = 'call_id' in toolCall ? (toolCall as ToolCallForPersistence).call_id : generateCallId(toolCall.name);
+      const callId = 'id' in toolCall ? (toolCall as { id: string }).id : generateCallId(toolCall.name);
 
       output.push({
         type: 'function_call',
@@ -160,7 +157,7 @@ export async function handleRequest(
   logger.debug({ hasCustomTools: context.hasCustomTools, toolCount: request.tools?.length }, '[Server] Tool detector state');
 
   let accumulatedText = '';
-  let toolCallsForPersist: ToolCallForPersistence[] | undefined;
+  let toolCalls: ToolCall[] | undefined;
 
   // Check for command before calling Lumo
   const commandResult = await tryExecuteCommand(turns, context.commandContext);
@@ -190,10 +187,12 @@ export async function handleRequest(
       });
 
       logger.debug('[Server] Stream completed');
-      persistTitle(loopResult.chatResult, deps, conversationId);
-      toolCallsForPersist = mapToolCallsForPersistence(loopResult.customToolCalls);
-
-      persistAssistantTurn(deps, conversationId, loopResult.chatResult.message, toolCallsForPersist);
+      // Map custom tool calls to format needed for response building
+      toolCalls = loopResult.customToolCalls.map(tc => ({
+        name: tc.function.name,
+        arguments: tc.function.arguments,
+        id: tc.id,
+      }));
     } catch (error) {
       logger.error({ error: String(error) }, 'Response error');
       if (emitter) {
@@ -208,7 +207,7 @@ export async function handleRequest(
 
   // Build and send response (shared for both command and normal flow)
   try {
-    const output = buildOutputItems({ text: accumulatedText, itemId, toolCalls: toolCallsForPersist });
+    const output = buildOutputItems({ text: accumulatedText, itemId, toolCalls });
     const response = createCompletedResponse(id, createdAt, request, output);
 
     if (emitter) {

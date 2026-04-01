@@ -204,25 +204,32 @@ export class ConversationStore {
      */
     appendMessages(
         id: ConversationId,
-        incoming: MessageForStore[]
+        incoming: MessageForStore[],
+        deduplicate = true
     ): Message[] {
         const convState = this.getOrCreate(id);
+        let newMessages: MessageForStore[];
 
-        // Validate continuation
-        const validation = isValidContinuation(incoming, convState.messages);
-        if (!validation.valid) {
-            getMetrics()?.invalidContinuationsTotal.inc();
-            logger.warn({
-                conversationId: id,
-                reason: validation.reason,
-                incomingCount: incoming.length,
-                storedCount: convState.messages.length,
-                ...validation.debugInfo,
-            }, 'Invalid conversation continuation');
+        if(deduplicate){
+            // Validate continuation
+            const validation = isValidContinuation(incoming, convState.messages);
+            if (!validation.valid) {
+                getMetrics()?.invalidContinuationsTotal.inc();
+                logger.warn({
+                    conversationId: id,
+                    reason: validation.reason,
+                    incomingCount: incoming.length,
+                    storedCount: convState.messages.length,
+                    ...validation.debugInfo,
+                }, 'Invalid conversation continuation');
+            }
+
+            // Find new messages
+            newMessages = findNewMessages(incoming, convState.messages);
         }
-
-        // Find new messages
-        const newMessages = findNewMessages(incoming, convState.messages);
+        else{
+            newMessages = incoming;
+        }
 
         if (newMessages.length === 0) {
             logger.debug({ conversationId: id }, 'No new messages to append');
@@ -248,7 +255,7 @@ export class ConversationStore {
                 id: messageId,
                 conversationId: id,
                 createdAt: now.toISOString(),
-                role: msg.role ,
+                role: msg.role,
                 parentId,
                 status: 'succeeded',
             }));
@@ -261,7 +268,7 @@ export class ConversationStore {
                     spaceId: this.spaceId,
                     content: msg.content,
                     status: 'succeeded',
-                    role: msg.role ,
+                    role: msg.role,
                 }));
             }
 
@@ -272,7 +279,7 @@ export class ConversationStore {
                 id: messageId,
                 conversationId: id,
                 createdAt: now.toISOString(),
-                role: msg.role ,
+                role: msg.role,
                 parentId,
                 status: 'succeeded',
                 content: msg.content,
@@ -283,7 +290,7 @@ export class ConversationStore {
             parentId = messageId;
         }
 
-        
+
         // Track metrics
         const metrics = getMetrics();
         if (metrics) {
@@ -343,7 +350,7 @@ export class ConversationStore {
         // Request push to server
         this.store.dispatch(pushMessageRequest({ id: messageId }));
 
-        
+
         // Update conversation status
         this.store.dispatch(updateConversationStatus({
             id,
@@ -429,7 +436,7 @@ export class ConversationStore {
         // Request push to server
         this.store.dispatch(pushMessageRequest({ id: messageId }));
 
-        
+
         const message: Message = {
             id: messageId,
             conversationId: id,
@@ -481,7 +488,7 @@ export class ConversationStore {
                 persist: true,
             }));
             this.store.dispatch(pushConversationRequest({ id }));
-                    }
+        }
         logger.debug({ conversationId: id }, 'Set title');
     }
 

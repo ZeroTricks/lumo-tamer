@@ -10,11 +10,12 @@ import { getCustomToolPrefix } from '../../../app/config.js';
 import { createStreamingToolProcessor, type StreamingToolEmitter } from '../streaming-processor.js';
 import { isServerTool, type ServerToolContext } from './registry.js';
 import { partitionToolCalls, buildServerToolContinuation } from './executor.js';
-import type { EndpointDependencies, OpenAIToolCall } from '../../types.js';
+import type { ChatMessageWithTools, EndpointDependencies, OpenAIToolCall } from '../../types.js';
 import type { RequestContext } from 'src/api/types.js';
 import type { Turn, ChatResult } from '../../../lumo-client/types.js';
-import type { ConversationId } from '../../../conversations/types.js';
+import type { ConversationId, MessageForStore } from '../../../conversations/types.js';
 import type { ParsedToolCall } from '../types.js';
+import { convertToolMessage } from 'src/api/message-converter.js';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ export async function chatAndExecute(options: ChatAndExecuteOptions): Promise<Ch
   let currentTurns = [...options.turns];
   let loopCount = 0;
   let accumulatedText = '';
-  const allCustomToolCalls: OpenAIToolCall[] = [];
+  const allClientToolCalls: OpenAIToolCall[] = [];
   let chatResult: ChatResult | undefined;
 
   // Build ServerTool context
@@ -108,12 +109,12 @@ export async function chatAndExecute(options: ChatAndExecuteOptions): Promise<Ch
     chatResult = result;
 
     // Partition tool calls into ServerTools and CustomTools
-    const { serverToolCalls, customToolCalls } = partitionToolCalls(processor.toolCallsEmitted);
-    allCustomToolCalls.push(...customToolCalls);
+    const { serverToolCalls, clientToolCalls } = partitionToolCalls(processor.toolCallsEmitted);
+    allClientToolCalls.push(...clientToolCalls);
 
     // If no ServerTools, we're done
     if (serverToolCalls.length === 0) {
-      logger.debug({ loopCount, customToolCalls: customToolCalls.length }, 'ServerTool loop complete (no ServerTools)');
+      logger.debug({ loopCount, clientToolCalls: clientToolCalls.length }, 'ServerTool loop complete (no ServerTools)');
       break;
     }
 
@@ -129,15 +130,69 @@ export async function chatAndExecute(options: ChatAndExecuteOptions): Promise<Ch
 
     // Update turns for next iteration
     currentTurns = [...currentTurns, ...continuationTurns];
+
+    // Persist intermediate turns for stateful requests
+    if (options.conversationId && deps.conversationStore) {
+
+      // Persist title if generated
+      if (chatResult.title) {
+        deps.conversationStore.setTitle(options.conversationId, chatResult.title);
+      }
+
+      // First continuation turn is assistant with tool call JSON
+      const assistantTurn = continuationTurns[0];
+      if (assistantTurn.content)
+        deps.conversationStore.appendAssistantResponse(
+          options.conversationId,
+          { content: assistantTurn.content }
+        );
+      const serverToolCallMessages = convertToolMessage({
+        role: 'assistant',
+        tool_calls: serverToolCalls,
+      } as ChatMessageWithTools) as MessageForStore[];
+
+      for (const serverToolCall of serverToolCallMessages) {
+        deps.conversationStore.appendAssistantResponse(
+          options.conversationId,
+          { content: serverToolCall.content! },
+          'succeeded',
+          serverToolCall.id
+        );
+      }
+
+      // Remaining turns are tool results
+      const toolResultTurns = continuationTurns.slice(1);
+      if (toolResultTurns.length > 0) {
+        deps.conversationStore.appendMessages(
+          options.conversationId,
+          toolResultTurns,
+          false
+        );
+      }
+
+      logger.debug({ conversationId: options.conversationId, loopCount }, 'Persisted server tool iteration');
+    }
   }
 
   if (loopCount >= MAX_SERVER_TOOL_LOOPS) {
     logger.warn({ maxLoops: MAX_SERVER_TOOL_LOOPS }, 'ServerTool loop reached maximum iterations');
   }
 
+  // Persist final assistant message and title
+  if (options.conversationId && deps.conversationStore) {
+    // Skip if custom tools present (client will send back with results)
+    if (allClientToolCalls.length === 0) {
+      deps.conversationStore.appendAssistantResponse(
+        options.conversationId,
+        chatResult!.message
+      );
+    }
+
+  }
+
   return {
     accumulatedText,
-    customToolCalls: allCustomToolCalls,
+    customToolCalls: allClientToolCalls,
     chatResult: chatResult!,
   };
 }

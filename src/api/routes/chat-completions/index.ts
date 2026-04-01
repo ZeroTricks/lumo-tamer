@@ -12,10 +12,7 @@ import { trackCustomToolCompletion } from '../../tools/call-id.js';
 import { chatAndExecute } from '../../tools/server-tools/index.js';
 import {
   buildRequestContext,
-  persistTitle,
-  persistAssistantTurn,
   generateChatCompletionId,
-  mapToolCallsForPersistence,
   tryExecuteCommand,
   setSSEHeaders,
 } from '../shared.js';
@@ -178,15 +175,7 @@ async function handleChatRequest(
       });
 
       logger.debug('[Server] Stream completed');
-      persistTitle(loopResult.chatResult, deps, conversationId);
       toolCalls = loopResult.customToolCalls.length > 0 ? loopResult.customToolCalls : undefined;
-
-      persistAssistantTurn(
-        deps,
-        conversationId,
-        loopResult.chatResult.message,
-        mapToolCallsForPersistence(loopResult.customToolCalls)
-      );
     } catch (error) {
       logger.error({ error: String(error) }, 'Chat completion error');
       if (emitter) {

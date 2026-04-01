@@ -24,7 +24,7 @@ export interface IConversationStore {
     entries(): IterableIterator<[ConversationId, ConversationState]>;
 
     // Message operations
-    appendMessages(id: ConversationId, incoming: MessageForStore[]): Message[];
+    appendMessages(id: ConversationId, incoming: MessageForStore[], deduplicate?: boolean): Message[];
     appendAssistantResponse(
         id: ConversationId,
         messageData: AssistantMessageData,
