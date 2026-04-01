@@ -16,7 +16,6 @@ import type { Turn, AssistantMessageData } from '../lumo-client/types.js';
 import {
     findNewMessages,
     hashMessage,
-    isValidContinuation,
 } from './deduplication.js';
 import type {
     ConversationId,
@@ -64,17 +63,6 @@ export class MinimalStore implements IConversationStore {
 
     appendMessages(id: ConversationId, incoming: MessageForStore[]): Message[] {
         const state = this.getOrCreate(id);
-
-        const validation = isValidContinuation(incoming, state.messages);
-        if (!validation.valid) {
-            getMetrics()?.invalidContinuationsTotal.inc();
-            logger.warn({
-                conversationId: id,
-                reason: validation.reason,
-                incomingCount: incoming.length,
-                storedCount: state.messages.length,
-            }, 'Invalid conversation continuation');
-        }
 
         const newMessages = findNewMessages(incoming, state.messages);
 

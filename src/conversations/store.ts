@@ -22,7 +22,6 @@ import type { AssistantMessageData, Turn } from '../lumo-client/types.js';
 import {
     findNewMessages,
     hashMessage,
-    isValidContinuation,
 } from './deduplication.js';
 import type {
     ConversationId,
@@ -211,20 +210,6 @@ export class ConversationStore {
         let newMessages: MessageForStore[];
 
         if(deduplicate){
-            // Validate continuation
-            const validation = isValidContinuation(incoming, convState.messages);
-            if (!validation.valid) {
-                getMetrics()?.invalidContinuationsTotal.inc();
-                logger.warn({
-                    conversationId: id,
-                    reason: validation.reason,
-                    incomingCount: incoming.length,
-                    storedCount: convState.messages.length,
-                    ...validation.debugInfo,
-                }, 'Invalid conversation continuation');
-            }
-
-            // Find new messages
             newMessages = findNewMessages(incoming, convState.messages);
         }
         else{

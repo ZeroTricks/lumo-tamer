@@ -45,8 +45,6 @@ export {
     createFingerprint,
     fingerprintMessages,
     findNewMessages,
-    isValidContinuation,
-    detectBranching,
 } from './deduplication.js';
 
 // Key management

@@ -6,18 +6,15 @@ import { describe, it, expect } from 'vitest';
 import {
     hashMessage,
     findNewMessages,
-    isValidContinuation,
-    detectBranching,
-    type MessageForStore,
 } from '../../src/conversations/deduplication.js';
-import type { Message } from '../../src/conversations/types.js';
+import type { Message, MessageForStore } from '../../src/conversations/types.js';
 
 function createStoredMessage(
     role: string,
     content: string,
     index: number,
     semanticId?: string,
-): Message {
+): MessageForStore {
     return {
         id: `msg-${index}`,
         conversationId: 'conv-1',
@@ -109,60 +106,7 @@ describe('findNewMessages', () => {
     });
 });
 
-describe('isValidContinuation', () => {
-    it('should be valid when stored is empty', () => {
-        const incoming: MessageForStore[] = [
-            { role: 'user', content: 'Hello' },
-        ];
 
-        const result = isValidContinuation(incoming, []);
-        expect(result.valid).toBe(true);
-    });
-
-    it('should be valid when incoming continues stored', () => {
-        const incoming: MessageForStore[] = [
-            { role: 'user', content: 'Hello' },
-            { role: 'assistant', content: 'Hi!' },
-            { role: 'user', content: 'New message' },
-        ];
-        const stored: Message[] = [
-            createStoredMessage('user', 'Hello', 0),
-            createStoredMessage('assistant', 'Hi!', 1),
-        ];
-
-        const result = isValidContinuation(incoming, stored);
-        expect(result.valid).toBe(true);
-    });
-
-    it('should be invalid when incoming has fewer messages', () => {
-        const incoming: MessageForStore[] = [
-            { role: 'user', content: 'Hello' },
-        ];
-        const stored: Message[] = [
-            createStoredMessage('user', 'Hello', 0),
-            createStoredMessage('assistant', 'Hi!', 1),
-        ];
-
-        const result = isValidContinuation(incoming, stored);
-        expect(result.valid).toBe(false);
-        expect(result.reason).toContain('fewer messages');
-    });
-
-    it('should be invalid when history is modified', () => {
-        const incoming: MessageForStore[] = [
-            { role: 'user', content: 'Hello MODIFIED' },
-            { role: 'assistant', content: 'Hi!' },
-        ];
-        const stored: Message[] = [
-            createStoredMessage('user', 'Hello', 0),
-            createStoredMessage('assistant', 'Hi!', 1),
-        ];
-
-        const result = isValidContinuation(incoming, stored);
-        expect(result.valid).toBe(false);
-        expect(result.reason).toContain('mismatch');
-    });
-});
 
 describe('ID-based deduplication', () => {
     it('should deduplicate tool messages by call_id even when content changes', () => {
@@ -227,58 +171,4 @@ describe('ID-based deduplication', () => {
         expect(result[0].content).toBe('New message');
     });
 
-    it('should validate continuation with ID-based matching', () => {
-        const callId = 'tool-call-789';
-
-        const stored: Message[] = [
-            createStoredMessage('user', 'Original content', 0, callId),
-        ];
-
-        // Different content but same ID - should be valid
-        const incoming: MessageForStore[] = [
-            { role: 'user', content: 'Modified content', id: callId },
-            { role: 'user', content: 'New message' },
-        ];
-
-        const result = isValidContinuation(incoming, stored);
-        expect(result.valid).toBe(true);
-    });
-});
-
-describe('detectBranching', () => {
-    it('should not detect branching when empty', () => {
-        const result = detectBranching([], []);
-        expect(result.isBranching).toBe(false);
-    });
-
-    it('should not detect branching for simple continuation', () => {
-        const incoming: MessageForStore[] = [
-            { role: 'user', content: 'Hello' },
-            { role: 'assistant', content: 'Hi!' },
-            { role: 'user', content: 'New' },
-        ];
-        const stored: Message[] = [
-            createStoredMessage('user', 'Hello', 0),
-            createStoredMessage('assistant', 'Hi!', 1),
-        ];
-
-        const result = detectBranching(incoming, stored);
-        expect(result.isBranching).toBe(false);
-    });
-
-    it('should detect branching when history diverges', () => {
-        const incoming: MessageForStore[] = [
-            { role: 'user', content: 'Hello' },
-            { role: 'assistant', content: 'Different response' },
-        ];
-        const stored: Message[] = [
-            createStoredMessage('user', 'Hello', 0),
-            createStoredMessage('assistant', 'Original response', 1),
-            createStoredMessage('user', 'Follow up', 2),
-        ];
-
-        const result = detectBranching(incoming, stored);
-        expect(result.isBranching).toBe(true);
-        expect(result.branchPoint).toBe(1);
-    });
 });

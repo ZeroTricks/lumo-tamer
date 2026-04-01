@@ -78,7 +78,6 @@ When authenticated via browser, sync is automatic via Redux sagas:
 
 - **semanticId**: Call ID for tool messages, hash(role+content) for regular messages
 - `findNewMessages()`: Compares incoming messages against stored messages
-- `isValidContinuation()`: Validates no branching in conversation tree
 
 ### Manual save
 Call `/save [optional title]` to save stateless conversations. See [troubleshooting](#i-enabled-sync-but-my-chats-dont-appear-in-lumo).
