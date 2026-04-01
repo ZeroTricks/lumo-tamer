@@ -180,9 +180,22 @@ export async function handleRequest(
           accumulatedText += text;
           emitter?.emitOutputTextDelta(itemId, 0, 0, text);
         },
-        onToolCall(callId, tc) {
-          // Only CustomTool calls reach here (ServerTools filtered by loop)
+        onClientToolCall(callId, tc) {
+          // Client tool calls - client must execute
           emitter?.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
+        },
+        onServerToolResult(result) {
+          // Server tool results - emit completed function_call + function_call_output
+          if (emitter) {
+            const { nextOutputIndex: newIndex } = emitter.emitServerToolExecution(
+              result.callId,
+              result.toolName,
+              result.args,
+              result.output,
+              nextOutputIndex
+            );
+            nextOutputIndex = newIndex;
+          }
         },
       });
 

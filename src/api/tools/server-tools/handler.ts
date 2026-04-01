@@ -9,13 +9,13 @@ import { logger } from '../../../app/logger.js';
 import { getCustomToolPrefix } from '../../../app/config.js';
 import { createStreamingToolProcessor, type StreamingToolEmitter } from '../streaming-processor.js';
 import { isServerTool, type ServerToolContext } from './registry.js';
-import { partitionToolCalls, buildServerToolContinuation } from './executor.js';
+import { partitionToolCalls, executeServerTools, buildContinuationTurns, type ServerToolResult } from './executor.js';
 import type { ChatMessageWithTools, EndpointDependencies, OpenAIToolCall } from '../../types.js';
 import type { RequestContext } from 'src/api/types.js';
 import type { Turn, ChatResult } from '../../../lumo-client/types.js';
 import type { ConversationId, MessageForStore } from '../../../conversations/types.js';
 import type { ParsedToolCall } from '../types.js';
-import { convertToolMessage } from 'src/api/message-converter.js';
+import { convertToolMessage } from '../../message-converter.js';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -28,8 +28,12 @@ export interface ChatAndExecuteOptions {
   injectInstructionsInto: 'first' | 'last';
   /** Callback for text deltas during streaming */
   onTextDelta: (text: string) => void;
-  /** Callback for tool calls (only CustomTools, ServerTools filtered out) */
-  onToolCall: (callId: string, tc: ParsedToolCall) => void;
+  /** Callback for client tool calls (client must execute) */
+  onClientToolCall: (callId: string, tc: ParsedToolCall) => void;
+  /** Callback for server tool calls (informational, server executes) */
+  onServerToolCall?: (tc: OpenAIToolCall) => void;
+  /** Callback for server tool results (after execution) */
+  onServerToolResult?: (result: ServerToolResult) => void;
 }
 
 export interface ChatAndExecuteResult {
@@ -56,7 +60,7 @@ const MAX_SERVER_TOOL_LOOPS = 5;
  * 5. Returns final text and any CustomTool calls
  */
 export async function chatAndExecute(options: ChatAndExecuteOptions): Promise<ChatAndExecuteResult> {
-  const { deps, context, instructions, injectInstructionsInto, onTextDelta, onToolCall } = options;
+  const { deps, context, instructions, injectInstructionsInto, onTextDelta, onClientToolCall } = options;
   const prefix = getCustomToolPrefix();
 
   let currentTurns = [...options.turns];
@@ -88,7 +92,7 @@ export async function chatAndExecute(options: ChatAndExecuteOptions): Promise<Ch
       emitToolCall(callId, tc) {
         // Only emit CustomTool calls to the client
         if (!isServerTool(tc.name)) {
-          onToolCall(callId, tc);
+          onClientToolCall(callId, tc);
         }
       },
     };
@@ -120,13 +124,21 @@ export async function chatAndExecute(options: ChatAndExecuteOptions): Promise<Ch
 
     logger.info({ loopCount, serverToolCount: serverToolCalls.length }, 'Executing ServerTools');
 
-    // Execute ServerTools and build continuation turns
-    const continuationTurns = await buildServerToolContinuation(
-      serverToolCalls,
-      iterationText,
-      serverToolCtx,
-      prefix
-    );
+    // Emit server tool calls before execution
+    for (const tc of serverToolCalls) {
+      options.onServerToolCall?.(tc);
+    }
+
+    // Execute ServerTools and get results
+    const results = await executeServerTools(serverToolCalls, serverToolCtx);
+
+    // Emit server tool results after execution
+    for (const result of results) {
+      options.onServerToolResult?.(result);
+    }
+
+    // Build continuation turns for next Lumo call
+    const continuationTurns = buildContinuationTurns(iterationText, results, prefix);
 
     // Update turns for next iteration
     currentTurns = [...currentTurns, ...continuationTurns];

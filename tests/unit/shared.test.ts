@@ -108,7 +108,7 @@ describe('partitionToolCalls', () => {
   it('returns empty arrays when no tool calls', () => {
     const result = partitionToolCalls([]);
     expect(result.serverToolCalls).toEqual([]);
-    expect(result.customToolCalls).toEqual([]);
+    expect(result.clientToolCalls).toEqual([]);
   });
 
   it('partitions tool calls into server and custom tools', () => {
@@ -131,8 +131,8 @@ describe('partitionToolCalls', () => {
 
     expect(result.serverToolCalls).toHaveLength(1);
     expect(result.serverToolCalls[0].function.name).toBe('lumo_search');
-    expect(result.customToolCalls).toHaveLength(2);
-    expect(result.customToolCalls.map(tc => tc.function.name)).toEqual(['custom_tool', 'another_custom']);
+    expect(result.clientToolCalls).toHaveLength(2);
+    expect(result.clientToolCalls.map(tc => tc.function.name)).toEqual(['custom_tool', 'another_custom']);
   });
 
   it('returns all as custom when no server tools registered', () => {
@@ -144,7 +144,7 @@ describe('partitionToolCalls', () => {
     const result = partitionToolCalls(toolCalls);
 
     expect(result.serverToolCalls).toEqual([]);
-    expect(result.customToolCalls).toHaveLength(2);
+    expect(result.clientToolCalls).toHaveLength(2);
   });
 });
 

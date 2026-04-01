@@ -21,7 +21,13 @@ export {
   type ServerToolHandler,
 } from './registry.js';
 
-export { executeServerTool, type ServerToolExecutionResult } from './executor.js';
+export {
+  executeServerTool,
+  executeServerTools,
+  buildContinuationTurns,
+  type ServerToolExecutionResult,
+  type ServerToolResult,
+} from './executor.js';
 
 export { chatAndExecute, type ChatAndExecuteOptions, type ChatAndExecuteResult } from './handler.js';
 

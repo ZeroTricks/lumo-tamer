@@ -168,9 +168,13 @@ async function handleChatRequest(
           accumulatedText += text;
           emitter?.emitContentDelta(text);
         },
-        onToolCall(callId, tc) {
-          // Only CustomTool calls reach here (ServerTools filtered by loop)
-          emitter?.emitToolCallDelta(callId, tc.name, tc.arguments);
+        onClientToolCall(callId, tc) {
+          // Client tool calls - client must execute
+          emitter?.emitToolCallDelta(callId, tc.name, JSON.stringify(tc.arguments));
+        },
+        onServerToolResult(result) {
+          // Server tool results - emit tool_call + tool result
+          emitter?.emitServerToolExecution(result.callId, result.toolName, result.args, result.output);
         },
       });
 

@@ -20,6 +20,15 @@ export interface ServerToolExecutionResult {
   error?: string;
 }
 
+/** Result from executing a server tool (for emission to clients) */
+export interface ServerToolResult {
+  callId: string;
+  toolName: string;
+  args: string;
+  output: string;
+  success: boolean;
+}
+
 /**
  * Execute a ServerTool by name.
  *
@@ -76,27 +85,60 @@ export function partitionToolCalls(toolCalls: OpenAIToolCall[]): PartitionedTool
   return { serverToolCalls, clientToolCalls };
 }
 
+// ── Execution ──────────────────────────────────────────────────────
+
+/**
+ * Execute multiple ServerTools and return results.
+ *
+ * @param serverToolCalls - ServerTool calls to execute
+ * @param context - ServerTool execution context
+ * @returns Array of execution results
+ */
+export async function executeServerTools(
+  serverToolCalls: OpenAIToolCall[],
+  context: ServerToolContext
+): Promise<ServerToolResult[]> {
+  const results: ServerToolResult[] = [];
+
+  for (const tc of serverToolCalls) {
+    const args = JSON.parse(tc.function.arguments);
+    const execResult = await executeServerTool(tc.function.name, args, context);
+
+    const output = execResult.error
+      ? `Error executing ${tc.function.name}: ${execResult.error}`
+      : execResult.result ?? 'No result';
+
+    results.push({
+      callId: tc.id,
+      toolName: tc.function.name,
+      args: tc.function.arguments,
+      output,
+      success: !execResult.error,
+    });
+  }
+
+  return results;
+}
+
 // ── Continuation ──────────────────────────────────────────────────────
 
 /**
- * Execute ServerTools and build continuation turns for the next Lumo call.
+ * Build continuation turns from execution results for the next Lumo call.
  *
  * Creates:
  * 1. An assistant turn with the iteration text (which includes tool call JSON)
  * 2. User turns with tool results for each executed ServerTool
  *
- * @param serverToolCalls - ServerTool calls to execute
  * @param assistantText - Text from the current iteration (includes tool call JSON)
- * @param context - ServerTool execution context
+ * @param results - Execution results from executeServerTools
  * @param prefix - CustomTools prefix for tool result formatting
  * @returns MessageForStore[] ready to append for next Lumo call
  */
-export async function buildServerToolContinuation(
-  serverToolCalls: OpenAIToolCall[],
+export function buildContinuationTurns(
   assistantText: string,
-  context: ServerToolContext,
+  results: ServerToolResult[],
   prefix: string
-): Promise<MessageForStore[]> {
+): MessageForStore[] {
   const continuationTurns: MessageForStore[] = [];
 
   // Add assistant turn with the text (which includes tool call JSON)
@@ -105,28 +147,19 @@ export async function buildServerToolContinuation(
     content: assistantText,
   });
 
-  // Execute each ServerTool and add result as user turn
-  for (const tc of serverToolCalls) {
-    const args = JSON.parse(tc.function.arguments);
-    const execResult = await executeServerTool(tc.function.name, args, context);
-
-    // Format result similar to CustomTool results
-    const resultContent = execResult.error
-      ? `Error executing ${tc.function.name}: ${execResult.error}`
-      : execResult.result ?? 'No result';
-
-    // Build user turn with tool result in JSON format (similar to function_call_output)
+  // Add user turn for each tool result
+  for (const result of results) {
     const toolResultJson = JSON.stringify({
       type: 'function_call_output',
-      call_id: tc.id,
-      tool_name: `${prefix}${tc.function.name}`,
-      output: resultContent,
+      call_id: result.callId,
+      tool_name: `${prefix}${result.toolName}`,
+      output: result.output,
     });
 
     continuationTurns.push({
       role: Role.User,
       content: `\`\`\`json\n${toolResultJson}\n\`\`\``,
-      id: tc.id,
+      id: result.callId,
     });
   }
 
