@@ -43,6 +43,13 @@ export class Application {
    * Initialize mock mode - bypass auth, use simulated API responses
    */
   private async initializeMock(): Promise<void> {
+    // Install mock fetch adapter BEFORE store init (sagas make API calls)
+    const { installMockFetchAdapter } = await import('../shims/fetch-adapter.js');
+    this.cleanupFetchAdapter = installMockFetchAdapter();
+
+    // Suppress API errors in logs (same as local-only mode)
+    suppressFullApiErrors();
+
     // Use primary store with fake-indexeddb for mock mode
     const { initializeMockStore } = await import('../mock/mock-store.js');
     const result = await initializeMockStore();

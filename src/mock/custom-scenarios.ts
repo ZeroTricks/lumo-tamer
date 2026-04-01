@@ -150,7 +150,7 @@ export const customScenarios: Record<string, ScenarioGenerator> = {
 
         // Include the prefix so the tool call is detected
         const prefix = getCustomToolPrefix() + serverToolPrefix;
-        const toolName = `${prefix}search`;
+        const toolName = `${prefix}get_date`;
         const json = `\`\`\`json\n{"name":"${toolName}","arguments":{"query":"weather forecast"}}\n\`\`\``;
         const tokens = json.split('');
         for (let i = 0; i < tokens.length; i++) {
