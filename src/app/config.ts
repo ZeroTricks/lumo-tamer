@@ -237,19 +237,9 @@ export function getServerConfig(): ServerMergedConfig {
   return config as ServerMergedConfig;
 }
 
-export function getClientToolsConfig() {
-  const cfg = getServerConfig();
-  return cfg.tools.client;
-}
-
 export function getCustomToolPrefix() {
   const cfg = getServerConfig();
   return cfg.tools.prefix;
-}
-
-export function getServerToolsEnabled() {
-  const cfg = getServerConfig();
-  return cfg.tools.server.enabled;
 }
 
 export function getServerInstructionsConfig() {
