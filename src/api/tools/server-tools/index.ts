@@ -36,6 +36,10 @@ export { chatAndExecute, type ChatAndExecuteOptions, type ChatAndExecuteResult }
  * Called during server startup when enableServerTools is true.
  */
 export function initializeServerTools(): void {
-  registerServerTool(dateServerTool);
-  registerServerTool(searchServerTool);
+  const tools = [dateServerTool, searchServerTool];
+  for (const tool of tools) {
+    if (tool.isAvailable === undefined || tool.isAvailable()) {
+      registerServerTool(tool);
+    }
+  }
 }

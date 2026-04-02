@@ -27,6 +27,8 @@ export type ServerToolHandler = (
 export interface ServerTool {
   definition: OpenAITool;
   handler: ServerToolHandler;
+  /** Optional check if tool should be registered. If undefined, tool is always available. */
+  isAvailable?: () => boolean;
 }
 
 /**

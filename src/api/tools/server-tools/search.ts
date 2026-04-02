@@ -7,6 +7,7 @@
 
 import { searchConversations, formatSearchResults } from '../../../conversations/search.js';
 import { serverToolPrefix, type ServerTool } from './registry.js';
+import { getConversationStore } from '../../../conversations/index.js';
 
 export const searchServerTool: ServerTool = {
   definition: {
@@ -51,4 +52,5 @@ export const searchServerTool: ServerTool = {
 
     return formatSearchResults(results, query.trim());
   },
+  isAvailable: () => getConversationStore() !== undefined,
 };
