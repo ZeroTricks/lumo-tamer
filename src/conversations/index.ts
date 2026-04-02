@@ -20,27 +20,14 @@ export type {
     RemoteId,
     IdMapEntry,
     MessageForStore,
+    InitializeStoreOptions,
+    InitializeSyncOptions,
 } from './types.js';
 
 // Store
 export { ConversationStore } from './store.js';
 
-// Store initialization
-export {
-    initializeStore,
-    type StoreConfig,
-    type StoreResult,
-} from './init.js';
-
-// Deduplication utilities
-export {
-    hashMessage,
-    createFingerprint,
-    fingerprintMessages,
-    findNewMessages,
-} from './deduplication.js';
-
-// Key management
+// Key management (exported for testing)
 export {
     KeyManager,
     getKeyManager,
@@ -48,34 +35,15 @@ export {
     type KeyManagerConfig,
 } from './key-manager.js';
 
-// Re-export LumoApi types for consumers
-export { LumoApi } from '@lumo/remote/api.js';
-export { RoleInt, StatusInt } from '@lumo/remote/types.js';
-
 // ============================================================================
 // Persistence initialization
 // ============================================================================
 
 import { logger } from '../app/logger.js';
-import type { AuthProvider, ProtonApi } from '../auth/index.js';
-import type { ConversationsConfig } from '../app/config.js';
 import { getKeyManager } from './key-manager.js';
-import { initializeStore, pullIncompleteConversations, type StoreResult } from './init.js';
+import { initializeStore, pullIncompleteConversations } from './init.js';
 import { ConversationStore } from './store.js';
-
-// ============================================================================
-// Conversation Store Initialization
-// ============================================================================
-
-export interface InitializeStoreOptions {
-    protonApi: ProtonApi;
-    uid: string;
-    authProvider: AuthProvider;
-    conversationsConfig: ConversationsConfig;
-}
-
-// Module-level state to track store result for sync initialization
-let storeResult: StoreResult | null = null;
+import type { InitializeStoreOptions, InitializeSyncOptions } from './types.js';
 
 // Singleton for the active store
 let activeStore: ConversationStore | null = null;
@@ -146,7 +114,6 @@ export async function initializeConversationStore(
         });
 
         activeStore = result.conversationStore;
-        storeResult = result;
         logger.info('ConversationStore initialized');
 
         // Pull incomplete conversations in background when sync is enabled
@@ -182,18 +149,6 @@ export function setConversationStore(store: ConversationStore): void {
  */
 export function resetConversationStore(): void {
     activeStore = null;
-    storeResult = null;
-}
-
-// ============================================================================
-// Sync Initialization
-// ============================================================================
-
-export interface InitializeSyncOptions {
-    protonApi: ProtonApi;
-    uid: string;
-    authProvider: AuthProvider;
-    conversationsConfig: ConversationsConfig;
 }
 
 /**

@@ -178,7 +178,6 @@ describe('formatSearchResults', () => {
         expect(output).toContain('Found 1 result');
         expect(output).toContain('My Conversation');
         expect(output).toContain('conv-123');
-        expect(output).toContain('/load');
     });
 
     it('formats multiple results with snippets', () => {

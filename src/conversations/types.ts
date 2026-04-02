@@ -54,9 +54,32 @@ export interface IdMapEntry {
 /**
  * Incoming message format from API
  */
-
 export interface MessageForStore {
     role: Role;
     content?: string;
     id?: string; // Semantic ID for deduplication (call_id for tools)
+}
+
+// Re-export auth types for initialization interfaces
+import type { AuthProvider, ProtonApi } from '../auth/index.js';
+import type { ConversationsConfig } from '../app/config.js';
+
+/**
+ * Options for initializing the conversation store
+ */
+export interface InitializeStoreOptions {
+    protonApi: ProtonApi;
+    uid: string;
+    authProvider: AuthProvider;
+    conversationsConfig: ConversationsConfig;
+}
+
+/**
+ * Options for initializing sync services
+ */
+export interface InitializeSyncOptions {
+    protonApi: ProtonApi;
+    uid: string;
+    authProvider: AuthProvider;
+    conversationsConfig: ConversationsConfig;
 }

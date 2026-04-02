@@ -367,24 +367,6 @@ export class ConversationStore {
     }
 
     /**
-     * Append tool calls as assistant messages (currently unused)
-     */
-    appendAssistantToolCalls(
-        id: ConversationId,
-        toolCalls: Array<{ name: string; arguments: string; call_id: string }>
-    ): void {
-        for (const tc of toolCalls) {
-            const content = JSON.stringify({
-                type: 'function_call',
-                call_id: tc.call_id,
-                name: tc.name,
-                arguments: tc.arguments,
-            });
-            this.appendAssistantResponse(id, { content }, 'succeeded', tc.call_id);
-        }
-    }
-
-    /**
      * Append a single user message (CLI mode)
      */
     appendUserMessage(id: ConversationId, content: string): Message {
