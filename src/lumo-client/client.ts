@@ -335,7 +335,7 @@ export class LumoClient {
             ];
 
             return {
-                ...this.chatWithHistory(bounceTurns, onChunk, options, true),
+                ...await this.chatWithHistory(bounceTurns, onChunk, options, true),
                 title: result.title ? postProcessTitle(result.title) : undefined,
             };
         }
