@@ -232,6 +232,7 @@ Server tools are custom tools executed by lumo-tamer itself, not passed to API c
 | Tool | Description |
 |------|-------------|
 | `lumo_search` | Search conversation history by title and message content |
+| `lumo_read_conversation` | Read the full text of a conversation by ID |
 
 ### Enable
 

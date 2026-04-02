@@ -27,7 +27,7 @@ lumo-tamer is a lightweight local proxy that talks to Proton's Lumo API using th
 
 - OpenAI-compatible API server with experimental tool support.
 - Interactive CLI, let Lumo help you execute commands, read, create and edit files.
-- Sync your conversations with Proton to access them on https://lumo.proton.me or in mobile apps.
+- Sync your conversations with Proton to access them on https://lumo.proton.me or in mobile apps. Let Lumo search through and read your past conversations.
 
 
 ## Project Status
