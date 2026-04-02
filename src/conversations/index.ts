@@ -2,7 +2,7 @@
  * Conversation persistence module
  *
  * Provides:
- * - ConversationStore: Primary storage using Redux + IndexedDB
+ * - ConversationStore: Redux + IndexedDB storage
  * - Message deduplication for OpenAI API format
  * - Types compatible with Proton Lumo webclient
  */
@@ -22,7 +22,7 @@ export type {
     MessageForStore,
 } from './types.js';
 
-// Primary store
+// Store
 export { ConversationStore } from './store.js';
 
 // Store initialization
@@ -74,15 +74,8 @@ export interface InitializeStoreOptions {
     conversationsConfig: ConversationsConfig;
 }
 
-export interface InitializeStoreResult {
-    /** Whether the primary store is being used (vs fallback) */
-    isPrimary: boolean;
-    /** Store result, only set when primary store is used */
-    storeResult?: StoreResult;
-}
-
 // Module-level state to track store result for sync initialization
-let primaryStoreResult: StoreResult | null = null;
+let storeResult: StoreResult | null = null;
 
 // Singleton for the active store
 let activeStore: ConversationStore | null = null;
@@ -90,67 +83,34 @@ let activeStore: ConversationStore | null = null;
 /**
  * Initialize the conversation store
  *
- * Creates the primary ConversationStore (Redux + IndexedDB) if possible.
- * Returns undefined if initialization fails - callers should handle this
+ * Creates the ConversationStore (Redux + IndexedDB) if possible.
+ * Logs warnings if initialization fails - callers should handle this
  * gracefully (server works stateless, CLI uses local Turn array).
  *
- * Primary store requires:
+ * Requires:
  * - Auth provider supports persistence (has cached encryption keys)
  * - keyPassword is available (for master key decryption)
  */
 export async function initializeConversationStore(
     options: InitializeStoreOptions
-): Promise<InitializeStoreResult> {
+): Promise<void> {
     const { authProvider, conversationsConfig } = options;
 
     // Check if store is disabled via config
     if (!conversationsConfig.enableStore) {
         logger.info('ConversationStore disabled via config');
-        return { isPrimary: false };
+        return;
     }
 
     // Check if ConversationStore can be used
     const storeWarning = authProvider.getConversationStoreWarning();
     if (storeWarning) {
         logger.warn({ method: authProvider.method }, storeWarning);
-        return { isPrimary: false };
+        return;
     }
 
     // If we get here, getConversationStoreWarning() confirmed keyPassword exists
     const keyPassword = authProvider.getKeyPassword()!;
-
-    // All conditions met - initialize primary store
-    try {
-        const result = await initializePrimaryStore(options, keyPassword);
-        if (result) {
-            activeStore = result.conversationStore;
-            primaryStoreResult = result;
-            logger.info('Using primary conversation store');
-
-            // Pull incomplete conversations in background when sync is enabled
-            if (options.conversationsConfig.enableSync) {
-                pullIncompleteConversations(result.store, result.spaceId)
-                    .catch(err => logger.error({ error: err }, 'Failed to pull incomplete conversations'));
-            }
-
-            return { isPrimary: true, storeResult: result };
-        }
-    } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        logger.error({ error: msg }, 'Failed to initialize primary store. Continuing without store.');
-    }
-
-    return { isPrimary: false };
-}
-
-/**
- * Initialize the primary conversation store
- */
-async function initializePrimaryStore(
-    options: InitializeStoreOptions,
-    keyPassword: string
-): Promise<StoreResult | null> {
-    const { protonApi, uid, authProvider, conversationsConfig } = options;
 
     // Get cached keys from browser provider if available
     const cachedUserKeys = authProvider.getCachedUserKeys?.();
@@ -162,28 +122,42 @@ async function initializePrimaryStore(
             hasCachedUserKeys: !!cachedUserKeys,
             hasCachedMasterKeys: !!cachedMasterKeys,
         },
-        'Initializing KeyManager for primary store...'
+        'Initializing KeyManager...'
     );
 
     // Initialize KeyManager
     const keyManager = getKeyManager({
-        protonApi,
+        protonApi: options.protonApi,
         cachedUserKeys,
         cachedMasterKeys,
     });
-    await keyManager.initialize(keyPassword);
 
-    // Get master key as base64 for crypto layer
-    const masterKeyBase64 = keyManager.getMasterKeyBase64();
+    try {
+        await keyManager.initialize(keyPassword);
 
-    const result = await initializeStore({
-        sessionUid: uid,
-        userId: authProvider.getUserId() ?? uid,
-        masterKey: masterKeyBase64,
-        projectName: conversationsConfig.projectName,
-    });
+        // Get master key as base64 for crypto layer
+        const masterKeyBase64 = keyManager.getMasterKeyBase64();
 
-    return result;
+        const result = await initializeStore({
+            sessionUid: options.uid,
+            userId: authProvider.getUserId() ?? options.uid,
+            masterKey: masterKeyBase64,
+            projectName: conversationsConfig.projectName,
+        });
+
+        activeStore = result.conversationStore;
+        storeResult = result;
+        logger.info('ConversationStore initialized');
+
+        // Pull incomplete conversations in background when sync is enabled
+        if (conversationsConfig.enableSync) {
+            pullIncompleteConversations(result.store, result.spaceId)
+                .catch(err => logger.error({ error: err }, 'Failed to pull incomplete conversations'));
+        }
+    } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        logger.error({ error: msg }, 'Failed to initialize store. Continuing without store.');
+    }
 }
 
 /**
@@ -208,7 +182,7 @@ export function setConversationStore(store: ConversationStore): void {
  */
 export function resetConversationStore(): void {
     activeStore = null;
-    primaryStoreResult = null;
+    storeResult = null;
 }
 
 // ============================================================================
@@ -225,8 +199,8 @@ export interface InitializeSyncOptions {
 /**
  * Initialize sync services
  *
- * Sync is handled automatically by Redux sagas when primary store is active.
- * Returns false if no primary store or sync is disabled.
+ * Sync is handled automatically by Redux sagas when the store is active.
+ * Returns false if no store or sync is disabled.
  */
 export function initializeSync(options: InitializeSyncOptions): boolean {
     const { authProvider, conversationsConfig } = options;

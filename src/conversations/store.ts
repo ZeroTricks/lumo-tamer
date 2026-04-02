@@ -1,7 +1,7 @@
 /**
  * Conversation Store
  *
- * Primary conversation storage using Redux + IndexedDB for persistence.
+ * Conversation storage using Redux + IndexedDB for persistence.
  *
  * Architecture:
  * - Redux store holds in-memory state (conversations, messages)

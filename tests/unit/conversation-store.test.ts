@@ -1,8 +1,7 @@
 /**
  * Unit tests for ConversationStore (Redux + IndexedDB)
  *
- * Tests the primary conversation store implementation using fake-indexeddb.
- * Mirrors FallbackStore tests for consistent behavior verification.
+ * Tests the conversation store implementation using fake-indexeddb.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
