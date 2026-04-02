@@ -15,7 +15,7 @@ import { BUSY_INDICATOR, clearBusyIndicator, print } from '../app/terminal.js';
 import type { Application } from '../app/index.js';
 import { randomUUID } from 'crypto';
 import * as readline from 'readline';
-import type { AssistantMessageData, Turn } from '../lumo-client/index.js';
+import { Role, type AssistantMessageData, type Turn } from '../lumo-client/index.js';
 import type { ConversationStore } from '../conversations/index.js';
 import { blockHandlers, executeBlocks, formatResultsMessage } from './local-actions/block-handlers.js';
 import { CodeBlockDetector, type CodeBlock } from './local-actions/code-block-detector.js';
@@ -216,11 +216,11 @@ export class CLIClient {
     }
 
     try {
-      this.turns.push({ role: 'user', content: input });
+      this.turns.push({ role: Role.User, content: input });
       this.store?.appendUserMessage(this.conversationId, input);
 
       let lumoResponse = await this.sendToLumo();
-      this.turns.push({ role: 'assistant', content: lumoResponse.message.content });
+      this.turns.push({ role: Role.Assistant, content: lumoResponse.message.content });
       this.store?.appendAssistantResponse(this.conversationId, lumoResponse.message);
 
       // Execute blocks until none remain (or user skips all)
@@ -232,11 +232,11 @@ export class CLIClient {
         // Send batch results back to Lumo
         print('─── Sending results to Lumo ───\n');
         const batchMessage = formatResultsMessage(results);
-        this.turns.push({ role: 'user', content: batchMessage });
+        this.turns.push({ role: Role.User, content: batchMessage });
         this.store?.appendUserMessage(this.conversationId, batchMessage);
 
         lumoResponse = await this.sendToLumo();
-        this.turns.push({ role: 'assistant', content: lumoResponse.message.content });
+        this.turns.push({ role: Role.Assistant, content: lumoResponse.message.content });
         this.store?.appendAssistantResponse(this.conversationId, lumoResponse.message);
       }
     } catch (error) {

@@ -8,9 +8,9 @@
 import { createHash } from 'crypto';
 import { Role } from '@lumo/types.js';
 import type { Message, MessageForStore } from './types.js';
-import { getMetrics } from 'src/app/metrics.js';
-import logger from 'src/app/logger.js';
-import { serverToolPrefix } from 'src/api/tools/server-tools/registry.js';
+import { getMetrics } from '../app/metrics.js';
+import logger from '../app/logger.js';
+import { serverToolPrefix } from '../api/tools/server-tools/registry.js';
 
 /**
  * Compute hash for a message (role + content)

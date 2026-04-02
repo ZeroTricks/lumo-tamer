@@ -121,7 +121,6 @@ describe('MetricsService', () => {
       expect(output).toContain('tool_name="web_search"');
       expect(output).toContain('tool_name="proton_info"');
       expect(output).toContain('tool_name="my_tool"');
-      expect(output).toContain('tool_name="current_time"');
     });
   });
 

@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestServer, parseSSEEvents, type TestServer } from '../helpers/test-server.js';
-import { getClientToolsConfig, getServerConfig } from '../../src/app/config.js';
+import { getServerConfig } from '../../src/app/config.js';
 
 /** POST /v1/responses with JSON body, returning the raw Response. */
 function postResponses(ts: TestServer, body: Record<string, unknown>): Promise<Response> {
@@ -189,10 +189,10 @@ describe('/v1/responses', () => {
     beforeAll(async () => {
       ts = await createTestServer('misroutedToolCall', { metrics: true });
       // Enable client tool detection so the bounce response JSON is parsed
-      (getClientToolsConfig() as any).enabled = true;
+      getServerConfig().tools.client.enabled = true;
     });
     afterAll(async () => {
-      (getClientToolsConfig() as any).enabled = false;
+      getServerConfig().tools.client.enabled = false;
       await ts.close();
     });
 
