@@ -7,9 +7,10 @@
  */
 
 import { logger } from '../app/logger.js';
-import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
+import { getServerInstructionsConfig, getCustomToolPrefix, getServerConfig } from '../app/config.js';
 import { interpolateTemplate } from '../app/template.js';
 import { applyToolPrefix, applyToolNamePrefix } from './tools/prefix.js';
+import { getAllServerToolDefinitions } from './tools/server-tools/index.js';
 import type { OpenAITool } from './types.js';
 
 // ── Template validation ───────────────────────────────────────────────
@@ -117,13 +118,27 @@ function extractToolNames(tools?: OpenAITool[]): string[] {
  * @returns Formatted instruction string
  */
 export function buildInstructions(tools?: OpenAITool[], clientInstructions?: string): string {
-  const instructionsConfig = getServerInstructionsConfig();
-  const toolsConfig = getCustomToolsConfig();
-  const { prefix } = toolsConfig;
-  const { replacePatterns } = instructionsConfig;
+  const {
+    instructions: instructionsConfig,
+    tools: {
+      prefix,
+      server: { enabled: serverToolsEnabled },
+      client: { enabled: clientToolsEnabled }
+    }
+  } = getServerConfig();
+
+  // Merge TamerTool definitions if enabled
+  let allTools = tools ?? [];
+  if (serverToolsEnabled) {
+    const serverToolDefs = getAllServerToolDefinitions();
+    allTools = [...serverToolDefs, ...allTools];
+  }
 
   // Determine if we should include tools
-  const includeTools = toolsConfig.enabled && tools && tools.length > 0;
+  // Include if either client tools are enabled with tools, or server tools are enabled
+  const hasClientTools = clientToolsEnabled && tools && tools.length > 0;
+  const hasServerTools = serverToolsEnabled && getAllServerToolDefinitions().length > 0;
+  const includeTools = hasClientTools || hasServerTools;
 
   // Pre-interpolate forTools block (it can use {{prefix}})
   const forTools = interpolateTemplate(instructionsConfig.forTools, { prefix });
@@ -131,15 +146,16 @@ export function buildInstructions(tools?: OpenAITool[], clientInstructions?: str
   // Prepare tools JSON if enabled and provided
   let toolsJson: string | undefined;
   if (includeTools) {
-    const prefixedTools = applyToolPrefix(tools, prefix);
+    const prefixedTools = applyToolPrefix(allTools, prefix);
     toolsJson = JSON.stringify(prefixedTools, null, 2);
   }
 
   // Clean and prefix client instructions
   let cleanedClientInstructions: string | undefined;
   if (clientInstructions) {
-    cleanedClientInstructions = applyReplacePatterns(clientInstructions, replacePatterns);
+    cleanedClientInstructions = applyReplacePatterns(clientInstructions, instructionsConfig.replacePatterns);
     if (includeTools) {
+      // Only prefix client tool names, not server tool names
       const toolNames = extractToolNames(tools);
       cleanedClientInstructions = applyToolNamePrefix(cleanedClientInstructions, toolNames, prefix);
     }

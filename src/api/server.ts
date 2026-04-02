@@ -72,6 +72,13 @@ export class APIServer {
   }
 
   async start(): Promise<void> {
+    // Initialize ServerTools if enabled
+    if (this.serverConfig.tools.server.enabled) {
+      const { initializeServerTools } = await import('./tools/server-tools/index.js');
+      initializeServerTools();
+      logger.info('ServerTools initialized');
+    }
+
     const { validateTemplateOnce } = await import('./instructions.js');
     validateTemplateOnce(this.serverConfig.instructions.template);
 

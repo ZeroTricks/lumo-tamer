@@ -1,7 +1,7 @@
 /**
  * Conversation Store
  *
- * Primary conversation storage using Redux + IndexedDB for persistence.
+ * Conversation storage using Redux + IndexedDB for persistence.
  *
  * Architecture:
  * - Redux store holds in-memory state (conversations, messages)
@@ -22,7 +22,6 @@ import type { AssistantMessageData, Turn } from '../lumo-client/types.js';
 import {
     findNewMessages,
     hashMessage,
-    isValidContinuation,
 } from './deduplication.js';
 import type {
     ConversationId,
@@ -112,7 +111,6 @@ function toConversationState(
 export class ConversationStore {
     private store: LumoStore;
     private spaceId: SpaceId;
-    private onDirtyCallback?: () => void;
 
     /**
      * Map of messageId (UUID) -> semanticId for deduplication.
@@ -136,13 +134,6 @@ export class ConversationStore {
         this.store = store;
         this.spaceId = spaceId;
         logger.info({ spaceId }, 'ConversationStore initialized');
-    }
-
-    /**
-     * Set callback to be called when a conversation becomes dirty
-     */
-    setOnDirtyCallback(callback: () => void): void {
-        this.onDirtyCallback = callback;
     }
 
     /**
@@ -212,25 +203,18 @@ export class ConversationStore {
      */
     appendMessages(
         id: ConversationId,
-        incoming: MessageForStore[]
+        incoming: MessageForStore[],
+        deduplicate = true
     ): Message[] {
         const convState = this.getOrCreate(id);
+        let newMessages: MessageForStore[];
 
-        // Validate continuation
-        const validation = isValidContinuation(incoming, convState.messages);
-        if (!validation.valid) {
-            getMetrics()?.invalidContinuationsTotal.inc();
-            logger.warn({
-                conversationId: id,
-                reason: validation.reason,
-                incomingCount: incoming.length,
-                storedCount: convState.messages.length,
-                ...validation.debugInfo,
-            }, 'Invalid conversation continuation');
+        if(deduplicate){
+            newMessages = findNewMessages(incoming, convState.messages);
         }
-
-        // Find new messages
-        const newMessages = findNewMessages(incoming, convState.messages);
+        else{
+            newMessages = incoming;
+        }
 
         if (newMessages.length === 0) {
             logger.debug({ conversationId: id }, 'No new messages to append');
@@ -256,7 +240,7 @@ export class ConversationStore {
                 id: messageId,
                 conversationId: id,
                 createdAt: now.toISOString(),
-                role: msg.role ,
+                role: msg.role,
                 parentId,
                 status: 'succeeded',
             }));
@@ -269,7 +253,7 @@ export class ConversationStore {
                     spaceId: this.spaceId,
                     content: msg.content,
                     status: 'succeeded',
-                    role: msg.role ,
+                    role: msg.role,
                 }));
             }
 
@@ -280,7 +264,7 @@ export class ConversationStore {
                 id: messageId,
                 conversationId: id,
                 createdAt: now.toISOString(),
-                role: msg.role ,
+                role: msg.role,
                 parentId,
                 status: 'succeeded',
                 content: msg.content,
@@ -291,7 +275,6 @@ export class ConversationStore {
             parentId = messageId;
         }
 
-        this.notifyDirty();
 
         // Track metrics
         const metrics = getMetrics();
@@ -352,7 +335,6 @@ export class ConversationStore {
         // Request push to server
         this.store.dispatch(pushMessageRequest({ id: messageId }));
 
-        this.notifyDirty();
 
         // Update conversation status
         this.store.dispatch(updateConversationStatus({
@@ -368,8 +350,7 @@ export class ConversationStore {
             parentId,
             status,
             content: messageData.content,
-            toolCall: messageData.toolCall,
-            toolResult: messageData.toolResult,
+            blocks: messageData.blocks,
             semanticId: effectiveSemanticId,
         };
 
@@ -379,29 +360,10 @@ export class ConversationStore {
             conversationId: id,
             messageId,
             contentLength: messageData.content.length,
-            hasToolCall: !!messageData.toolCall,
-            hasToolResult: !!messageData.toolResult,
+            hasBlocks: !!messageData.blocks?.length,
         }, 'Appended assistant response');
 
         return message;
-    }
-
-    /**
-     * Append tool calls as assistant messages (currently unused)
-     */
-    appendAssistantToolCalls(
-        id: ConversationId,
-        toolCalls: Array<{ name: string; arguments: string; call_id: string }>
-    ): void {
-        for (const tc of toolCalls) {
-            const content = JSON.stringify({
-                type: 'function_call',
-                call_id: tc.call_id,
-                name: tc.name,
-                arguments: tc.arguments,
-            });
-            this.appendAssistantResponse(id, { content }, 'succeeded', tc.call_id);
-        }
     }
 
     /**
@@ -441,7 +403,6 @@ export class ConversationStore {
         // Request push to server
         this.store.dispatch(pushMessageRequest({ id: messageId }));
 
-        this.notifyDirty();
 
         const message: Message = {
             id: messageId,
@@ -483,19 +444,6 @@ export class ConversationStore {
     }
 
     /**
-     * Mark conversation as generating
-     */
-    setGenerating(id: ConversationId): void {
-        if (this.has(id)) {
-            this.store.dispatch(updateConversationStatus({
-                id,
-                status: ConversationStatus.GENERATING,
-            }));
-            this.store.dispatch(pushConversationRequest({ id }));
-        }
-    }
-
-    /**
      * Update conversation title
      */
     setTitle(id: ConversationId, title: string): void {
@@ -507,7 +455,6 @@ export class ConversationStore {
                 persist: true,
             }));
             this.store.dispatch(pushConversationRequest({ id }));
-            this.notifyDirty();
         }
         logger.debug({ conversationId: id }, 'Set title');
     }
@@ -569,52 +516,7 @@ export class ConversationStore {
         }
     }
 
-    /**
-     * Get all dirty conversations
-     *
-     * Note: Upstream uses IDB dirty flag, not in-memory. This returns empty
-     * since sagas handle sync automatically.
-     */
-    getDirty(): ConversationState[] {
-        // Upstream sagas handle dirty tracking via IDB
-        // Return empty array since we don't track dirty in-memory
-        return [];
-    }
-
-    /**
-     * Mark a conversation as synced (no-op for upstream)
-     */
-    markSynced(_id: ConversationId): void {
-        // Upstream sagas handle sync marking via IDB
-    }
-
-    /**
-     * Mark a conversation as dirty
-     */
-    markDirtyById(_id: ConversationId): void {
-        // Upstream sagas handle dirty tracking via IDB
-        this.notifyDirty();
-    }
-
-    /**
-     * Get store statistics
-     */
-    getStats(): {
-        total: number;
-        dirty: number;
-    } {
-        const state = this.store.getState();
-        return {
-            total: Object.keys(state.conversations).length,
-            dirty: 0, // Upstream uses IDB dirty flag
-        };
-    }
-
     // Private methods
-
-    private notifyDirty(): void {
-        this.onDirtyCallback?.();
-    }
 
     private generateAutoTitle(turns: Turn[]): string {
         const firstUserTurn = turns.find(t => t.role === Role.User);

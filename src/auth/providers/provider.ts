@@ -296,14 +296,9 @@ export class AuthProvider implements IAuthProvider {
     // === Persistence warnings ===
 
     /**
-     * Get warning if ConversationStore is configured but will fall back to FallbackStore.
-     * Returns null if ConversationStore will work or if FallbackStore is explicitly configured.
+     * Get warning if ConversationStore is unavailable
      */
     getConversationStoreWarning(): string | null {
-        const config = getConversationsConfig();
-        if (config.useFallbackStore) {
-            return null; // Fallback explicitly configured
-        }
 
         if (!this.supportsPersistence()) {
             return 'ConversationStore disabled: no encryption keys. Using FallbackStore. Conversations will not be persisted.  Re-authenticate to enable.';

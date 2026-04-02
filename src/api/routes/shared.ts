@@ -1,46 +1,11 @@
 import { randomUUID } from 'crypto';
 import type { Response } from 'express';
-import { getCustomToolsConfig } from '../../app/config.js';
-import { getMetrics } from '../../app/metrics';
-import type { CommandContext } from '../../app/commands.js';
-import type { EndpointDependencies, OpenAITool, OpenAIToolCall } from '../types.js';
+import { getServerConfig } from '../../app/config.js';
+import type { EndpointDependencies, OpenAITool, RequestContext } from '../types.js';
 import type { ConversationId } from '../../conversations/types.js';
-import type { ChatResult, AssistantMessageData } from '../../lumo-client/index.js';
 
 // Re-export for convenience
 export { tryExecuteCommand, type CommandResult } from '../../app/commands.js';
-
-// ── Tool call type for persistence ─────────────────────────────────
-
-/** Tool call with call_id for persistence and response building. */
-export interface ToolCallForPersistence {
-  name: string;
-  arguments: string;
-  call_id: string;
-}
-
-/**
- * Map emitted tool calls to format needed for persistence.
- * Returns undefined if no tool calls were emitted.
- */
-export function mapToolCallsForPersistence(
-  toolCallsEmitted: OpenAIToolCall[]
-): ToolCallForPersistence[] | undefined {
-  if (toolCallsEmitted.length === 0) return undefined;
-  return toolCallsEmitted.map(tc => ({
-    name: tc.function.name,
-    arguments: tc.function.arguments,
-    call_id: tc.id,
-  }));
-}
-
-// ── Request context ────────────────────────────────────────────────
-
-export interface RequestContext {
-  hasCustomTools: boolean;
-  commandContext: CommandContext;
-  requestTitle: boolean;
-}
 
 /**
  * Build the common request context shared by all handler variants.
@@ -51,9 +16,17 @@ export function buildRequestContext(
   conversationId: ConversationId | undefined,
   tools?: OpenAITool[]
 ): RequestContext {
-  const serverToolsConfig = getCustomToolsConfig();
+
+  const { tools: {
+    server: { enabled: serverToolsEnabled },
+    client: { enabled: clientToolsEnabled }
+  } } = getServerConfig();
+
+  // Enable tool detection if either client tools or server tools are active
+  const hasClientTools = clientToolsEnabled && !!tools && tools?.length > 0;
+
   return {
-    hasCustomTools: serverToolsConfig.enabled && !!tools && tools.length > 0,
+    hasCustomTools: hasClientTools || serverToolsEnabled,
     commandContext: {
       syncInitialized: deps.syncInitialized ?? false,
       conversationId,
@@ -64,46 +37,6 @@ export function buildRequestContext(
       ? deps.conversationStore?.get(conversationId)?.title === 'New Conversation'
       : false,
   };
-}
-
-// ── Persistence helpers ────────────────────────────────────────────
-
-/** Persist title if Lumo generated one. No-op for stateless requests. */
-export function persistTitle(result: ChatResult, deps: EndpointDependencies, conversationId: ConversationId | undefined): void {
-  if (!conversationId || !result.title || !deps.conversationStore) return;
-  deps.conversationStore.setTitle(conversationId, result.title);  // Already processed by LumoClient
-}
-
-/**
- * Persist an assistant turn.
- *
- * When custom tool calls are present, we skip persistence entirely. The client (e.g. Home Assistant)
- * will send the assistant message back with the tool output in the next request, and
- * appendMessages() will handle it via ID-based deduplication. This avoids order mismatches
- * between what we persist and what the client sends back.
- *
- * Native tool calls (web_search, weather, etc.) are handled differently - they are executed
- * server-side by Lumo, so we persist them immediately with the tool call/result data.
- * The message data (including JSON-serialized tool call) comes from ChatResult.message.
- */
-export function persistAssistantTurn(
-  deps: EndpointDependencies,
-  conversationId: ConversationId | undefined,
-  message: AssistantMessageData,
-  customToolCalls?: Array<{ name: string; arguments: string; call_id: string }>
-): void {
-  if (conversationId && deps.conversationStore) {
-    // Custom tool calls: skip persistence (client will send back)
-    if (customToolCalls && customToolCalls.length > 0) {
-      return;
-    }
-
-    // Persist message (with or without native tool data)
-    deps.conversationStore.appendAssistantResponse(conversationId, message);
-  } else {
-    // Stateless: track metric only (no persistence)
-    getMetrics()?.messagesTotal.inc({ role: 'assistant' });
-  }
 }
 
 // ── ID generation ─────────────────────────────────────────────────

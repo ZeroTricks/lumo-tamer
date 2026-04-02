@@ -172,6 +172,41 @@ export class ResponseEventEmitter {
     });
   }
 
+  /**
+   * Emit events for a server-executed tool call and its result.
+   * Unlike client tool calls, these are emitted with status: 'completed' immediately
+   * and include the function_call_output with the result.
+   */
+  emitServerToolExecution(
+    callId: string,
+    toolName: string,
+    args: string,
+    output: string,
+    outputIndex: number
+  ): { nextOutputIndex: number } {
+    const functionCallItem = {
+      type: 'function_call',
+      id: `fc-${randomUUID()}`,
+      call_id: callId,
+      status: 'completed',
+      name: toolName,
+      arguments: args,
+    };
+    this.emitOutputItemAdded(functionCallItem, outputIndex);
+    this.emitOutputItemDone(functionCallItem, outputIndex);
+
+    const outputItem = {
+      type: 'function_call_output',
+      id: `item-${randomUUID()}`,
+      call_id: callId,
+      output,
+    };
+    this.emitOutputItemAdded(outputItem, outputIndex + 1);
+    this.emitOutputItemDone(outputItem, outputIndex + 1);
+
+    return { nextOutputIndex: outputIndex + 2 };
+  }
+
   emitResponseCompleted(response: OpenAIResponse): void {
     this.emit({
       type: 'response.completed',
