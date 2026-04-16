@@ -10,7 +10,7 @@ import { logger } from './logger.js';
 import { resolveProjectPath } from './paths.js';
 import { LumoClient } from '../lumo-client/index.js';
 import { createAuthProvider, AuthManager, type AuthProvider, type ProtonApi } from '../auth/index.js';
-import { getConversationStore, getFallbackStore, setConversationStore, type ConversationStore, initializeSync, initializeConversationStore, FallbackStore } from '../conversations/index.js';
+import { getConversationStore, setConversationStore, initializeConversationStore, type ConversationStore } from '../conversations/index.js';
 import { createMockProtonApi } from '../mock/mock-api.js';
 import { installFetchAdapter } from '../shims/fetch-adapter.js';
 import { suppressFullApiErrors } from '../shims/console.js';
@@ -34,7 +34,6 @@ export class Application {
     } else {
       await app.initializeAuth();
       await app.initializeStore();
-      await app.initializeSync();
     }
     return app;
   }
@@ -43,25 +42,22 @@ export class Application {
    * Initialize mock mode - bypass auth, use simulated API responses
    */
   private async initializeMock(): Promise<void> {
-    const conversationsConfig = getConversationsConfig();
+    // Install mock fetch adapter BEFORE store init (sagas make API calls)
+    const { installMockFetchAdapter } = await import('../shims/fetch-adapter.js');
+    this.cleanupFetchAdapter = installMockFetchAdapter();
 
-    if (!conversationsConfig.useFallbackStore) {
-      // Use primary store with fake-indexeddb
-      const { initializeMockStore } = await import('../mock/mock-store.js');
-      const result = await initializeMockStore();
-      setConversationStore(result.conversationStore);
-    } else {
-      // Use fallback in-memory store
-      getFallbackStore();
-    }
+    // Suppress API errors in logs (same as local-only mode)
+    suppressFullApiErrors();
+
+    // Use primary store with fake-indexeddb for mock mode
+    const { initializeMockStore } = await import('../mock/mock-store.js');
+    const result = await initializeMockStore();
+    setConversationStore(result.conversationStore);
 
     this.protonApi = createMockProtonApi(mockConfig.scenario);
     this.lumoClient = new LumoClient(this.protonApi, { enableEncryption: false });
 
-    logger.info({
-      scenario: mockConfig.scenario,
-      useFallbackStore: conversationsConfig.useFallbackStore,
-    }, 'Mock mode active - auth and sync bypassed');
+    logger.info({ scenario: mockConfig.scenario }, 'Mock mode active - auth and sync bypassed');
   }
 
   /**
@@ -114,20 +110,9 @@ export class Application {
       authProvider: this.authProvider,
       conversationsConfig,
     });
-  }
 
-  /**
-   * Initialize sync service for conversation persistence
-   */
-  private async initializeSync(): Promise<void> {
-    const conversationsConfig = getConversationsConfig();
-    const result = await initializeSync({
-      protonApi: this.protonApi,
-      uid: this.uid,
-      authProvider: this.authProvider,
-      conversationsConfig,
-    });
-    this.syncInitialized = result.initialized;
+    // Sync is enabled if config allows and auth provider supports it
+    this.syncInitialized = conversationsConfig.enableSync && !this.authProvider.getSyncWarning();
   }
 
   // AppContext implementation
@@ -136,7 +121,7 @@ export class Application {
     return this.lumoClient;
   }
 
-  getConversationStore(): ConversationStore | FallbackStore {
+  getConversationStore(): ConversationStore | undefined {
     return getConversationStore();
   }
 

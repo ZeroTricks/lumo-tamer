@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestServer, parseSSEEvents, type TestServer } from '../helpers/test-server.js';
-import { getCustomToolsConfig } from '../../src/app/config.js';
+import { getServerConfig } from '../../src/app/config.js';
 
 /** POST /v1/responses with JSON body, returning the raw Response. */
 function postResponses(ts: TestServer, body: Record<string, unknown>): Promise<Response> {
@@ -188,11 +188,11 @@ describe('/v1/responses', () => {
 
     beforeAll(async () => {
       ts = await createTestServer('misroutedToolCall', { metrics: true });
-      // Enable custom tool detection so the bounce response JSON is parsed
-      (getCustomToolsConfig() as any).enabled = true;
+      // Enable client tool detection so the bounce response JSON is parsed
+      getServerConfig().tools.client.enabled = true;
     });
     afterAll(async () => {
-      (getCustomToolsConfig() as any).enabled = false;
+      getServerConfig().tools.client.enabled = false;
       await ts.close();
     });
 
@@ -240,6 +240,55 @@ describe('/v1/responses', () => {
       expect(metricsOutput).toContain('type="custom"');
       expect(metricsOutput).toContain('status="misrouted"');
       expect(metricsOutput).toContain('tool_name="GetLiveContext"');
+    });
+  });
+
+  describe('serverToolCall scenario', () => {
+    let ts: TestServer;
+    let originalEnableServerTools: boolean;
+
+    beforeAll(async () => {
+      // Enable ServerTools for this test
+      originalEnableServerTools = (getServerConfig() as any).tools.server.enabled;
+      (getServerConfig() as any).tools.server.enabled = true;
+
+      ts = await createTestServer('serverToolCall', { serverTools: true });
+    });
+    afterAll(async () => {
+      (getServerConfig() as any).tools.server.enabled = originalEnableServerTools;
+      await ts.close();
+    });
+
+    it('executes search ServerTool and returns final response', async () => {
+      const res = await postResponses(ts, { input: 'Search for weather', stream: false });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.status).toBe('completed');
+
+      // Final response should contain text from the second Lumo call (after tool execution)
+      const messageItem = body.output.find((o: any) => o.type === 'message');
+      expect(messageItem).toBeDefined();
+      expect(messageItem.content[0].text).toContain('search results');
+    });
+
+    it('streaming: executes search ServerTool and streams final response', async () => {
+      const res = await postResponses(ts, { input: 'Search for weather', stream: true });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      const events = parseSSEEvents(text);
+
+      // Should have response lifecycle events
+      const eventTypes = events.map(e => (e.data as any)?.type).filter(Boolean);
+      expect(eventTypes).toContain('response.created');
+      expect(eventTypes).toContain('response.completed');
+
+      // Final text should be from second Lumo response (after tool execution)
+      const doneEvent = events.find(e => (e.data as any)?.type === 'response.output_text.done');
+      expect(doneEvent).toBeDefined();
+      expect((doneEvent!.data as any).text).toContain('search results');
     });
   });
 

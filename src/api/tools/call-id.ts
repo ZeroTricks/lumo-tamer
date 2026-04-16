@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { getCustomToolsConfig } from '../../app/config.js';
+import { getCustomToolPrefix } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
 import { getMetrics } from '../../app/metrics.js';
 
@@ -52,7 +52,7 @@ export function trackCustomToolCompletion(callId: string): void {
 
   logger.info({ toolName, call_id: callId }, 'Custom tool call completed');
   getMetrics()?.toolCallsTotal.inc({
-    type: 'custom',
+    type: 'client',
     status: 'completed',
     tool_name: toolName,
   });
@@ -70,7 +70,7 @@ export function addToolNameToFunctionOutput(content: string): string {
     if (parsed.type === 'function_call_output' && parsed.call_id) {
       const toolName = extractToolNameFromCallId(String(parsed.call_id));
       if (toolName) {
-        const prefix = getCustomToolsConfig().prefix;
+        const prefix = getCustomToolPrefix();
         const prefixedToolName = prefix ? `${prefix}${toolName}` : toolName;
         return JSON.stringify({
           ...parsed,

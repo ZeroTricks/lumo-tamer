@@ -118,6 +118,8 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       if (conversationId && deps.conversationStore && turns.length > 0) {
         deps.conversationStore.appendMessages(conversationId, turns);
         logger.debug({ conversationId, messageCount: turns.length }, 'Persisted conversation messages');
+      } else if (conversationId && !deps.conversationStore) {
+        logger.warn({ conversationId }, 'Stateful request but no conversation store available');
       } else if (!conversationId) {
         // Stateless request - track +1 user message (not deduplicated)
         getMetrics()?.messagesTotal.inc({ role: 'user' });

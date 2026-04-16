@@ -9,7 +9,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { applyReadBlock, isBinaryFile, getFileSize } from '../../src/cli/local-actions/file-reader.js';
-import { initConfig, getLocalActionsConfig } from '../../src/app/config.js';
+import { initConfig, getLocalToolsConfig } from '../../src/app/config.js';
 import type { CodeBlock } from '../../src/cli/local-actions/types.js';
 
 // CLI tests need CLI mode config
@@ -108,15 +108,15 @@ describe('applyReadBlock', () => {
     let originalMaxSize: string | number;
 
     beforeAll(() => {
-      originalMaxSize = getLocalActionsConfig().fileReads.maxFileSize;
+      originalMaxSize = getLocalToolsConfig().fileReads.maxFileSize;
     });
 
     afterAll(() => {
-      (getLocalActionsConfig().fileReads as any).maxFileSize = originalMaxSize;
+      (getLocalToolsConfig().fileReads as any).maxFileSize = originalMaxSize;
     });
 
     it('rejects a file exceeding maxFileSize', async () => {
-      (getLocalActionsConfig().fileReads as any).maxFileSize = '1kb';
+      (getLocalToolsConfig().fileReads as any).maxFileSize = '1kb';
       const result = await applyReadBlock(readBlock(largeFile));
       expect(result.success).toBe(false);
       expect(result.output).toContain('File too large');
@@ -124,7 +124,7 @@ describe('applyReadBlock', () => {
     });
 
     it('accepts a file within the size limit', async () => {
-      (getLocalActionsConfig().fileReads as any).maxFileSize = '1kb';
+      (getLocalToolsConfig().fileReads as any).maxFileSize = '1kb';
       const result = await applyReadBlock(readBlock(textFile)); // 14 bytes
       expect(result.success).toBe(true);
     });

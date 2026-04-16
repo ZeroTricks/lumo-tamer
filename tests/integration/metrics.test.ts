@@ -11,7 +11,6 @@ import { createHealthRouter } from '../../src/api/routes/health.js';
 import { RequestQueue } from '../../src/api/queue.js';
 import { LumoClient } from '../../src/lumo-client/index.js';
 import { createMockProtonApi } from '../../src/mock/mock-api.js';
-import { FallbackStore } from '../../src/conversations/fallback/store.js';
 import { MetricsService, setMetrics } from '../../src/app/metrics.js';
 import { setupMetricsMiddleware } from '../../src/api/middleware.js';
 import { createMetricsRouter } from '../../src/api/routes/metrics.js';
@@ -27,13 +26,12 @@ interface TestServer {
 async function createTestServerWithMetrics(): Promise<TestServer> {
   const mockApi = createMockProtonApi('success');
   const lumoClient = new LumoClient(mockApi, { enableEncryption: false });
-  const store = new FallbackStore();
   const queue = new RequestQueue(1);
 
   const deps: EndpointDependencies = {
     queue,
     lumoClient,
-    conversationStore: store,
+    conversationStore: undefined,
     syncInitialized: false,
   };
 

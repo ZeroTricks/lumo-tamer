@@ -25,9 +25,9 @@ const logConfigSchema = z.object({
 
 
 const conversationsConfigSchema = z.object({
+  enableStore: z.boolean(),
   deriveIdFromUser: z.boolean(),
   databasePath: z.string(),
-  useFallbackStore: z.boolean(),
   enableSync: z.boolean(),
   projectName: z.string().min(1),
 });
@@ -38,10 +38,12 @@ const replacePatternSchema = z.object({
   replacement: z.string().optional(),
 });
 
-// Server-specific custom tools config
-const customToolsConfigSchema = z.object({
-  enabled: z.boolean(),
+// Server tools config (native, custom prefix, server, client)
+const serverToolsConfigSchema = z.object({
+  native: z.object({ enabled: z.boolean() }),
   prefix: z.string(),
+  server: z.object({ enabled: z.boolean() }),
+  client: z.object({ enabled: z.boolean() }),
 });
 
 // Metrics config
@@ -64,7 +66,7 @@ const injectIntoSchema = z.enum(['first', 'last']);
 const cliInstructionsConfigSchema = z.object({
   injectInto: injectIntoSchema,
   template: z.string(),
-  forLocalActions: z.string(),
+  forLocalTools: z.string(),
   forToolBounce: z.string(),
 });
 const serverInstructionsConfigSchema = z.object({
@@ -76,14 +78,20 @@ const serverInstructionsConfigSchema = z.object({
   replacePatterns: z.array(replacePatternSchema),
 });
 
-// CLI local actions config
-const localActionsConfigSchema = z.object({
+// CLI local tools config
+const localToolsConfigSchema = z.object({
   enabled: z.boolean(),
   fileReads: z.object({
     enabled: z.boolean(),
     maxFileSize: byteSizeSchema,
   }),
   executors: z.record(z.string(), z.array(z.string())),
+});
+
+// CLI tools config (native, local)
+const cliToolsConfigSchema = z.object({
+  native: z.object({ enabled: z.boolean() }),
+  local: localToolsConfigSchema,
 });
 
 export const authMethodSchema = z.enum(['login', 'browser', 'rclone']);
@@ -119,8 +127,7 @@ const serverMergedConfigSchema = z.object({
   log: logConfigSchema,
   conversations: conversationsConfigSchema,
   commands: z.object({ enabled: z.boolean(), wakeword: z.string() }),
-  enableWebSearch: z.boolean(),
-  customTools: customToolsConfigSchema,
+  tools: serverToolsConfigSchema,
   instructions: serverInstructionsConfigSchema,
   metrics: metricsConfigSchema,
   bodyLimit: byteSizeSchema,
@@ -135,8 +142,7 @@ const cliMergedConfigSchema = z.object({
   log: logConfigSchema,
   conversations: conversationsConfigSchema,
   commands: z.object({ enabled: z.boolean(), wakeword: z.string() }),
-  enableWebSearch: z.boolean(),
-  localActions: localActionsConfigSchema,
+  tools: cliToolsConfigSchema,
   instructions: cliInstructionsConfigSchema,
 });
 
@@ -224,7 +230,7 @@ function getConfig(): MergedConfig {
 export const getLogConfig = () => getConfig().log;
 export const getConversationsConfig = () => getConfig().conversations;
 export const getCommandsConfig = () => getConfig().commands;
-export const getEnableWebSearch = () => getConfig().enableWebSearch;
+export const getNativeToolsEnabled = () => getConfig().tools.native.enabled;
 
 // Server-specific getters
 export function getServerConfig(): ServerMergedConfig {
@@ -232,9 +238,9 @@ export function getServerConfig(): ServerMergedConfig {
   return config as ServerMergedConfig;
 }
 
-export function getCustomToolsConfig() {
+export function getCustomToolPrefix() {
   const cfg = getServerConfig();
-  return cfg.customTools;
+  return cfg.tools.prefix;
 }
 
 export function getServerInstructionsConfig() {
@@ -253,9 +259,9 @@ export function getCliConfig(): CliMergedConfig {
   return config as CliMergedConfig;
 }
 
-export function getLocalActionsConfig() {
+export function getLocalToolsConfig() {
   const cfg = getCliConfig();
-  return cfg.localActions;
+  return cfg.tools.local;
 }
 
 export function getCliInstructionsConfig() {
@@ -287,7 +293,7 @@ export const authConfig = ((): z.infer<typeof authConfigSchema> => {
 // Mock config (eagerly loaded, needed before initConfig to decide auth vs mock)
 const mockConfigSchema = z.object({
   enabled: z.boolean(),
-  scenario: z.enum(['success', 'error', 'timeout', 'rejected', 'toolCall', 'misroutedToolCall', 'weeklyLimit', 'cycle']),
+  scenario: z.enum(['success', 'error', 'timeout', 'rejected', 'toolCall', 'misroutedToolCall', 'serverToolCall', 'weeklyLimit', 'cycle']),
 });
 
 export const mockConfig = ((): z.infer<typeof mockConfigSchema> => {

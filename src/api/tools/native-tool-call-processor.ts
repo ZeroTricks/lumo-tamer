@@ -8,16 +8,19 @@
  *
  * This processor:
  * - Parses streaming JSON via JsonBraceTracker
+ * - Builds ContentBlock[] for interleaved tool calls/results
  * - Detects misrouted custom tools (custom tools Lumo mistakenly routed through native pipeline)
  * - Tracks success/failure metrics
  */
 
 import { JsonBraceTracker } from './json-brace-tracker.js';
 import { stripToolPrefix } from './prefix.js';
-import { getCustomToolsConfig } from '../../app/config.js';
+import { getConfigMode, getCustomToolPrefix } from '../../app/config.js';
 import { getMetrics } from '../../app/metrics.js';
 import { logger } from '../../app/logger.js';
 import type { ParsedToolCall } from './types.js';
+import type { ContentBlock } from '@lumo/types.js';
+import { setToolCallInBlocks, setToolResultInBlocks } from '@lumo/messageHelpers.js';
 
 const KNOWN_NATIVE_TOOLS = new Set([
   'proton_info', 'web_search', 'weather', 'stock', 'cryptocurrency'
@@ -74,9 +77,10 @@ function isErrorResult(json: string): boolean {
 // ── Exported types and class ─────────────────────────────────────────
 
 export interface NativeToolCallResult {
+  /** ContentBlocks for tool calls/results (may be empty) */
+  blocks: ContentBlock[];
+  /** First tool call detected (for bounce handling) */
   toolCall: ParsedToolCall | undefined;
-  /** Raw tool_result JSON string from SSE (if any) */
-  toolResult: string | undefined;
   failed: boolean;
   /** True if a misrouted custom tool was detected */
   misrouted: boolean;
@@ -84,13 +88,13 @@ export interface NativeToolCallResult {
 
 /**
  * Processes native tool calls from Lumo's SSE tool_call/tool_result targets.
- * Detects misrouted custom tools and tracks metrics.
+ * Builds ContentBlocks and detects misrouted custom tools.
  */
 export class NativeToolCallProcessor {
   private toolCallTracker = new JsonBraceTracker();
   private toolResultTracker = new JsonBraceTracker();
+  private blocks: ContentBlock[] = [];
   private firstToolCall: ParsedToolCall | null = null;
-  private firstToolResult: string | null = null;
   private failed = false;
   private _misrouted = false;
 
@@ -105,27 +109,28 @@ export class NativeToolCallProcessor {
       const toolCall = parseToolCallJson(json);
       if (!toolCall) continue;
 
-      // Save first for result (used by bounce logic)
+      // Save first for bounce logic
       if (!this.firstToolCall) {
         this.firstToolCall = toolCall;
       }
 
       if (this.isMisrouted(toolCall)) {
-        const strippedName = stripToolPrefix(toolCall.name, getCustomToolsConfig().prefix);
+        // Only strip prefix in server mode (CLI has no tool prefix concept)
+        const prefix = getConfigMode() === 'server' ? getCustomToolPrefix() : '';
+        const strippedName = stripToolPrefix(toolCall.name, prefix);
         getMetrics()?.toolCallsTotal.inc({
           type: 'custom', status: 'misrouted', tool_name: strippedName
         });
         logger.debug({ tool: toolCall.name, isBounce: this.isBounce }, 'Misrouted tool call detected');
 
         // Only abort on first misroute in non-bounce mode.
-        // Note: This means we may undercount if Lumo queues multiple misrouted calls
-        // in one response. The bounce response will count any subsequent retries.
         if (!this.isBounce && toolCall === this.firstToolCall) {
           this._misrouted = true;
           return true;
         }
       } else {
-        // Native tool - no success/failed distinction (unreliable)
+        // Native tool - add to blocks
+        this.blocks = setToolCallInBlocks(this.blocks, json);
         getMetrics()?.toolCallsTotal.inc({
           type: 'native', status: 'detected', tool_name: toolCall.name
         });
@@ -139,10 +144,9 @@ export class NativeToolCallProcessor {
   feedToolResult(content: string): void {
     for (const json of this.toolResultTracker.feed(content)) {
       logger.debug({ raw: json }, 'Native SSE tool_result');
-      // Store first tool result for persistence
-      if (!this.firstToolResult) {
-        this.firstToolResult = json;
-      }
+      // Add to blocks
+      this.blocks = setToolResultInBlocks(this.blocks, json);
+      // Track failure status
       if (this.firstToolCall && !this.failed && isErrorResult(json)) {
         this.failed = true;
       }
@@ -157,8 +161,8 @@ export class NativeToolCallProcessor {
   /** Get the result after stream completes. */
   getResult(): NativeToolCallResult {
     return {
+      blocks: this.blocks,
       toolCall: this.firstToolCall ?? undefined,
-      toolResult: this.firstToolResult ?? undefined,
       failed: this.failed,
       misrouted: this._misrouted,
     };

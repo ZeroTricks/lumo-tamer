@@ -27,7 +27,7 @@ export class ChatCompletionEventEmitter {
     this.res.write(`data: ${JSON.stringify(chunk)}\n\n`);
   }
 
-  emitToolCallDelta(callId: string, name: string, args: Record<string, unknown>): void {
+  emitToolCallDelta(callId: string, name: string, args: string): void {
     const chunk: OpenAIStreamChunk = {
       id: this.id,
       object: 'chat.completion.chunk',
@@ -40,13 +40,40 @@ export class ChatCompletionEventEmitter {
             index: this.toolCallIndex++,
             id: callId,
             type: 'function',
-            function: { name, arguments: JSON.stringify(args) },
+            function: { name, arguments: args },
           }],
         },
         finish_reason: null,
       }],
     };
     this.res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+  }
+
+  /**
+   * Emit events for a server-executed tool call and its result.
+   * Emits both the tool_call and a tool result message so clients
+   * see the complete execution cycle.
+   */
+  emitServerToolExecution(callId: string, toolName: string, args: string, output: string): void {
+    this.emitToolCallDelta(callId, toolName, args);
+
+    // Emit tool result message
+    const toolResultChunk = {
+      id: this.id,
+      object: 'chat.completion.chunk',
+      created: this.created,
+      model: this.model,
+      choices: [{
+        index: 0,
+        delta: {
+          role: 'tool',
+          tool_call_id: callId,
+          content: output,
+        },
+        finish_reason: null,
+      }],
+    };
+    this.res.write(`data: ${JSON.stringify(toolResultChunk)}\n\n`);
   }
 
   emitDone(toolCalls: OpenAIToolCall[] | undefined): void {

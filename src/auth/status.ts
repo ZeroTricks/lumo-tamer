@@ -43,12 +43,10 @@ export function printSummary(status: AuthProviderStatus, provider: AuthProvider)
 
         // ConversationStore status
         const storeWarning = provider.getConversationStoreWarning();
-        if (!conversationsConfig.useFallbackStore) {
-            if (storeWarning) {
-                print('ConversationStore: \x1b[33mdisabled\x1b[0m');
-            } else {
-                print('ConversationStore: \x1b[32menabled\x1b[0m');
-            }
+        if (storeWarning) {
+            print('ConversationStore: \x1b[33mdisabled\x1b[0m');
+        } else {
+            print('ConversationStore: \x1b[32menabled\x1b[0m');
         }
 
         // Sync status

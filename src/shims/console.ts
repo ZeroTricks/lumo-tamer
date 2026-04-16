@@ -32,6 +32,12 @@ const suppressLogs = [
 ];
 const suppressLogRegex = new RegExp(`^(?:${suppressLogs.join('|')})`);
 
+const suppressErrors = [
+    'softDeleteSpaceCascade: [a-f0-9-]+ not found',
+];
+
+const suppressErrorRegex = new RegExp(`^(?:${suppressErrors.join('|')})`);
+
 const suppressApiErrors = [
     // Sync-disabled errors (login/rclone auth without lumo scope)
     'list spaces failure',
@@ -93,6 +99,7 @@ function createLogFunction(logger: Logger) {
             ee.shift()
             if (    (levelOrLog == 'log' && suppressLogRegex.test(first))
                 ||  (fullApiErrorsSuppressed && levelOrLog == 'error' && suppressApiErrorRegex.test(first))
+                ||  ((levelOrLog == 'error' || levelOrLog == 'warn') && suppressErrorRegex.test(first))
             )
                 level = 'trace';
             logger[level](minimal(ee), first);

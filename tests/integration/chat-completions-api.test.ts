@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestServer, parseSSEEvents, type TestServer } from '../helpers/test-server.js';
-import { getCustomToolsConfig } from '../../src/app/config.js';
+import { getServerConfig } from '../../src/app/config.js';
 
 /** POST /v1/chat/completions with JSON body, returning the raw Response. */
 function postChat(ts: TestServer, body: Record<string, unknown>): Promise<Response> {
@@ -139,10 +139,10 @@ describe('/v1/chat/completions', () => {
 
     beforeAll(async () => {
       nativeTs = await createTestServer('misroutedToolCall');
-      (getCustomToolsConfig() as any).enabled = true;
+      getServerConfig().tools.client.enabled = true;
     });
     afterAll(async () => {
-      (getCustomToolsConfig() as any).enabled = false;
+      getServerConfig().tools.client.enabled = false;
       await nativeTs.close();
     });
 

@@ -4,17 +4,26 @@
  * Tests ID generators, accumulating tool processor, and persistence helpers.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   generateResponseId,
   generateItemId,
   generateFunctionCallId,
   generateChatCompletionId,
-  persistAssistantTurn,
 } from '../../src/api/routes/shared.js';
+import {
+  registerServerTool,
+  clearServerTools,
+  type ServerToolContext,
+} from '../../src/api/tools/server-tools/registry.js';
+import {
+  partitionToolCalls,
+  executeServerTools,
+  buildContinuationTurns,
+} from '../../src/api/tools/server-tools/executor.js';
+import { Role } from '../../src/lumo-client/types.js';
 import { generateCallId, extractToolNameFromCallId } from '../../src/api/tools/call-id.js';
 import { createAccumulatingToolProcessor } from '../../src/api/tools/streaming-processor.js';
-import type { EndpointDependencies } from '../../src/api/types.js';
 
 describe('ID generators', () => {
   it('generateResponseId returns resp-{uuid} format', () => {
@@ -92,114 +101,164 @@ describe('createAccumulatingToolProcessor', () => {
   });
 });
 
-describe('persistAssistantTurn', () => {
-  interface PersistedMessage {
-    content: string;
-    toolCall?: string;
-    toolResult?: string;
-  }
-
-  function createMockDeps(): EndpointDependencies & {
-    persistedMessages: PersistedMessage[];
-  } {
-    const persistedMessages: PersistedMessage[] = [];
-    return {
-      persistedMessages,
-      queue: {} as any,
-      lumoClient: {} as any,
-      conversationStore: {
-        appendAssistantResponse: vi.fn(
-          (_id: string, messageData: { content: string; toolCall?: string; toolResult?: string }) => {
-            persistedMessages.push(messageData);
-          }
-        ),
-      } as any,
-    };
-  }
-
-  it('persists content when no tool calls', () => {
-    const deps = createMockDeps();
-    persistAssistantTurn(deps, 'conv-123', { content: 'Hello world' }, undefined);
-
-    expect(deps.persistedMessages).toHaveLength(1);
-    expect(deps.persistedMessages[0].content).toBe('Hello world');
-    expect(deps.persistedMessages[0].toolCall).toBeUndefined();
+describe('partitionToolCalls', () => {
+  beforeEach(() => {
+    clearServerTools();
   });
 
-  it('skips persistence when custom tool calls are present', () => {
-    const deps = createMockDeps();
+  it('returns empty arrays when no tool calls', () => {
+    const result = partitionToolCalls([]);
+    expect(result.serverToolCalls).toEqual([]);
+    expect(result.clientToolCalls).toEqual([]);
+  });
+
+  it('partitions tool calls into server and custom tools', () => {
+    // Register a server tool
+    registerServerTool({
+      definition: {
+        type: 'function',
+        function: { name: 'lumo_search', description: 'Search', parameters: {} },
+      },
+      handler: async () => 'result',
+    });
+
     const toolCalls = [
-      { name: 'search', arguments: '{}', call_id: 'call-123' },
+      { id: 'call-1', type: 'function' as const, function: { name: 'lumo_search', arguments: '{}' } },
+      { id: 'call-2', type: 'function' as const, function: { name: 'custom_tool', arguments: '{}' } },
+      { id: 'call-3', type: 'function' as const, function: { name: 'another_custom', arguments: '{}' } },
     ];
 
-    persistAssistantTurn(deps, 'conv-123', { content: 'Some text' }, toolCalls);
+    const result = partitionToolCalls(toolCalls);
 
-    // Should NOT persist anything - client will send it back
-    expect(deps.persistedMessages).toEqual([]);
+    expect(result.serverToolCalls).toHaveLength(1);
+    expect(result.serverToolCalls[0].function.name).toBe('lumo_search');
+    expect(result.clientToolCalls).toHaveLength(2);
+    expect(result.clientToolCalls.map(tc => tc.function.name)).toEqual(['custom_tool', 'another_custom']);
   });
 
-  it('skips persistence when multiple custom tool calls are present', () => {
-    const deps = createMockDeps();
+  it('returns all as custom when no server tools registered', () => {
     const toolCalls = [
-      { name: 'search', arguments: '{"q":"test"}', call_id: 'call-1' },
-      { name: 'weather', arguments: '{"loc":"Paris"}', call_id: 'call-2' },
+      { id: 'call-1', type: 'function' as const, function: { name: 'tool1', arguments: '{}' } },
+      { id: 'call-2', type: 'function' as const, function: { name: 'tool2', arguments: '{}' } },
     ];
 
-    persistAssistantTurn(deps, 'conv-123', { content: 'Let me check that' }, toolCalls);
+    const result = partitionToolCalls(toolCalls);
 
-    expect(deps.persistedMessages).toEqual([]);
+    expect(result.serverToolCalls).toEqual([]);
+    expect(result.clientToolCalls).toHaveLength(2);
+  });
+});
+
+describe('executeServerTools + buildContinuationTurns', () => {
+  beforeEach(() => {
+    clearServerTools();
   });
 
-  it('does nothing for stateless requests (no conversationId)', () => {
-    const deps = createMockDeps();
-    persistAssistantTurn(deps, undefined, { content: 'Hello' }, undefined);
+  it('builds continuation turns with assistant message and tool results', async () => {
+    // Register a server tool
+    registerServerTool({
+      definition: {
+        type: 'function',
+        function: { name: 'lumo_search', description: 'Search', parameters: {} },
+      },
+      handler: async (args) => `Found results for: ${args.query}`,
+    });
 
-    expect(deps.persistedMessages).toEqual([]);
+    const serverToolCalls = [
+      { id: 'call-1', type: 'function' as const, function: { name: 'lumo_search', arguments: '{"query":"test"}' } },
+    ];
+
+    const context: ServerToolContext = {};
+    const results = await executeServerTools(serverToolCalls, context);
+    const turns = buildContinuationTurns('Assistant text', results, 'user:');
+
+    expect(turns).toHaveLength(2);
+
+    // First turn: assistant message
+    expect(turns[0].role).toBe(Role.Assistant);
+    expect(turns[0].content).toBe('Assistant text');
+
+    // Second turn: user message with tool result
+    expect(turns[1].role).toBe(Role.User);
+    expect(turns[1].content).toContain('function_call_output');
+    expect(turns[1].content).toContain('call-1');
+    expect(turns[1].content).toContain('Found results for: test');
   });
 
-  it('persists native tool call with tool data', () => {
-    const deps = createMockDeps();
-    const message = {
-      content: 'Based on search results...',
-      toolCall: '{"name":"web_search","arguments":{"query":"test search"}}',
-      toolResult: '{"results":[{"title":"Result"}]}',
-    };
+  it('handles multiple server tool calls', async () => {
+    registerServerTool({
+      definition: {
+        type: 'function',
+        function: { name: 'tool_a', description: 'A', parameters: {} },
+      },
+      handler: async () => 'Result A',
+    });
+    registerServerTool({
+      definition: {
+        type: 'function',
+        function: { name: 'tool_b', description: 'B', parameters: {} },
+      },
+      handler: async () => 'Result B',
+    });
 
-    persistAssistantTurn(deps, 'conv-123', message, undefined);
+    const serverToolCalls = [
+      { id: 'call-a', type: 'function' as const, function: { name: 'tool_a', arguments: '{}' } },
+      { id: 'call-b', type: 'function' as const, function: { name: 'tool_b', arguments: '{}' } },
+    ];
 
-    expect(deps.persistedMessages).toHaveLength(1);
-    expect(deps.persistedMessages[0].content).toBe('Based on search results...');
-    expect(deps.persistedMessages[0].toolCall).toBe('{"name":"web_search","arguments":{"query":"test search"}}');
-    expect(deps.persistedMessages[0].toolResult).toBe('{"results":[{"title":"Result"}]}');
+    const results = await executeServerTools(serverToolCalls, {});
+    const turns = buildContinuationTurns('Text', results, 'prefix:');
+
+    // 1 assistant + 2 user turns
+    expect(turns).toHaveLength(3);
+    expect(turns[0].role).toBe(Role.Assistant);
+    expect(turns[1].role).toBe(Role.User);
+    expect(turns[2].role).toBe(Role.User);
+
+    expect(turns[1].content).toContain('Result A');
+    expect(turns[2].content).toContain('Result B');
   });
 
-  it('persists native tool call without tool result', () => {
-    const deps = createMockDeps();
-    const message = {
-      content: 'Weather info...',
-      toolCall: '{"name":"weather","arguments":{"location":{"city":"Paris"}}}',
-      toolResult: undefined,
-    };
+  it('includes error message when tool execution fails', async () => {
+    registerServerTool({
+      definition: {
+        type: 'function',
+        function: { name: 'failing_tool', description: 'Fails', parameters: {} },
+      },
+      handler: async () => {
+        throw new Error('Something went wrong');
+      },
+    });
 
-    persistAssistantTurn(deps, 'conv-123', message, undefined);
+    const serverToolCalls = [
+      { id: 'call-fail', type: 'function' as const, function: { name: 'failing_tool', arguments: '{}' } },
+    ];
 
-    expect(deps.persistedMessages).toHaveLength(1);
-    expect(deps.persistedMessages[0].toolCall).toBe('{"name":"weather","arguments":{"location":{"city":"Paris"}}}');
-    expect(deps.persistedMessages[0].toolResult).toBeUndefined();
+    const results = await executeServerTools(serverToolCalls, {});
+    const turns = buildContinuationTurns('Text', results, 'user:');
+
+    expect(turns).toHaveLength(2);
+    expect(turns[1].content).toContain('Error executing failing_tool');
+    expect(turns[1].content).toContain('Something went wrong');
   });
 
-  it('prioritizes custom tool calls over native tool calls', () => {
-    const deps = createMockDeps();
-    const customToolCalls = [{ name: 'custom_tool', arguments: '{}', call_id: 'call-1' }];
-    const message = {
-      content: 'Text',
-      toolCall: '{"name":"web_search","arguments":{"query":"test"}}',
-      toolResult: '{}',
-    };
+  it('includes prefix in tool_name field', async () => {
+    registerServerTool({
+      definition: {
+        type: 'function',
+        function: { name: 'my_tool', description: 'My tool', parameters: {} },
+      },
+      handler: async () => 'ok',
+    });
 
-    // Both custom and native present - custom takes precedence (skip persistence)
-    persistAssistantTurn(deps, 'conv-123', message, customToolCalls);
+    const serverToolCalls = [
+      { id: 'call-1', type: 'function' as const, function: { name: 'my_tool', arguments: '{}' } },
+    ];
 
-    expect(deps.persistedMessages).toEqual([]);
+    const results = await executeServerTools(serverToolCalls, {});
+    const turns = buildContinuationTurns('Text', results, 'custom:');
+
+    const content = turns[1].content;
+    expect(content).toContain('"tool_name":"custom:my_tool"');
   });
 });

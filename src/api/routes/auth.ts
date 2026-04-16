@@ -9,7 +9,6 @@
 
 import { Router, Request, Response } from 'express';
 import { EndpointDependencies } from '../types.js';
-import { getAutoSyncService } from '../../conversations/index.js';
 import { logger } from '../../app/logger.js';
 
 export function createAuthRouter(deps: EndpointDependencies): Router {
@@ -35,10 +34,6 @@ export function createAuthRouter(deps: EndpointDependencies): Router {
         });
         return;
       }
-
-      // Stop auto-sync if running
-      const autoSync = getAutoSyncService();
-      autoSync?.stop();
 
       // Perform logout (stops refresh timer, revokes session, deletes tokens)
       await deps.authManager.logout();

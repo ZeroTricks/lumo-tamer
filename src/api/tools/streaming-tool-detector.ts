@@ -13,7 +13,7 @@
 import { JsonBraceTracker } from './json-brace-tracker.js';
 import { isToolCallJson, parseToolCallJson, type ParsedToolCall } from './types.js';
 import { logger } from '../../app/logger.js';
-import { getCustomToolsConfig } from '../../app/config.js';
+import { getCustomToolPrefix } from '../../app/config.js';
 import { stripToolPrefix } from './prefix.js';
 import { getMetrics } from '../../app/metrics.js';
 
@@ -224,7 +224,7 @@ export class StreamingToolDetector {
   private extractToolName(content: string): string | null {
     const match = content.match(/"name"\s*:\s*"([^"]+)"/);
     if (match) {
-      const prefix = getCustomToolsConfig().prefix;
+      const prefix = getCustomToolPrefix();
       return stripToolPrefix(match[1], prefix);
     }
     return null;
@@ -250,7 +250,7 @@ export class StreamingToolDetector {
       if (isToolCallJson(parsed)) {
         const normalized = parseToolCallJson(parsed);
         if (!normalized) return null;
-        const prefix = getCustomToolsConfig().prefix;
+        const prefix = getCustomToolPrefix();
         const toolName = stripToolPrefix(normalized.name, prefix);
         logger.info(`Tool call detected: ${content.replace(/\n/g, ' ').substring(0, 100)}...`);
         return {
@@ -260,7 +260,7 @@ export class StreamingToolDetector {
       }
       // JSON parsed but schema invalid - only track if it has a name (looks like attempted tool call)
       if ('name' in parsed && typeof parsed.name === 'string') {
-        const prefix = getCustomToolsConfig().prefix;
+        const prefix = getCustomToolPrefix();
         const toolName = stripToolPrefix(parsed.name, prefix);
         this.trackInvalidToolCall('missing arguments', content, toolName);
       }
