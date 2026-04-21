@@ -1,20 +1,25 @@
 #!/usr/bin/env node
 
 import arg from 'arg';
-import { initConfig, getLogConfig } from './app/config.js';
-import { initLogger, logger } from './app/logger.js';
-import { printAuthHelp, printHelp, printServerHelp } from './app/terminal.js';
 import './shims/uint8array-base64-polyfill.js';
 
-// stopAtPositional ensures --help after a subcommand is passed to the subcommand
 const args = arg({
   '--help': Boolean,
   '-h': '--help',
+  '--home': String,
 }, {
   permissive: true,
-  stopAtPositional: true,
   argv: process.argv.slice(2)
 });
+
+// Initialize home directory BEFORE importing config (which has eager loaders)
+import { initHome } from './app/paths.js';
+initHome(args['--home']);
+
+// Now safe to import config and logger
+const { initConfig, getLogConfig } = await import('./app/config.js');
+const { initLogger, logger } = await import('./app/logger.js');
+const { printAuthHelp, printHelp, printServerHelp } = await import('./app/terminal.js');
 
 const mode = args._[0] === 'server' ? 'server' : 'cli';
 initConfig(mode);

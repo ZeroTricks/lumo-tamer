@@ -26,7 +26,6 @@ const logConfigSchema = z.object({
 
 const conversationsConfigSchema = z.object({
   deriveIdFromUser: z.boolean(),
-  databasePath: z.string(),
   useFallbackStore: z.boolean(),
   enableSync: z.boolean(),
   projectName: z.string().min(1),
@@ -91,7 +90,6 @@ export const authMethodSchema = z.enum(['login', 'browser', 'rclone']);
 const authConfigSchema = z.object({
   method: authMethodSchema,
   vault: z.object({
-    path: z.string(),
     keychain: z.object({
       service: z.string(),
       account: z.string(),

@@ -6,14 +6,13 @@ services:
     ports:
       - "3003:3003"
     volumes:
-      # NOTE: config.yaml must exist before first run (touch config.yaml).
-      # Docker creates a directory if the file doesn't exist, causing errors.
-      - ./config.yaml:/app/config.yaml
-      - ./sessions:/app/sessions
+      # All user files (config.yaml, vault.enc, databases, logs) go in ./data
+      # NOTE: ./data directory must exist before first run (mkdir -p data).
+      - ./data:/data
     secrets:
       - lumo-vault-key
     environment:
-      - NODE_ENV=production
+      - LUMO_HOME=/data
     restart: unless-stopped
 
   # Optional: Browser service
@@ -56,8 +55,8 @@ services:
       - OPENAI_API_BASE_URLS=http://tamer:3003/v1
       - ENABLE_OPENAI_API=true
     volumes:
-      # access app config for API key
-      - ./config.yaml:/app/config.yaml:ro
+      # access app config for API key (from tamer's home directory)
+      - ./data/config.yaml:/app/config.yaml:ro
       - open-webui-data:/app/backend/data
     restart: unless-stopped
 

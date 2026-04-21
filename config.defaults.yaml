@@ -8,8 +8,8 @@ auth:
 
   # Encrypted vault for secure token storage (AES-256-GCM)
   # Key is stored in OS keychain (desktop) or Docker secret (containers)
+  # Vault file is stored at <dataDir>/vault.enc
   vault:
-    path: "sessions/vault.enc"
     keychain:
       service: "lumo-tamer"
       account: "vault-key"
@@ -56,7 +56,7 @@ log:
   level: "info"
   # "stdout" or "file"
   target: "stdout"
-  # Used when target is "file"
+  # Used when target is "file". Relative to LUMO_HOME directory.
   filePath: "lumo-tamer.log"
   # Log user/assistant message content (disabled by default to preserve privacy)
   messageContent: false
@@ -66,8 +66,6 @@ log:
 # - do they still work/make sense with upstream store?
 # - can they still be overwritten for cli/server? (ie. overwriting dbpath doesn't make sense if sync enabled, does it otherwise?)
 conversations:
-  # Path for IndexedDB SQLite files (used when useUpstreamStorage is true)
-  databasePath: "sessions/"
 
   # WORKAROUND for clients without conversation_id support (e.g., Home Assistant).
   # Derives conversation ID from the `user` field in the request.
