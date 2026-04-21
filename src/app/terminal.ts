@@ -27,7 +27,11 @@ Commands:
   server                     Start OpenAI-compatible API server
 
 Options:
+  --home PATH   Override platform-specific home directory
   -h, --help    Show help
+
+Environment:
+  LUMO_HOME     Home directory (overridden by --home)
 
 `);
 }
@@ -57,6 +61,10 @@ tamer server - Start OpenAI-compatible API server
 Usage:
   tamer server               Start the API server
   tamer server --help        Show this help
+
+Options:
+  --home PATH   Override platform-specific home directory
+  -h, --help    Show this help
 
 The server listens on the port configured in config.yaml (default: 3003).
 `);

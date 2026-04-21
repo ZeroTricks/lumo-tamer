@@ -4,6 +4,5 @@ dist
 .git
 .gitignore
 browser-data
-*.log
 .DS_Store
 README.md
