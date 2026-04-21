@@ -118,7 +118,7 @@ tamer server
 
 ### Server
 
-Set an API key in `config.yaml`:
+Set an API key in `config.yaml` (located in your [home directory](#home-directory)):
 ```yaml
 server:
   apiKey: my-super-secret-key
@@ -146,7 +146,7 @@ tamer                   # use Lumo interactively
 tamer "make me laugh"   # one-time prompt
 ```
 
-To give Lumo access to your files and let it execute commands locally, set `cli.tools.local.enabled: true` in `config.yaml` (see [Local Tools](#local-tools-cli)).  
+To give Lumo access to your files and let it execute commands locally, set `cli.tools.local.enabled: true` in your `config.yaml` (see [Local Tools](#local-tools-cli)).  
 You can ask Lumo to give you a demo of its capabilities, or see this [demo chat](docs/demo-cli-chat.md).
 
 ### In-chat commands
@@ -164,7 +164,24 @@ Both CLI and API accept a few in-chat commands. Realistically, you'll only use `
 
 ## Configuration
 
-Add configuration options to `config.yaml`. Find all options in [`config.defaults.yaml`](config.defaults.yaml), but don't edit this file directly.
+### Home Directory
+
+lumo-tamer stores all user files (config, vault, databases, logs) in a single directory:
+
+| Platform | Default Location |
+|----------|------------------|
+| Linux | `~/.local/share/lumo-tamer` |
+| macOS | `~/Library/Application Support/lumo-tamer` |
+| Windows | `%APPDATA%/lumo-tamer` |
+| Docker | `/data` |
+
+Override using:
+- `--home /path` CLI argument
+- `LUMO_HOME` environment variable
+
+### config.yaml
+
+Add configuration options to `config.yaml` in your home directory. Find all options in [`config.defaults.yaml`](config.defaults.yaml), but don't edit this file directly.
 
 Below is a non-exhaustive overview of the most common config sections and their options. Except for some auth settings (which are set by `tamer auth`), all settings are optional. By default, lumo-tamer is conservative: experimental or resource-heavy features are disabled. 
 
@@ -321,6 +338,8 @@ It is recommended to run lumo-tamer's server in a Docker container.
 git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
 docker compose build tamer
+# Create data directory for user files
+mkdir -p data
 # Create secret key to encrypt the token vault (or alternatively, use another secrets manager)
 mkdir -p secrets && chmod 700 secrets
 openssl rand -base64 32 > secrets/lumo-vault-key
@@ -329,7 +348,7 @@ chmod 600 secrets/lumo-vault-key
 
 #### Configure
 
-Create `config.yaml`:
+Create `data/config.yaml`:
 
 ```yaml
 server:

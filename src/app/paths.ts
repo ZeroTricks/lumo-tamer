@@ -3,6 +3,11 @@
  *
  * Resolves paths relative to project root, regardless of process.cwd().
  * This allows CLI to run from any directory.
+ *
+ * Home directory resolution order (highest to lowest priority):
+ * 1. CLI argument --home
+ * 2. LUMO_HOME environment variable
+ * 3. Platform default
  */
 
 import { existsSync, mkdirSync } from 'fs';
@@ -30,12 +35,24 @@ export function resolveProjectPath(path: string): string {
   return join(PROJECT_ROOT, path);
 }
 
+/**
+ * Resolve a path, expanding ~ to home directory
+ */
+function resolvePath(path: string): string {
+  if (isAbsolute(path)) return path;
+  if (path.startsWith('~')) {
+    return path.replace('~', process.env.HOME || '');
+  }
+  return path;
+}
+
 // ============================================
-// Data Directory
+// Home Directory
 // ============================================
 
 const APP_NAME = 'lumo-tamer';
 const VAULT_FILENAME = 'vault.enc';
+const CONFIG_FILENAME = 'config.yaml';
 
 /**
  * Detect if running inside Docker container
@@ -45,14 +62,14 @@ function isDocker(): boolean {
 }
 
 /**
- * Get platform-specific default data directory
+ * Get platform-specific default home directory
  *
  * - Docker: /data
  * - Linux: $XDG_DATA_HOME/lumo-tamer or ~/.local/share/lumo-tamer
  * - macOS: ~/Library/Application Support/lumo-tamer
  * - Windows: %APPDATA%/lumo-tamer
  */
-export function getDefaultDataDir(): string {
+export function getDefaultHome(): string {
   if (isDocker()) {
     return '/data';
   }
@@ -71,44 +88,62 @@ export function getDefaultDataDir(): string {
   }
 }
 
-// Cached resolved data directory
-let resolvedDataDir: string | null = null;
-
 /**
- * Get the data directory, resolving from config or using platform default
- * Call setDataDir() first if using config value, otherwise uses platform default
+ * Get home directory from LUMO_HOME environment variable
  */
-export function getDataDir(): string {
-  if (resolvedDataDir === null) {
-    resolvedDataDir = getDefaultDataDir();
+function getHomeFromEnv(): string | null {
+  const envValue = process.env.LUMO_HOME;
+  if (envValue) {
+    return resolvePath(envValue);
   }
-  return resolvedDataDir;
+  return null;
 }
 
+// Cached resolved home directory
+let resolvedHome: string | null = null;
+
 /**
- * Set the data directory from config value
- * Empty string means use platform default
+ * Initialize the home directory
+ * Resolution order: CLI arg > LUMO_HOME env var > platform default
+ *
+ * @param cliValue Optional value from --home CLI argument
  */
-export function setDataDir(configValue: string): void {
-  if (configValue === '') {
-    resolvedDataDir = getDefaultDataDir();
+export function initHome(cliValue?: string): void {
+  if (cliValue) {
+    resolvedHome = resolvePath(cliValue);
   } else {
-    resolvedDataDir = resolveProjectPath(configValue);
+    const envValue = getHomeFromEnv();
+    if (envValue) {
+      resolvedHome = envValue;
+    } else {
+      resolvedHome = getDefaultHome();
+    }
   }
 }
 
 /**
- * Reset data directory (for testing)
+ * Get the home directory
+ * Call initHome() first, otherwise uses platform default
  */
-export function resetDataDir(): void {
-  resolvedDataDir = null;
+export function getHome(): string {
+  if (resolvedHome === null) {
+    resolvedHome = getDefaultHome();
+  }
+  return resolvedHome;
 }
 
 /**
- * Ensure data directory exists, creating it with secure permissions if needed
+ * Reset home directory (for testing)
  */
-export function ensureDataDir(): void {
-  const dir = getDataDir();
+export function resetHome(): void {
+  resolvedHome = null;
+}
+
+/**
+ * Ensure home directory exists, creating it with secure permissions if needed
+ */
+export function ensureHome(): void {
+  const dir = getHome();
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
@@ -133,15 +168,30 @@ export function ensureDataDir(): void {
 // }
 
 /**
- * Get path to the encrypted vault file
+ * Get path to the user config file
  */
-export function getVaultPath(): string {
-  return join(getDataDir(), VAULT_FILENAME);
+export function getConfigPath(): string {
+  return join(getHome(), CONFIG_FILENAME);
 }
 
 /**
- * Get path for IndexedDB SQLite files (the data directory itself)
+ * Get path to the log file
+ * @param filename Log filename (e.g., 'lumo-tamer.log')
+ */
+export function getLogPath(filename: string): string {
+  return join(getHome(), filename);
+}
+
+/**
+ * Get path to the encrypted vault file
+ */
+export function getVaultPath(): string {
+  return join(getHome(), VAULT_FILENAME);
+}
+
+/**
+ * Get path for IndexedDB SQLite files (the home directory itself)
  */
 export function getConversationsDbPath(): string {
-  return getDataDir();
+  return getHome();
 }

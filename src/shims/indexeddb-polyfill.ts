@@ -11,10 +11,10 @@
 
 import indexeddbshim from 'indexeddbshim';
 
-import { ensureDataDir, getConversationsDbPath } from '../app/paths.js';
+import { ensureHome, getConversationsDbPath } from '../app/paths.js';
 
-// Ensure data directory exists (creates with 0o700 if missing)
-ensureDataDir();
+// Ensure home directory exists (creates with 0o700 if missing)
+ensureHome();
 
 // databaseBasePath - where SQLite files are stored
 const databaseBasePath = getConversationsDbPath();

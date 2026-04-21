@@ -2,7 +2,6 @@ import { z } from 'zod';
 import merge from 'lodash/merge.js';
 import bytes from 'bytes';
 import { fatalExit, loadConfigYaml, loadDefaultsYaml } from './config-file.js';
-import { setDataDir } from './paths.js';
 
 // Load defaults from YAML (single source of truth)
 const configDefaults = loadDefaultsYaml();
@@ -122,7 +121,6 @@ const authConfigSchema = z.object({
 
 // Server merged config schema
 const serverMergedConfigSchema = z.object({
-  dataDir: z.string(),
   auth: authConfigSchema,
   log: logConfigSchema,
   conversations: conversationsConfigSchema,
@@ -138,7 +136,6 @@ const serverMergedConfigSchema = z.object({
 
 // CLI merged config schema
 const cliMergedConfigSchema = z.object({
-  dataDir: z.string(),
   auth: authConfigSchema,
   log: logConfigSchema,
   conversations: conversationsConfigSchema,
@@ -211,8 +208,6 @@ function catchZodErrors(error: unknown, path="") {
 export function initConfig(mode: ConfigMode): void {
   configMode = mode;
   config = loadMergedConfig(mode);
-  // Initialize data directory from config (empty string = platform default)
-  setDataDir(config.dataDir);
   // Note: replacePatterns regex validation happens in src/api/instructions/
   // at module load time, when logger is available
 }

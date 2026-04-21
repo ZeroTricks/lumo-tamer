@@ -1,12 +1,3 @@
-# User data directory for vault, conversations, etc.
-# Platform defaults (when empty ""):
-#   Linux: $XDG_DATA_HOME/lumo-tamer or ~/.local/share/lumo-tamer
-#   macOS: ~/Library/Application Support/lumo-tamer
-#   Windows: %APPDATA%/lumo-tamer
-#   Docker (/.dockerenv exists): /data
-# Supports: absolute paths, ~ for home, relative to project root
-dataDir: ""
-
 # Authentication configuration
 auth:
   # - login: enter Proton credentials via go-proton-api
@@ -65,7 +56,7 @@ log:
   level: "info"
   # "stdout" or "file"
   target: "stdout"
-  # Used when target is "file"
+  # Used when target is "file". Relative to LUMO_HOME directory.
   filePath: "lumo-tamer.log"
   # Log user/assistant message content (disabled by default to preserve privacy)
   messageContent: false

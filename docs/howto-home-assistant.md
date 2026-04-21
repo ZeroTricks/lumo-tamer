@@ -47,6 +47,8 @@ Choose your installation method for lumo-tamer. Docker is recommended if you're 
 git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
 docker compose build tamer
+# Create data directory for user files
+mkdir -p data
 # Create secret key to encrypt the token vault (or alternatively, use another secrets manager)
 mkdir -p secrets && chmod 700 secrets
 openssl rand -base64 32 > secrets/lumo-vault-key
@@ -55,7 +57,7 @@ chmod 600 secrets/lumo-vault-key
 
 #### Step 2: Configure
 
-Create `config.yaml`:
+Create `data/config.yaml`:
 
 ```yaml
 server:
@@ -141,7 +143,7 @@ npm link
 
 #### Step 3: Configure
 
-Create `config.yaml`:
+Create `config.yaml` in the [home directory](../README.md#home-directory):
 
 ```yaml
 server:
