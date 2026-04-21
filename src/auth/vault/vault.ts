@@ -9,7 +9,7 @@
  * Inspired by proton-bridge vault implementation.
  */
 
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, statSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, statSync, renameSync } from 'fs';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { dirname } from 'path';
 import { logger } from '../../app/logger.js';
@@ -126,7 +126,6 @@ export async function writeVault(vaultPath: string, tokens: StoredTokens, keyCon
     writeFileSync(tempPath, ciphertext, { mode: 0o600 });
 
     // Rename (atomic on most filesystems)
-    const { renameSync } = await import('fs');
     renameSync(tempPath, vaultPath);
 
     logger.debug({ vaultPath }, 'Tokens written to vault');

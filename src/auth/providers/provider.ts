@@ -292,4 +292,48 @@ export class AuthProvider implements IAuthProvider {
     getUserId(): string | undefined {
         return this.tokens.userKeys?.[0]?.ID;
     }
+
+    // === Persistence warnings ===
+
+    /**
+     * Get warning if ConversationStore is configured but will fall back to FallbackStore.
+     * Returns null if ConversationStore will work or if FallbackStore is explicitly configured.
+     */
+    getConversationStoreWarning(): string | null {
+        const config = getConversationsConfig();
+        if (config.useFallbackStore) {
+            return null; // Fallback explicitly configured
+        }
+
+        if (!this.supportsPersistence()) {
+            return 'ConversationStore disabled: no encryption keys. Using FallbackStore. Conversations will not be persisted.  Re-authenticate to enable.';
+        }
+
+        if (!this.tokens.keyPassword) {
+            return 'ConversationStore disabled: no keyPassword. Using FallbackStore. Conversations will not be persisted. Re-authenticate to enable.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Get warning if sync is configured but won't work.
+     * Returns null if sync will work or if sync is disabled.
+     */
+    getSyncWarning(): string | null {
+        const config = getConversationsConfig();
+        if (!config.enableSync) {
+            return null; // Sync not configured
+        }
+
+        if (!this.supportsFullApi()) {
+            return 'Conversation sync disabled: requires browser auth. Conversations will NOT sync to Proton. Run "tamer auth browser" to enable.';
+        }
+
+        if (!this.tokens.keyPassword) {
+            return 'Conversation sync disabled: no keyPassword. Conversations will NOT sync to Proton. Re-run "tamer auth browser" to enable.';
+        }
+
+        return null;
+    }
 }

@@ -241,12 +241,10 @@ See [Local Actions](docs/local-actions.md) for further configuration and trouble
 
 ```yaml
 conversations:
-  sync:
-    enabled: true
-    projectName: "lumo-tamer" # project conversations will belong to
-    autoSync: true
+  enableSync: true
+  projectName: "lumo-tamer" # project conversations will belong to
 ```
-> **Note:** Only supported with the `browser` authentication method. Enabling conversation sync requires additional user secrets; if you enable this after initial setup, re-run `tamer auth browser`.
+> **Note:** Sync requires `browser` authentication.
 
 > **Warning:** Projects in Lumo have a limit on the number of conversations per project. When hit, sync will fail. Deleting conversations won't help. Use a new `projectName` as a workaround. See [#16](https://github.com/ZeroTricks/lumo-tamer/issues/16).
 
@@ -277,6 +275,8 @@ See the [full guide](docs/howto-home-assistant.md). TLDR:
 ### OpenClaw
 Add Lumo to `models.providers` in your OpenClaw config. [Example](docs/openclaw.md).
 
+### OpenCode
+Add Lumo to `models.providers` in your `opencode.json` configuration file. [Example](docs/opencode.md).
 
 ### Nanocoder
 Status: very experimental.
@@ -396,7 +396,7 @@ See [docs/](docs/) for detailed documentation:
 - **Unofficial project.** This project is not affiliated with, endorsed by, or related to Proton AG in any way.
 - **Terms of service.** Use of this software may violate Proton's terms of service.
 - **Rate limiting and token usage.** Although care was put into making the app behave, it may make many API calls, potentially getting you rate-limited, or burn through your allowed tokens quickly. I have not experienced either of these issues on Lumo Plus.
-- **Security.** This app handles Proton user secrets. Although the code is vetted to the best of my knowledge and follows best practices, this is not my area of expertise. Please verify for yourself. Using the app without full conversation sync will only fetch API tokens and will not fetch the user's PGP keys in any way.
+- **Security.** This app handles Proton user secrets. Although the code is vetted to the best of my knowledge and follows best practices, this is not my area of expertise. Please verify for yourself.
 - **AI-assisted development.** This code was written with the extensive use of Claude Code.
 - **Tool execution.** Enabling tools gives Lumo the power to execute actions client-side (API or CLI). I am not responsible for Lumo's actions. lumo-tamer does not prevent prompt injection.
 

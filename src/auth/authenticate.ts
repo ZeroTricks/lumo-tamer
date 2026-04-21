@@ -136,10 +136,7 @@ export async function runAuthCommand(argv: string[]): Promise<void> {
     const provider = await AuthProvider.create();
     const status = provider.getStatus();
     printStatus(status);
-    printSummary(status, {
-        supportsPersistence: provider.supportsPersistence(),
-        supportsFullApi: provider.supportsFullApi(),
-    });
+    printSummary(status, provider);
 
     print('\nYou can now run: tamer or tamer server');
   } catch (error) {

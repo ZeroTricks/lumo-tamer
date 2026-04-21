@@ -370,9 +370,8 @@ This is expected. The integrations refer to OpenAI here and there (e.g., "Error 
 If you enabled syncing your conversations with the Lumo app, set `conversations.deriveIdFromUser: true` to properly group messages per conversation:
 ```yaml
 conversations:
-  sync:
-    enabled: true
-    deriveIdFromUser: true
+  enableSync: true
+  deriveIdFromUser: true
 ```
 
 ---

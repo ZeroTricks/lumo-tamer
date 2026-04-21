@@ -131,25 +131,16 @@ export async function initializeConversationStore(
         return { isPrimary: false };
     }
 
-    // Try to initialize primary store
-    if (!authProvider.supportsPersistence()) {
-        logger.warn(
-            { method: authProvider.method },
-            'Primary store requires cached encryption keys. Falling back to in-memory store.'
-        );
+    // Check if ConversationStore can be used
+    const storeWarning = authProvider.getConversationStoreWarning();
+    if (storeWarning) {
+        logger.warn({ method: authProvider.method }, storeWarning);
         activeStore = getFallbackStore();
         return { isPrimary: false };
     }
 
-    const keyPassword = authProvider.getKeyPassword();
-    if (!keyPassword) {
-        logger.warn(
-            { method: authProvider.method },
-            'Primary store requires keyPassword. Falling back to in-memory store.'
-        );
-        activeStore = getFallbackStore();
-        return { isPrimary: false };
-    }
+    // If we get here, getConversationStoreWarning() confirmed keyPassword exists
+    const keyPassword = authProvider.getKeyPassword()!;
 
     // All conditions met - initialize primary store
     try {
@@ -274,23 +265,15 @@ export async function initializeSync(
         return { initialized: false };
     }
 
-    // Sync requires browser auth for lumo scope (spaces API access)
-    if (!authProvider.supportsFullApi()) {
-        logger.warn(
-            { method: authProvider.method },
-            'Conversation sync requires browser auth method'
-        );
+    // Check if sync can be used
+    const syncWarning = authProvider.getSyncWarning();
+    if (syncWarning) {
+        logger.warn({ method: authProvider.method }, syncWarning);
         return { initialized: false };
     }
 
-    const keyPassword = authProvider.getKeyPassword();
-    if (!keyPassword) {
-        logger.warn(
-            { method: authProvider.method },
-            'No keyPassword available - sync will not be initialized'
-        );
-        return { initialized: false };
-    }
+    // If we get here, getSyncWarning() confirmed keyPassword exists
+    const keyPassword = authProvider.getKeyPassword()!;
 
     try {
         // Primary store: sync is handled by sagas

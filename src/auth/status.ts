@@ -3,7 +3,7 @@
  */
 
 import { print } from '../app/terminal.js';
-import { createAuthProvider, type AuthProviderStatus } from './index.js';
+import { createAuthProvider, type AuthProviderStatus, AuthProvider } from './index.js';
 import { authConfig, getConversationsConfig } from '../app/config.js';
 
 export function printStatus(status: AuthProviderStatus): void {
@@ -34,41 +34,41 @@ export function printStatus(status: AuthProviderStatus): void {
     }
 }
 
-export interface SummaryOptions {
-    supportsPersistence: boolean;
-    supportsFullApi: boolean;
-}
-
-export function printSummary(status: AuthProviderStatus, options: SummaryOptions): void {
-    const { supportsPersistence, supportsFullApi } = options;
+export function printSummary(status: AuthProviderStatus, provider: AuthProvider): void {
     const conversationsConfig = getConversationsConfig();
 
     print('\n--- Summary ---');
     if (status.valid) {
         print('\x1b[32mAuthentication is configured and valid.\x1b[0m');
 
-        // Primary store status (local encryption)
+        // ConversationStore status
+        const storeWarning = provider.getConversationStoreWarning();
         if (!conversationsConfig.useFallbackStore) {
-            if (!supportsPersistence) {
-                print('Primary store: \x1b[33mdisabled\x1b[0m (no cached encryption keys)');
-            } else if (!status.details.hasKeyPassword) {
-                print('Primary store: \x1b[33mdisabled\x1b[0m (no keyPassword)');
+            if (storeWarning) {
+                print('ConversationStore: \x1b[33mdisabled\x1b[0m');
             } else {
-                print('Primary store: \x1b[32menabled\x1b[0m');
+                print('ConversationStore: \x1b[32menabled\x1b[0m');
             }
         }
 
-        // Sync status (Proton server sync)
+        // Sync status
+        const syncWarning = provider.getSyncWarning();
         if (conversationsConfig.enableSync) {
-            if (!supportsFullApi) {
-                print('Conversation sync: \x1b[33mdisabled\x1b[0m (requires browser auth for lumo scope)');
-            } else if (!status.details.hasKeyPassword) {
-                print('Conversation sync: \x1b[33mdisabled\x1b[0m (no keyPassword)');
+            if (syncWarning) {
+                print('Conversation sync: \x1b[33mdisabled\x1b[0m');
             } else {
                 print('Conversation sync: \x1b[32menabled\x1b[0m');
             }
         } else {
             print('Conversation sync: \x1b[33mdisabled\x1b[0m (by configuration)');
+        }
+
+        // Print warnings
+        if (storeWarning) {
+            print(`  \x1b[33m⚠\x1b[0m ${storeWarning}`);
+        }
+        if (syncWarning) {
+            print(`  \x1b[33m⚠\x1b[0m ${syncWarning}`);
         }
     } else {
         print('\x1b[31mAuthentication needs attention.\x1b[0m');
@@ -86,10 +86,7 @@ export async function runStatus(): Promise<void> {
         const provider = await createAuthProvider();
         const status = provider.getStatus();
         printStatus(status);
-        printSummary(status, {
-            supportsPersistence: provider.supportsPersistence(),
-            supportsFullApi: provider.supportsFullApi(),
-        });
+        printSummary(status, provider);
 
         print('');
         process.exit(status.valid ? 0 : 1);
