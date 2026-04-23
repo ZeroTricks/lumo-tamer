@@ -9,34 +9,15 @@
  * Source: https://www.npmjs.com/package/indexeddbshim
  */
 
-import fs from 'fs';
 import indexeddbshim from 'indexeddbshim';
 
-import { getConversationsConfig } from '../app/config.js';
-import { resolveProjectPath } from '../app/paths.js';
+import { ensureHome, getConversationsDbPath } from '../app/paths.js';
 
+// Ensure home directory exists (creates with 0o700 if missing)
+ensureHome();
 
-const config = getConversationsConfig();
-
-// databaseBasePath - where SQLite files are stored (resolved to absolute path)
-const databaseBasePath = resolveProjectPath(config.databasePath);
-
-// Verify databaseBasePath is a writable directory
-try {
-    const stat = fs.statSync(databaseBasePath);
-    if (!stat.isDirectory()) {
-        throw new Error(`databasePath "${databaseBasePath}" is not a directory`);
-    }
-    fs.accessSync(databaseBasePath, fs.constants.W_OK);
-} catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new Error(`databasePath "${databaseBasePath}" does not exist`);
-    }
-    if ((err as NodeJS.ErrnoException).code === 'EACCES') {
-        throw new Error(`databasePath "${databaseBasePath}" is not writable`);
-    }
-    throw err;
-}
+// databaseBasePath - where SQLite files are stored
+const databaseBasePath = getConversationsDbPath();
 
 
 // Initialize indexeddbshim with Node.js-compatible settings

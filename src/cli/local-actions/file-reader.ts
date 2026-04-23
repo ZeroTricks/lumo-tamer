@@ -12,7 +12,7 @@
 
 import bytes from 'bytes';
 import { closeSync, openSync, readFileSync, readSync, statSync } from 'fs';
-import { getLocalActionsConfig } from '../../app/config.js';
+import { getLocalToolsConfig } from '../../app/config.js';
 import { FILE_PREFIX, type BlockHandler, type CodeBlock } from './types.js';
 
 export interface ReadResult {
@@ -66,7 +66,7 @@ export function getFileSize(filePath: string): number {
  * Read files listed in a read block and return their contents.
  */
 export async function applyReadBlock(block: CodeBlock): Promise<ReadResult> {
-  const { fileReads } = getLocalActionsConfig();
+  const { fileReads } = getLocalToolsConfig();
   const maxFileSize = bytes.parse(fileReads.maxFileSize);
 
   const paths = block.content.split('\n').map(l => l.trim()).filter(Boolean);
@@ -124,7 +124,7 @@ export const readHandler: BlockHandler = {
   requiresConfirmation: false,
   confirmOptions: () => ({ label: '', prompt: '', verb: '', errorLabel: '' }),
   apply: (block) => {
-    if (!getLocalActionsConfig().fileReads.enabled) {
+    if (!getLocalToolsConfig().fileReads.enabled) {
       return Promise.resolve({
         type: 'read',
         success: false,

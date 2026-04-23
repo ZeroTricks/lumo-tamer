@@ -8,6 +8,9 @@
 import { createHash } from 'crypto';
 import { Role } from '@lumo/types.js';
 import type { Message, MessageForStore } from './types.js';
+import { getMetrics } from '../app/metrics.js';
+import logger from '../app/logger.js';
+import { serverToolPrefix } from '../api/tools/server-tools/registry.js';
 
 /**
  * Compute hash for a message (role + content)
@@ -83,96 +86,19 @@ export function findNewMessages(
         // Compute semantic ID for incoming message
         const incomingSemanticId = incomingMsg.id ?? hashMessage(incomingMsg.role, incomingMsg.content ?? '').slice(0, 16);
 
-        if (storedIds.has(incomingSemanticId)) {
+        // semantic id is stored or assistant response differs after a server tool call
+        if (storedIds.has(incomingSemanticId) || stored[i + 1]?.semanticId?.startsWith(serverToolPrefix)) {
             matchedCount++;
         } else {
             // Divergence found - stop matching
+            getMetrics()?.invalidContinuationsTotal.inc();
+            logger.warn({
+                index: i,
+            }, 'Conversation message divergence');
             break;
         }
     }
 
     // Return messages after the matched prefix
     return incoming.slice(matchedCount);
-}
-
-/**
- * Check if incoming messages are a valid continuation of stored conversation
- *
- * Valid if:
- * - Incoming starts with the same messages as stored (prefix match by semantic ID)
- * - Or incoming is entirely new (stored is empty)
- */
-export function isValidContinuation(
-    incoming: MessageForStore[],
-    stored: Message[]
-): { valid: boolean; reason?: string; debugInfo?: { storedMsg?: string; incomingMsg?: string } } {
-    if (stored.length === 0) {
-        return { valid: true };
-    }
-
-    if (incoming.length < stored.length) {
-        return {
-            valid: false,
-            reason: 'Incoming has fewer messages than stored - possible history truncation'
-        };
-    }
-
-    // Check if incoming starts with the same messages (using semantic IDs)
-    for (let i = 0; i < stored.length; i++) {
-        const storedSemanticId = stored[i].semanticId;
-        const incomingSemanticId = incoming[i].id ?? hashMessage(incoming[i].role, incoming[i].content ?? '').slice(0, 16);
-
-        if (storedSemanticId !== incomingSemanticId) {
-            return {
-                valid: false,
-                reason: `Message mismatch at index ${i} - history may have been modified`,
-                debugInfo: {
-                    storedMsg: `${stored[i].role}: ${stored[i].content ?? ''}`,
-                    incomingMsg: `${incoming[i].role}: ${incoming[i].content ?? ''}`,
-                }
-            };
-        }
-    }
-
-    return { valid: true };
-}
-
-/**
- * Detect if this is a branching request (user is continuing from a different point)
- *
- * Branching is detected when:
- * - Incoming has some matching prefix with stored
- * - But then diverges (different message at some index)
- */
-export function detectBranching(
-    incoming: MessageForStore[],
-    stored: Message[]
-): { isBranching: boolean; branchPoint?: number } {
-    if (stored.length === 0 || incoming.length === 0) {
-        return { isBranching: false };
-    }
-
-    // Find the point where they diverge
-    let divergePoint = -1;
-    const minLength = Math.min(stored.length, incoming.length);
-
-    for (let i = 0; i < minLength; i++) {
-        const storedSemanticId = stored[i].semanticId;
-        const incomingSemanticId = incoming[i].id ?? hashMessage(incoming[i].role, incoming[i].content ?? '').slice(0, 16);
-
-        if (storedSemanticId !== incomingSemanticId) {
-            divergePoint = i;
-            break;
-        }
-    }
-
-    // If they diverge before the end of stored messages, it's a branch
-    if (divergePoint >= 0 && divergePoint < stored.length) {
-        return {
-            isBranching: true,
-            branchPoint: divergePoint
-        };
-    }
-
-    return { isBranching: false };
 }

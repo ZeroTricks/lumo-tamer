@@ -11,21 +11,19 @@ import { chromium, type Page, type BrowserContext, type Browser } from 'playwrig
 import { promises as dns, ADDRCONFIG } from 'dns';
 import type { PersistedSessionData } from '../../lumo-client/types.js';
 import type { StoredTokens } from '../types.js';
-import { authConfig, getConversationsConfig } from '../../app/config.js';
+import { authConfig } from '../../app/config.js';
 import { APP_VERSION_HEADER } from '@lumo/config.js';
 import { PROTON_URLS } from '../../app/urls.js';
 import { logger } from '../../app/logger.js';
 import { decryptPersistedSession } from '../session-keys.js';
 import { writeVault, type VaultKeyConfig } from '../vault/index.js';
-import { resolveProjectPath } from '../../app/paths.js';
+import { getVaultPath } from '../../app/paths.js';
 
 export interface ExtractionOptions {
     /** CDP endpoint to connect to browser */
     cdpEndpoint: string;
     /** Target URL (Lumo) */
     targetUrl: string;
-    /** Whether to fetch persistence keys (userKeys, masterKeys) */
-    fetchPersistenceKeys: boolean;
     /** Proton app version for API calls */
     appVersion: string;
     /** Timeout for waiting for login (ms) */
@@ -402,7 +400,7 @@ async function connectAndGetPage(
  */
 export async function extractBrowserTokens(options: ExtractionOptions): Promise<ExtractionResult> {
     const warnings: string[] = [];
-    const { cdpEndpoint, targetUrl, fetchPersistenceKeys, appVersion, loginTimeout = 120000 } = options;
+    const { cdpEndpoint, targetUrl, appVersion, loginTimeout = 120000 } = options;
 
     logger.info('=== Browser Token Extraction ===');
 
@@ -530,95 +528,91 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
             persistedSession = extractPersistedSession(accountLocalStorage);
         }
 
-        // Fetch persistence keys if requested
+        // Fetch encryption keys
         let userKeys: StoredTokens['userKeys'];
         let masterKeys: StoredTokens['masterKeys'];
         let keyPassword: string | undefined;
 
-        if (fetchPersistenceKeys) {
-            logger.info('Fetching encryption keys for persistence...');
+        logger.info('Fetching encryption keys...');
 
-            // Fetch ClientKey and decrypt blob to get keyPassword
-            if (persistedSession?.blob) {
-                const matchingAuthCookie = relevantCookies.find(
-                    c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('account.proton.me')
-                ) || relevantCookies.find(
-                    c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
-                );
+        // Fetch ClientKey and decrypt blob to get keyPassword
+        if (persistedSession?.blob) {
+            const matchingAuthCookie = relevantCookies.find(
+                c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('account.proton.me')
+            ) || relevantCookies.find(
+                c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
+            );
 
-                const authCookie = matchingAuthCookie || primaryAccountAuthCookie || primaryLumoAuthCookie;
-                if (authCookie) {
-                    const uid = authCookie.name.replace('AUTH-', '');
-                    const accessToken = authCookie.value;
+            const authCookie = matchingAuthCookie || primaryAccountAuthCookie || primaryLumoAuthCookie;
+            if (authCookie) {
+                const uid = authCookie.name.replace('AUTH-', '');
+                const accessToken = authCookie.value;
 
-                    logger.info({ uid: uid.slice(0, 8) + '...' }, 'Fetching ClientKey from API...');
-                    const clientKey = await fetchClientKey(page, uid, accessToken, appVersion);
+                logger.info({ uid: uid.slice(0, 8) + '...' }, 'Fetching ClientKey from API...');
+                const clientKey = await fetchClientKey(page, uid, accessToken, appVersion);
 
-                    if (clientKey) {
-                        // Temporarily set clientKey to decrypt blob
-                        persistedSession.clientKey = clientKey;
+                if (clientKey) {
+                    // Temporarily set clientKey to decrypt blob
+                    persistedSession.clientKey = clientKey;
 
-                        try {
-                            const decrypted = await decryptPersistedSession(persistedSession);
-                            keyPassword = decrypted.keyPassword;
-                            logger.info({ type: decrypted.type }, 'Successfully extracted keyPassword');
-                            // Clear encryption artifacts - keyPassword is stored directly in vault
-                            delete persistedSession.blob;
-                            delete persistedSession.clientKey;
-                            delete persistedSession.payloadVersion;
-                        } catch (err) {
-                            logger.error({ err }, 'ClientKey fetch succeeded but decryption failed');
-                            delete persistedSession.clientKey;
-                            warnings.push('ClientKey fetch succeeded but decryption failed');
-                        }
+                    try {
+                        const decrypted = await decryptPersistedSession(persistedSession);
+                        keyPassword = decrypted.keyPassword;
+                        logger.info({ type: decrypted.type }, 'Successfully extracted keyPassword');
+                        // Clear encryption artifacts - keyPassword is stored directly in vault
+                        delete persistedSession.blob;
+                        delete persistedSession.clientKey;
+                        delete persistedSession.payloadVersion;
+                    } catch (err) {
+                        logger.error({ err }, 'ClientKey fetch succeeded but decryption failed');
+                        delete persistedSession.clientKey;
+                        warnings.push('ClientKey fetch succeeded but decryption failed');
                     }
                 }
             }
+        }
 
-            // Fetch user keys (only if we got keyPassword)
-            // Note: keyPassword being set implies persistedSession exists (it came from the blob)
-            if (keyPassword && persistedSession) {
-                const matchingAuthCookie = relevantCookies.find(
-                    c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('account.proton.me')
-                ) || relevantCookies.find(
-                    c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
-                );
-                const authCookieForUserInfo = matchingAuthCookie || primaryAccountAuthCookie || primaryLumoAuthCookie;
+        // Fetch user keys (only if we got keyPassword)
+        // Note: keyPassword being set implies persistedSession exists (it came from the blob)
+        if (keyPassword && persistedSession) {
+            const matchingAuthCookie = relevantCookies.find(
+                c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('account.proton.me')
+            ) || relevantCookies.find(
+                c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
+            );
+            const authCookieForUserInfo = matchingAuthCookie || primaryAccountAuthCookie || primaryLumoAuthCookie;
 
-                if (authCookieForUserInfo) {
-                    const uid = authCookieForUserInfo.name.replace('AUTH-', '');
-                    const accessToken = authCookieForUserInfo.value;
-                    const userInfo = await fetchUserInfo(page, uid, accessToken, appVersion);
-                    if (userInfo?.User?.Keys) {
-                        userKeys = userInfo.User.Keys.map(k => ({
-                            ID: k.ID,
-                            PrivateKey: k.PrivateKey,
-                            Primary: k.Primary,
-                            Active: k.Active,
-                        }));
-                        logger.info({ keyCount: userKeys.length }, 'Cached user keys');
-                    }
+            if (authCookieForUserInfo) {
+                const uid = authCookieForUserInfo.name.replace('AUTH-', '');
+                const accessToken = authCookieForUserInfo.value;
+                const userInfo = await fetchUserInfo(page, uid, accessToken, appVersion);
+                if (userInfo?.User?.Keys) {
+                    userKeys = userInfo.User.Keys.map(k => ({
+                        ID: k.ID,
+                        PrivateKey: k.PrivateKey,
+                        Primary: k.Primary,
+                        Active: k.Active,
+                    }));
+                    logger.info({ keyCount: userKeys.length }, 'Cached user keys');
                 }
             }
+        }
 
-            // Fetch master keys (only if we got keyPassword)
-            if (keyPassword && persistedSession) {
-                const lumoAuthForMasterKeys = relevantCookies.find(
-                    c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
-                ) || primaryLumoAuthCookie;
+        // Fetch master keys (only if we got keyPassword)
+        if (keyPassword && persistedSession) {
+            const lumoAuthForMasterKeys = relevantCookies.find(
+                c => c.name === `AUTH-${persistedSession.UID}` && c.domain.includes('lumo.proton.me')
+            ) || primaryLumoAuthCookie;
 
-                if (lumoAuthForMasterKeys) {
-                    const uid = lumoAuthForMasterKeys.name.replace('AUTH-', '');
-                    const accessToken = lumoAuthForMasterKeys.value;
-                    const fetchedMasterKeys = await fetchMasterKeys(page, uid, accessToken, appVersion);
-                    if (fetchedMasterKeys && fetchedMasterKeys.length > 0) {
-                        masterKeys = fetchedMasterKeys;
-                        logger.info({ keyCount: masterKeys.length }, 'Cached master keys');
-                    }
+            if (lumoAuthForMasterKeys) {
+                const uid = lumoAuthForMasterKeys.name.replace('AUTH-', '');
+                const accessToken = lumoAuthForMasterKeys.value;
+                const fetchedMasterKeys = await fetchMasterKeys(page, uid, accessToken, appVersion);
+                if (fetchedMasterKeys && fetchedMasterKeys.length > 0) {
+                    masterKeys = fetchedMasterKeys;
+                    logger.info({ keyCount: masterKeys.length }, 'Cached master keys');
                 }
             }
-        } else {
-            logger.info('Skipping encryption key extraction (persistence disabled)');
         }
 
         // Determine output uid/accessToken - use the primary (active session) auth
@@ -676,8 +670,8 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
             masterKeys,
         };
 
-        // Add warnings for missing data (only if persistence was requested)
-        if (fetchPersistenceKeys && !keyPassword) {
+        // Add warnings for missing data
+        if (!keyPassword) {
             warnings.push('No keyPassword available - local-only encryption will be used');
         }
 
@@ -690,14 +684,13 @@ export async function extractBrowserTokens(options: ExtractionOptions): Promise<
 /**
  * Prompt user for CDP endpoint
  */
-async function promptForCdpEndpoint(defaultEndpoint?: string): Promise<string> {
+async function promptForCdpEndpoint(defaultEndpoint: string): Promise<string> {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const defaultValue = defaultEndpoint || 'http://localhost:9222';
 
     return new Promise(resolve => {
-        rl.question(`CDP endpoint [${defaultValue}]: `, answer => {
+        rl.question(`CDP endpoint [${defaultEndpoint}]: `, answer => {
             rl.close();
-            resolve(answer.trim() || defaultValue);
+            resolve(answer.trim() || defaultEndpoint);
         });
     });
 }
@@ -714,17 +707,14 @@ export async function runBrowserAuthentication(): Promise<ExtractionResult> {
     const configEndpoint = authConfig.browser?.cdpEndpoint;
     const cdpEndpoint = await promptForCdpEndpoint(configEndpoint);
 
-    const syncEnabled = getConversationsConfig().enableSync;
-
     const result = await extractBrowserTokens({
         cdpEndpoint,
         targetUrl: PROTON_URLS.LUMO_BASE,
-        fetchPersistenceKeys: syncEnabled,
         appVersion: APP_VERSION_HEADER,
     });
 
     // Write tokens to encrypted vault
-    const vaultPath = resolveProjectPath(authConfig.vault.path);
+    const vaultPath = getVaultPath();
     const keyConfig: VaultKeyConfig = {
         keychain: authConfig.vault.keychain,
         keyFilePath: authConfig.vault.keyFilePath,

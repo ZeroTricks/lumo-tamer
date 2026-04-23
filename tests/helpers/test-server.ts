@@ -15,26 +15,26 @@ import { createModelsRouter } from '../../src/api/routes/models.js';
 import { RequestQueue } from '../../src/api/queue.js';
 import { LumoClient } from '../../src/lumo-client/index.js';
 import { createMockProtonApi } from '../../src/mock/mock-api.js';
-import { FallbackStore } from '../../src/conversations/fallback/store.js';
 import { MetricsService, setMetrics } from '../../src/app/metrics.js';
 import { setupMetricsMiddleware } from '../../src/api/middleware.js';
 import { createMetricsRouter } from '../../src/api/routes/metrics.js';
 import type { EndpointDependencies } from '../../src/api/types.js';
 import type { MockConfig } from '../../src/app/config.js';
-import { ConversationStore } from '../../src/conversations/store.js';
+import { initializeServerTools, clearServerTools } from '../../src/api/tools/server-tools/index.js';
 
 type Scenario = MockConfig['scenario'];
 
 export interface TestServerOptions {
   /** Enable metrics collection and /metrics endpoint */
   metrics?: boolean;
+  /** Enable ServerTools (search, etc.) */
+  serverTools?: boolean;
 }
 
 export interface TestServer {
   server: Server;
   baseUrl: string;
   deps: EndpointDependencies;
-  store: ConversationStore;
   /** MetricsService instance (only if metrics option was true) */
   metrics?: MetricsService;
   close: () => Promise<void>;
@@ -53,13 +53,12 @@ export async function createTestServer(
 ): Promise<TestServer> {
   const mockApi = createMockProtonApi(scenario);
   const lumoClient = new LumoClient(mockApi, { enableEncryption: false });
-  const store = new FallbackStore();
   const queue = new RequestQueue(1);
 
   const deps: EndpointDependencies = {
     queue,
     lumoClient,
-    conversationStore: store,
+    conversationStore: undefined,
     syncInitialized: false,
   };
 
@@ -68,6 +67,12 @@ export async function createTestServer(
   if (options.metrics) {
     metrics = new MetricsService({ enabled: true, collectDefaultMetrics: false, prefix: 'test_' });
     setMetrics(metrics);
+  }
+
+  // Set up ServerTools if requested
+  if (options.serverTools) {
+    clearServerTools(); // Ensure clean state
+    initializeServerTools();
   }
 
   const app = express();
@@ -93,10 +98,10 @@ export async function createTestServer(
     server,
     baseUrl,
     deps,
-    store,
     metrics,
     close: () => new Promise((resolve) => {
       if (metrics) setMetrics(null);
+      if (options.serverTools) clearServerTools();
       server.close(() => resolve());
     }),
   };

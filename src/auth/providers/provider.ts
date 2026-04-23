@@ -15,7 +15,7 @@
 import { existsSync } from 'fs';
 import { logger } from '../../app/logger.js';
 import { authConfig, getConversationsConfig } from '../../app/config.js';
-import { resolveProjectPath } from '../../app/paths.js';
+import { getVaultPath } from '../../app/paths.js';
 import { createProtonApi } from '../api-factory.js';
 import { refreshWithRefreshToken, canRefreshWithToken } from '../token-refresh.js';
 import { readVault, writeVault } from '../vault/index.js';
@@ -40,7 +40,7 @@ export interface ProviderConfig {
  */
 export function getProviderConfig(): ProviderConfig {
     return {
-        vaultPath: resolveProjectPath(authConfig.vault.path),
+        vaultPath: getVaultPath(),
         keyConfig: {
             keychain: authConfig.vault.keychain,
             keyFilePath: authConfig.vault.keyFilePath,
@@ -296,14 +296,9 @@ export class AuthProvider implements IAuthProvider {
     // === Persistence warnings ===
 
     /**
-     * Get warning if ConversationStore is configured but will fall back to FallbackStore.
-     * Returns null if ConversationStore will work or if FallbackStore is explicitly configured.
+     * Get warning if ConversationStore is unavailable
      */
     getConversationStoreWarning(): string | null {
-        const config = getConversationsConfig();
-        if (config.useFallbackStore) {
-            return null; // Fallback explicitly configured
-        }
 
         if (!this.supportsPersistence()) {
             return 'ConversationStore disabled: no encryption keys. Using FallbackStore. Conversations will not be persisted.  Re-authenticate to enable.';

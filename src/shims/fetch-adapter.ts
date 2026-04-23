@@ -139,3 +139,38 @@ export function installFetchAdapter(
         globalThis.fetch = originalFetch;
     };
 }
+
+/**
+ * Installs a mock fetch adapter for test/mock mode.
+ *
+ * Returns 418 for all /api/lumo/v1/ calls, same as local-only mode.
+ * Does not require authentication - for use before store initialization.
+ *
+ * @returns A cleanup function to restore the original fetch
+ */
+export function installMockFetchAdapter(): () => void {
+    globalThis.fetch = async function mockFetch(
+        input: RequestInfo | URL,
+        init?: RequestInit
+    ): Promise<Response> {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        // Intercept /api/lumo/v1/ calls - return 418 like local-only mode
+        if (url.startsWith('/api/lumo/v1/')) {
+            return new Response(JSON.stringify({
+                Code: 418,
+                Error: 'Mock mode - API calls disabled',
+            }), {
+                status: 418,
+                statusText: "I'm a teapot",
+                headers: { 'content-type': 'application/json' },
+            });
+        }
+
+        return originalFetch(input, init);
+    };
+
+    return () => {
+        globalThis.fetch = originalFetch;
+    };
+}

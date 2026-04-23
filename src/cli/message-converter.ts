@@ -5,7 +5,7 @@
  * not persisted in the conversation store.
  */
 
-import { getCliInstructionsConfig, getLocalActionsConfig } from '../app/config.js';
+import { getCliInstructionsConfig, getLocalToolsConfig } from '../app/config.js';
 import { interpolateTemplate } from '../app/template.js';
 
 /**
@@ -13,19 +13,19 @@ import { interpolateTemplate } from '../app/template.js';
  */
 export function buildCliInstructions(): string | undefined {
   const instructionsConfig = getCliInstructionsConfig();
-  const localActionsConfig = getLocalActionsConfig();
+  const localToolsConfig = getLocalToolsConfig();
 
   // Build executor list (comma-separated language tags)
-  const executorKeys = Object.keys(localActionsConfig.executors || {});
+  const executorKeys = Object.keys(localToolsConfig.executors || {});
   const executors = executorKeys.join(', ');
 
-  // Pre-interpolate forLocalActions with executors
-  const forLocalActions = interpolateTemplate(instructionsConfig.forLocalActions, { executors });
+  // Pre-interpolate forLocalTools with executors
+  const forLocalTools = interpolateTemplate(instructionsConfig.forLocalTools, { executors });
 
   // Interpolate main template
   const result = interpolateTemplate(instructionsConfig.template, {
-    localActions: localActionsConfig.enabled ? 'true' : undefined,
-    forLocalActions,
+    localTools: localToolsConfig.enabled ? 'true' : undefined,
+    forLocalTools,
     executors,
   });
 

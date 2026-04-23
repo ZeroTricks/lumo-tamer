@@ -47,6 +47,8 @@ Choose your installation method for lumo-tamer. Docker is recommended if you're 
 git clone https://github.com/ZeroTricks/lumo-tamer.git
 cd lumo-tamer
 docker compose build tamer
+# Create data directory for user files
+mkdir -p data
 # Create secret key to encrypt the token vault (or alternatively, use another secrets manager)
 mkdir -p secrets && chmod 700 secrets
 openssl rand -base64 32 > secrets/lumo-vault-key
@@ -55,14 +57,16 @@ chmod 600 secrets/lumo-vault-key
 
 #### Step 2: Configure
 
-Create `config.yaml`:
+Create `data/config.yaml`:
 
 ```yaml
 server:
   apiKey: "your-secret-api-key-here"
-  customTools:
-    enabled: true  # allows Lumo to control your devices
-  enableWebSearch: true # optionally, enable Lumo's own websearch
+  tools:
+    client:
+      enabled: true  # allows Lumo to control your devices
+    native:
+      enabled: true  # optionally, enable Lumo's own websearch
 ```
 
 > **Security:** Keep your API key private and make sure lumo-tamer is only accessible from your local network, not the internet.
@@ -139,14 +143,16 @@ npm link
 
 #### Step 3: Configure
 
-Create `config.yaml`:
+Create `config.yaml` in the [home directory](../README.md#home-directory):
 
 ```yaml
 server:
   apiKey: "your-secret-api-key-here"
-  customTools:
-    enabled: true  # allows Lumo to control your devices
-  enableWebSearch: true # optionally, enable Lumo's own websearch
+  tools:
+    client:
+      enabled: true  # allows Lumo to control your devices
+    native:
+      enabled: true  # optionally, enable Lumo's own websearch
 ```
 
 > **Security:** Keep your API key private and make sure lumo-tamer is only accessible from your local network, not the internet.
@@ -315,7 +321,7 @@ Follow the [HACS installation guide](https://hacs.xyz/docs/setup/download).
 1. Go to **Settings** > **Voice Assistants** > **Expose** tab
 2. Select which entities Lumo can access
 
-> **Tip:** Start with a few entities to test, add more later. Custom tool support is experimental, see [Custom Tools](custom-tools.md) for troubleshooting.
+> **Tip:** Start with a few entities to test, add more later. Client tool support is experimental, see [Tools](tools.md#client-tools-api) for troubleshooting.
 
 ---
 
@@ -352,14 +358,14 @@ Try:
 Lumo taking a few seconds to answer is to be expected. If you encounter larger response times when calling tools:
 - Reduce the number of exposed entities.
 - Enable Home Assistant's built-in intent recognition to handle simple commands locally.
-- Lumo might [misroute](custom-tools.md#misrouted-tool-calls) tool calls, which lumo-tamer needs to redirect, adding to the latency. Enable debug logging for lumo-tamer (`server.log.level: debug`), look for "misrouted tool calls" and experiment with settings `server.instructions` to get better results.
+- Lumo might [misroute](tools.md#misrouted-tool-calls) tool calls, which lumo-tamer needs to redirect, adding to the latency. Enable debug logging for lumo-tamer (`server.log.level: debug`), look for "misrouted tool calls" and experiment with settings `server.instructions` to get better results.
 
 ### Device control not working or Lumo saying "I can't do that"
 
 This usually indicates Lumo has trouble understanding the exposed entities and tools.
 
 - Ask Lumo "What devices do you know about?" or "What Home Assistant tools can you use?" to see what it can access.
-- Ensure `customTools.enabled: true` in config.yaml
+- Ensure `tools.client.enabled: true` in config.yaml
 - Check that entities are exposed in HA (**Settings** > **Voice Assistants** > **Expose**) and reduce the number of aliases per entity.
 - Enable debug logging for lumo-tamer (`server.log.level: debug`) and check logs for errors
 
@@ -380,6 +386,6 @@ conversations:
 
 - [lumo-tamer README](../README.md)
 - [lumo-tamer Authentication](authentication.md)
-- [lumo-tamer Custom Tools](custom-tools.md)
+- [lumo-tamer Tools](tools.md)
 - [Home Assistant OpenAI integration](https://www.home-assistant.io/integrations/openai_conversation/)
 - [Home Assistant Extended OpenAI Conversation](https://github.com/jekalmin/extended_openai_conversation)

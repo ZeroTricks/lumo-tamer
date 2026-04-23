@@ -98,20 +98,26 @@ describe('MetricsService', () => {
       metrics.toolCallsTotal.inc({ type: 'native', status: 'detected', tool_name: 'web_search' });
       metrics.toolCallsTotal.inc({ type: 'native', status: 'detected', tool_name: 'proton_info' });
       // Custom tools: completed (tracked on function_call_output)
-      metrics.toolCallsTotal.inc({ type: 'custom', status: 'completed', tool_name: 'my_tool' });
+      metrics.toolCallsTotal.inc({ type: 'client', status: 'completed', tool_name: 'my_tool' });
       // Custom tools: invalid (malformed JSON)
       metrics.toolCallsTotal.inc({ type: 'custom', status: 'invalid', tool_name: 'unknown' });
       // Custom tools: misrouted (incorrectly routed through native pipeline)
       metrics.toolCallsTotal.inc({ type: 'custom', status: 'misrouted', tool_name: 'computer' });
+      metrics.toolCallsTotal.inc({ type: 'server', status: 'success', tool_name: 'computer' });
+      metrics.toolCallsTotal.inc({ type: 'server', status: 'failed', tool_name: 'computer' });
 
       const output = await metrics.getMetrics();
       expect(output).toContain('test_tool_calls_total');
       expect(output).toContain('type="native"');
       expect(output).toContain('type="custom"');
+      expect(output).toContain('type="client"');
+      expect(output).toContain('type="server"');
       expect(output).toContain('status="detected"');
       expect(output).toContain('status="completed"');
       expect(output).toContain('status="invalid"');
       expect(output).toContain('status="misrouted"');
+      expect(output).toContain('status="success"');
+      expect(output).toContain('status="failed"');
       expect(output).toContain('tool_name="web_search"');
       expect(output).toContain('tool_name="proton_info"');
       expect(output).toContain('tool_name="my_tool"');

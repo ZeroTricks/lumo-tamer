@@ -1,12 +1,13 @@
 import { RequestQueue } from './queue.js';
 import { LumoClient } from '../lumo-client/index.js';
-import type { ConversationStore, FallbackStore } from '../conversations/index.js';
+import type { ConversationStore } from '../conversations/index.js';
 import type { AuthManager } from '../auth/index.js';
+import type { CommandContext } from 'src/app/commands.js';
 
 export interface EndpointDependencies {
   queue: RequestQueue;
   lumoClient: LumoClient;
-  conversationStore?: ConversationStore | FallbackStore;
+  conversationStore?: ConversationStore;
   syncInitialized?: boolean;
   authManager?: AuthManager;
   vaultPath?: string;
@@ -240,3 +241,10 @@ export type ResponseStreamEvent =
   | { type: 'response.function_call_arguments.delta'; item_id: string; output_index: number; delta: string; sequence_number: number }
   | { type: 'response.function_call_arguments.done'; item_id: string; output_index: number; arguments: string; name: string; sequence_number: number }
   | { type: 'error'; code: string; message: string; param: string | null; sequence_number: number };
+// ── Request context ────────────────────────────────────────────────
+
+export interface RequestContext {
+  hasCustomTools: boolean;
+  commandContext: CommandContext;
+  requestTitle: boolean;
+}

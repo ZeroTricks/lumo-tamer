@@ -5,14 +5,7 @@ This document is for developers working on conversation persistence.
 
 ## Overview
 
-lumo-tamer supports two conversation stores:
-- **ConversationStore**: encrypted offline persistence and full sync reusing WebClient's code
-- **FallbackStore**: in-memory, optional one-way sync
-
-ConversationStore is the way forward, but still new. It will allow future lumo-tamer versions to make Lumo remember and search past converations.  
-However, FallbackStore is the default for now (`useFallbackStore: true`) because:
-- ConversationStore needs more testing (general performance and performance with `login`and `rclone` authentications)
-- Persistence is not required for the core functionality of chatting with Lumo
+lumo-tamer uses **ConversationStore** for encrypted offline persistence and server sync, reusing Proton's WebClient code. When the store is unavailable (missing encryption keys), the API operates stateless and the CLI uses a local turn array.
 
 To sync conversations with other Lumo instances (web- or mobile apps), **browser authentication** is required.
 
@@ -22,7 +15,6 @@ To sync conversations with other Lumo instances (web- or mobile apps), **browser
 
 ```yaml
 conversations:
-  useFallbackStore: true          # true = fallback, false = ConversationStore (default: true)
   enableSync: false               # Enable server sync (requires browser auth)
   projectName: lumo-tamer         # Project name (created if doesn't exist)
   deriveIdFromUser: false         # For stateless clients (Home Assistant)
@@ -78,7 +70,6 @@ When authenticated via browser, sync is automatic via Redux sagas:
 
 - **semanticId**: Call ID for tool messages, hash(role+content) for regular messages
 - `findNewMessages()`: Compares incoming messages against stored messages
-- `isValidContinuation()`: Validates no branching in conversation tree
 
 ### Manual save
 Call `/save [optional title]` to save stateless conversations. See [troubleshooting](#i-enabled-sync-but-my-chats-dont-appear-in-lumo).
@@ -98,44 +89,6 @@ Call `/save [optional title]` to save stateless conversations. See [troubleshoot
 
 ---
 
-## FallbackStore
-
-Legacy in-memory cache for environments without full persistence support.
-
-### Architecture
-
-```
-FallbackStore (in-memory LRU)
-  → SyncService (manual sync to server)
-    → SpaceManager (space lifecycle)
-    → EncryptionCodec (AEAD encryption)
-    → AutoSyncService
-```
-
-### Auto-Sync
-
-When authenticated via browser and `enableSync: true`:
-
-1. `FallbackStore.markDirtyById()` notifies `AutoSyncService`
-2. **Debounce**: Waits 5s for activity to settle
-3. **Throttle**: Respects 30s minimum interval
-4. **Max delay**: Forces sync after 60s
-5. Auto syncs on exit.
-
-### Key Components
-
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| FallbackStore | [src/conversations/fallback/store.ts](../src/conversations/fallback/store.ts) | In-memory Map with LRU eviction |
-| SyncService | [src/conversations/fallback/sync/sync-service.ts](../src/conversations/fallback/sync/sync-service.ts) | Orchestrates server sync |
-| SpaceManager | [src/conversations/fallback/sync/space-manager.ts](../src/conversations/fallback/sync/space-manager.ts) | Space lifecycle and key management |
-| EncryptionCodec | [src/conversations/fallback/sync/encryption-codec.ts](../src/conversations/fallback/sync/encryption-codec.ts) | AEAD encryption/decryption |
-| AutoSyncService | [src/conversations/fallback/sync/auto-sync.ts](../src/conversations/fallback/sync/auto-sync.ts) | Debounced/throttled sync |
-
-
-
----
-
 ## Known Limitations
 
 ### Sync only available when authenticated via `browser`
@@ -149,9 +102,9 @@ Proton's backend enforces a per-project conversation limit. Deleted conversation
 
 ## Troubleshooting
 
-### "I set useFallbackStore: false but it's still using FallbackStore"
+### "ConversationStore disabled" warning
 
-**Solution:** ConversationStore requires cached encryption keys. Re-authenticate to save/generate them.
+**Cause:** ConversationStore requires cached encryption keys. Re-authenticate to save/generate them.
 
 ### "I enabled sync but my chats don't appear in Lumo"
 

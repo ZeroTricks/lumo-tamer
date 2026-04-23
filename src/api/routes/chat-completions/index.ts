@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse } from '../../types.js';
+import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse, OpenAIToolCall } from '../../types.js';
 import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig } from '../../../app/config.js';
 import { logger } from '../../../app/logger.js';
 import { convertOpenAIChatMessages, extractSystemMessage } from '../../message-converter.js';
@@ -9,13 +9,10 @@ import { ChatCompletionEventEmitter } from './events.js';
 import type { Turn } from '../../../lumo-client/index.js';
 import type { ConversationId } from '../../../conversations/types.js';
 import { trackCustomToolCompletion } from '../../tools/call-id.js';
-import { createStreamingToolProcessor } from '../../tools/streaming-processor.js';
+import { chatAndExecute } from '../../tools/server-tools/index.js';
 import {
   buildRequestContext,
-  persistTitle,
-  persistAssistantTurn,
   generateChatCompletionId,
-  mapToolCallsForPersistence,
   tryExecuteCommand,
   setSSEHeaders,
 } from '../shared.js';
@@ -111,6 +108,8 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       if (conversationId && deps.conversationStore && turns.length > 0) {
         deps.conversationStore.appendMessages(conversationId, turns);
         logger.debug({ conversationId, messageCount: turns.length }, 'Persisted conversation messages');
+      } else if (conversationId && !deps.conversationStore) {
+        logger.warn({ conversationId }, 'Stateful request but no conversation store available');
       } else if (!conversationId) {
         // Stateless request - track +1 user message (not deduplicated)
         getMetrics()?.messagesTotal.inc({ role: 'user' });
@@ -141,7 +140,7 @@ async function handleChatRequest(
   const id = generateChatCompletionId();
   const created = Math.floor(Date.now() / 1000);
   const model = request.model || getServerConfig().apiModelName;
-  const ctx = buildRequestContext(deps, conversationId, request.tools);
+  const context = buildRequestContext(deps, conversationId, request.tools);
 
   // Streaming setup
   const emitter = streaming ? new ChatCompletionEventEmitter(res, id, created, model) : null;
@@ -150,45 +149,39 @@ async function handleChatRequest(
   }
 
   let accumulatedText = '';
-  let toolCalls: typeof processor.toolCallsEmitted | undefined;
-
-  const processor = createStreamingToolProcessor(ctx.hasCustomTools, {
-    emitTextDelta(text) {
-      accumulatedText += text;
-      emitter?.emitContentDelta(text);
-    },
-    emitToolCall(callId, tc) {
-      emitter?.emitToolCallDelta(callId, tc.name, tc.arguments);
-    },
-  });
+  let toolCalls: OpenAIToolCall[] | undefined;
 
   // Check for command before calling Lumo
-  const commandResult = await tryExecuteCommand(turns, ctx.commandContext);
+  const commandResult = await tryExecuteCommand(turns, context.commandContext);
   if (commandResult) {
     accumulatedText = commandResult.response;
     emitter?.emitContentDelta(accumulatedText);
   } else {
-    // Normal flow: call Lumo
+    // Normal flow: call Lumo with TamerTool loop
     try {
-      const result = await deps.queue.add(async () =>
-        deps.lumoClient.chatWithHistory(turns, processor.onChunk, {
-          requestTitle: ctx.requestTitle,
-          instructions,
-          injectInstructionsInto,
-        })
-      );
+      const loopResult = await chatAndExecute({
+        deps,
+        context,
+        turns,
+        conversationId,
+        instructions,
+        injectInstructionsInto,
+        onTextDelta(text) {
+          accumulatedText += text;
+          emitter?.emitContentDelta(text);
+        },
+        onClientToolCall(callId, tc) {
+          // Client tool calls - client must execute
+          emitter?.emitToolCallDelta(callId, tc.name, JSON.stringify(tc.arguments));
+        },
+        onServerToolResult(result) {
+          // Server tool results - emit tool_call + tool result
+          emitter?.emitServerToolExecution(result.callId, result.toolName, result.args, result.output);
+        },
+      });
 
       logger.debug('[Server] Stream completed');
-      processor.finalize();
-      persistTitle(result, deps, conversationId);
-      toolCalls = processor.toolCallsEmitted.length > 0 ? processor.toolCallsEmitted : undefined;
-
-      persistAssistantTurn(
-        deps,
-        conversationId,
-        result.message,
-        mapToolCallsForPersistence(processor.toolCallsEmitted)
-      );
+      toolCalls = loopResult.customToolCalls.length > 0 ? loopResult.customToolCalls : undefined;
     } catch (error) {
       logger.error({ error: String(error) }, 'Chat completion error');
       if (emitter) {
