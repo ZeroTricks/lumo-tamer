@@ -39,4 +39,19 @@ describe('model tier + reasoning (chat/completions)', () => {
         const res = await chat({ model: 'lumo-max', reasoning_effort: 'high', messages: [{ role: 'user', content: 'hi' }] });
         expect(res.status).toBe(200);
     });
+
+    it('rejects an invalid reasoning_effort with a 400', async () => {
+        const res = await chat({ reasoning_effort: 'ludicrous', messages: [{ role: 'user', content: 'hi' }] });
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.error.code).toBe('invalid_reasoning_effort');
+        expect(body.error.param).toBe('reasoning_effort');
+    });
+
+    it('rejects a non-string model with a 400 (not a 500)', async () => {
+        const res = await chat({ model: 123, messages: [{ role: 'user', content: 'hi' }] });
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.error.code).toBe('model_not_found');
+    });
 });

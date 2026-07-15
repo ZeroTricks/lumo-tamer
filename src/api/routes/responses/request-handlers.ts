@@ -108,7 +108,7 @@ function createCompletedResponse(
     parallel_tool_calls: false,
     previous_response_id: request.previous_response_id ?? null,
     reasoning: {
-      effort: null,
+      effort: request.reasoning?.effort ?? null,
       summary: null,
     },
     store: request.store ?? false,

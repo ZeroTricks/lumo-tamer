@@ -1,5 +1,18 @@
 import { z } from 'zod';
 import merge from 'lodash/merge.js';
+import mergeWith from 'lodash/mergeWith.js';
+
+/**
+ * Merge config layers, but REPLACE arrays wholesale instead of merging them by
+ * index. Index-wise array merge means a user override like
+ * `allowedModels: ["lumo-max"]` would leave the other defaults in place; config
+ * arrays should fully replace the default.
+ */
+function mergeConfigLayers(...sources: unknown[]): Record<string, unknown> {
+  return mergeWith({}, ...sources, (_objValue: unknown, srcValue: unknown) =>
+    Array.isArray(srcValue) ? srcValue : undefined,
+  );
+}
 import bytes from 'bytes';
 import { fatalExit, loadConfigYaml, loadDefaultsYaml } from './config-file.js';
 
@@ -173,12 +186,12 @@ function loadMergedConfig(mode: ConfigMode): MergedConfig {
     const userModeConfig = (mode === 'server' ? userConfig.server : userConfig.cli) as Record<string, unknown> | undefined;
 
     // Stage 1: defaults -> user (for all keys including mode-specific)
-    const merged = merge({}, configDefaults, defaultModeConfig, userConfig, userModeConfig);
+    const merged = mergeConfigLayers(configDefaults, defaultModeConfig, userConfig, userModeConfig);
 
     // Stage 2: apply user mode overrides for shared keys only
     for (const key of SHARED_KEYS) {
       if (userModeConfig?.[key]) {
-        merged[key] = merge({}, merged[key], userModeConfig[key]);
+        merged[key] = mergeConfigLayers(merged[key], userModeConfig[key]);
       }
     }
 

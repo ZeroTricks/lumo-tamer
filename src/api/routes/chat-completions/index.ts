@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse } from '../../types.js';
 import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig, getReasoningConfig } from '../../../app/config.js';
-import { modelToTier, normalizeModelId, isModelAllowed, resolveReasoning } from '../../../lumo-client/model-tier.js';
+import { modelToTier, normalizeModelId, isModelAllowed, resolveReasoning, isValidReasoningEffort } from '../../../lumo-client/model-tier.js';
 import type { LumoModelTier } from '../../../lumo-client/types.js';
 import { logger } from '../../../app/logger.js';
 import { convertOpenAIChatMessages, extractSystemMessage } from '../../message-converter.js';
@@ -81,17 +81,25 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
         return sendInvalidRequest(res, 'At least one user message is required', 'messages', 'missing_user_message');
       }
 
-      // Validate the requested model before any side effects (persistence, SSE, queue).
-      if (request.model) {
+      // Validate model + reasoning_effort before any side effects (persistence, SSE, queue).
+      if (request.model !== undefined && request.model !== null) {
         const allowedModels = getServerConfig().allowedModels;
-        if (!isModelAllowed(normalizeModelId(request.model), allowedModels)) {
+        if (typeof request.model !== 'string' || !isModelAllowed(normalizeModelId(request.model), allowedModels)) {
           return sendInvalidRequest(
             res,
-            `Unknown model '${request.model}'. Allowed models: ${allowedModels.join(', ')}`,
+            `Unknown model '${String(request.model)}'. Allowed models: ${allowedModels.join(', ')}`,
             'model',
             'model_not_found',
           );
         }
+      }
+      if (!isValidReasoningEffort(request.reasoning_effort)) {
+        return sendInvalidRequest(
+          res,
+          `Invalid reasoning_effort '${String(request.reasoning_effort)}'. Allowed: none, low, medium, high`,
+          'reasoning_effort',
+          'invalid_reasoning_effort',
+        );
       }
 
       // ===== Generate conversation ID for persistence =====

@@ -11,10 +11,9 @@
  * from the legacy generation_request path.
  */
 
-import { Role, type Turn, type ToolName } from './types.js';
+import { Role, type Turn, type ToolName, type LumoModelTier } from './types.js';
 
-/** OpenAI-style model id that selects the Lumo tier. */
-export type LumoModelTier = 'auto' | 'lumo-lite' | 'lumo-max';
+export type { LumoModelTier };
 
 /** Lumo 2.0 unified endpoint (replaces the legacy `ai/v1/chat`). */
 export const LUMO_CHAT_ENDPOINT = 'ai/v1/chat/completions';

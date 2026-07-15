@@ -9,13 +9,22 @@ import type { LumoModelTier } from './types.js';
  * Normalize a client-supplied model id: lowercase, trimmed, and stripped of any
  * provider prefix (e.g. "proton/lumo-max" -> "lumo-max").
  */
-export function normalizeModelId(model?: string): string {
-    if (!model) {
+export function normalizeModelId(model?: unknown): string {
+    if (typeof model !== 'string') {
         return '';
     }
     const lower = model.trim().toLowerCase();
     const slash = lower.lastIndexOf('/');
     return slash >= 0 ? lower.slice(slash + 1) : lower;
+}
+
+/** Valid inbound reasoning_effort values (plus absent/null meaning "use default"). */
+export const VALID_REASONING_EFFORTS = ['none', 'low', 'medium', 'high'] as const;
+
+/** True if the effort is absent/null or one of the valid string values. */
+export function isValidReasoningEffort(effort: unknown): boolean {
+    return effort === undefined || effort === null
+        || (typeof effort === 'string' && (VALID_REASONING_EFFORTS as readonly string[]).includes(effort));
 }
 
 /** Map a normalized model id to a tier. `lumo`/`auto`/unknown-ish -> 'auto'. */

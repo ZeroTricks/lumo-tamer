@@ -104,10 +104,10 @@ server:
 
   # Model tier selection (Lumo 2.0).
   # The inbound OpenAI "model" field picks the tier:
-  #   lumo / auto -> Proton routes automatically
-  #   lumo-lite   -> Lumo 2.0 Lite (fast, everyday)
-  #   lumo-max    -> Lumo 2.0 Max (high-performance)
-  # Tier used when a request omits the model field:
+  #   lumo      -> Proton routes automatically
+  #   lumo-lite -> Lumo 2.0 Lite (fast, everyday)
+  #   lumo-max  -> Lumo 2.0 Max (high-performance)
+  # Tier used when a request omits the model field (auto = lumo / Proton routes):
   defaultModelTier: "auto"
   # Models advertised on /v1/models and accepted in the "model" field.
   # Unknown models are rejected with HTTP 400.

@@ -1,11 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeModelId, modelToTier, isModelAllowed, resolveReasoning } from '../../src/lumo-client/model-tier.js';
+import { normalizeModelId, modelToTier, isModelAllowed, resolveReasoning, isValidReasoningEffort } from '../../src/lumo-client/model-tier.js';
 
 describe('normalizeModelId', () => {
     it('lowercases, trims, and strips a provider prefix', () => {
         expect(normalizeModelId('  Lumo-Max ')).toBe('lumo-max');
         expect(normalizeModelId('proton/lumo-max')).toBe('lumo-max');
         expect(normalizeModelId(undefined)).toBe('');
+    });
+    it('returns empty string for non-string input (no throw)', () => {
+        expect(normalizeModelId(42 as unknown)).toBe('');
+        expect(normalizeModelId({} as unknown)).toBe('');
+        expect(normalizeModelId(null)).toBe('');
+    });
+});
+
+describe('isValidReasoningEffort', () => {
+    it('accepts valid values and absent/null', () => {
+        for (const e of ['none', 'low', 'medium', 'high', undefined, null]) {
+            expect(isValidReasoningEffort(e)).toBe(true);
+        }
+    });
+    it('rejects invalid values (including wrong case and non-strings)', () => {
+        for (const e of ['NONE', 'HIGH', 'typo', '', 5, {}]) {
+            expect(isValidReasoningEffort(e)).toBe(false);
+        }
     });
 });
 
