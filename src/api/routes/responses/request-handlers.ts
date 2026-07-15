@@ -7,7 +7,9 @@ import {
   MessageOutputItem,
   FunctionCallOutputItem,
 } from '../../types.js';
-import { getServerConfig } from '../../../app/config.js';
+import { getServerConfig, getReasoningConfig } from '../../../app/config.js';
+import { modelToTier, normalizeModelId, resolveReasoning } from '../../../lumo-client/model-tier.js';
+import type { LumoModelTier } from '../../../lumo-client/types.js';
 import { logger } from '../../../app/logger.js';
 import { ResponseEventEmitter } from './events.js';
 import type { Turn } from '../../../lumo-client/index.js';
@@ -141,8 +143,15 @@ export async function handleRequest(
   const id = generateResponseId();
   const itemId = generateItemId();
   const createdAt = Math.floor(Date.now() / 1000);
-  const model = request.model || getServerConfig().apiModelName;
+  const serverConfig = getServerConfig();
+  const model = request.model || serverConfig.apiModelName;
   const ctx = buildRequestContext(deps, conversationId, request.tools);
+
+  // Resolve tier (Lite/Max) and thinking mode from the inbound request.
+  const tier: LumoModelTier = request.model
+    ? modelToTier(normalizeModelId(request.model))
+    : serverConfig.defaultModelTier;
+  const enableReasoning = resolveReasoning(request.reasoning?.effort, getReasoningConfig().default === 'high');
 
   // Streaming setup
   const emitter = streaming ? new ResponseEventEmitter(res) : null;
@@ -186,6 +195,8 @@ export async function handleRequest(
           requestTitle: ctx.requestTitle,
           instructions,
           injectInstructionsInto,
+          modelTier: tier,
+          enableReasoning,
         })
       );
 

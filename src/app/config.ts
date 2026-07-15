@@ -127,6 +127,12 @@ const serverMergedConfigSchema = z.object({
   port: z.number().int().positive(),
   apiKey: z.string().min(1, 'server.apiKey is required'),
   apiModelName: z.string().min(1),
+  defaultModelTier: z.enum(['auto', 'lumo-lite', 'lumo-max']),
+  allowedModels: z.array(z.string().min(1)).min(1),
+  reasoning: z.object({
+    default: z.enum(['none', 'high']),
+    surfaceThinking: z.boolean(),
+  }),
 });
 
 // CLI merged config schema
@@ -245,6 +251,11 @@ export function getServerInstructionsConfig() {
 export function getMetricsConfig() {
   const cfg = getServerConfig();
   return cfg.metrics;
+}
+
+export function getReasoningConfig() {
+  const cfg = getServerConfig();
+  return cfg.reasoning;
 }
 
 // CLI-specific getters
