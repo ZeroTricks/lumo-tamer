@@ -112,6 +112,24 @@ export interface AssistantMessageData {
 
 // LumoClient types
 
+/** OpenAI-style model id selecting the Lumo tier. */
+export type LumoModelTier = 'auto' | 'lumo-lite' | 'lumo-max';
+
+/**
+ * Usage/limit info from the chat/completions `usage` SSE chunk.
+ * Proton reports completion tokens + limit metadata, but NOT prompt or
+ * reasoning token counts, so those are intentionally absent.
+ */
+export interface LumoUsage {
+    completion_tokens?: number;
+    /** Which tier bucket the request was billed against ('lite' | 'max'). */
+    applied_limit_category?: string;
+    /** Remaining per-bucket limits, or null on unlimited plans. */
+    remaining_limits?: Record<string, number | null> | null;
+    /** Serving model id (hashed for encrypted requests). */
+    model?: string;
+}
+
 export interface LumoClientOptions {
     enableEncryption?: boolean;
     endpoint?: string;
@@ -120,12 +138,22 @@ export interface LumoClientOptions {
     instructions?: string;
     /** Where to inject instructions: 'first' or 'last' user turn. Default: 'first'. */
     injectInstructionsInto?: 'first' | 'last';
+    /** Model tier (Lite/Max). Defaults to 'auto'. */
+    modelTier?: LumoModelTier;
+    /** Thinking mode: request reasoning (reasoning_effort:'high'). */
+    enableReasoning?: boolean;
+    /** Sink for reasoning/thinking chunks (always drained, even if unused). */
+    onReasoning?: (content: string) => void;
 }
 
 /** Result from a chat request. */
 export interface ChatResult {
     /** Assistant message data ready for persistence */
     message: AssistantMessageData;
+    /** Accumulated reasoning/thinking text (when reasoning_effort was high) */
+    reasoning?: string;
+    /** Usage/limit metadata from the final `usage` chunk */
+    usage?: LumoUsage;
     /** Generated conversation title (for new conversations) */
     title?: string;
     /** Whether the native tool call failed server-side (tool_result contained error) */
