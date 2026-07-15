@@ -29,6 +29,22 @@ export interface ProtonApiOptions {
 
 export type ProtonApi = (options: ProtonApiOptions) => Promise<ReadableStream<Uint8Array> | unknown>;
 
+/**
+ * Error thrown by the ProtonApi transport for non-2xx responses.
+ * Carries the full Proton error context so callers can decode terminal errors
+ * (e.g. app-version rejection, tier/quota limits) from the response body.
+ */
+export interface ProtonApiError extends Error {
+    /** HTTP status code */
+    status?: number;
+    /** Proton API error code (from the response body's `Code` field) */
+    Code?: number;
+    /** Parsed JSON error body, if the response was JSON */
+    data?: unknown;
+    /** Raw response body text */
+    body?: string;
+}
+
 // Cached user keys structure (for persistence without core/v4/users scope)
 export interface CachedUserKey {
     ID: string;
