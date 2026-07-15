@@ -27,7 +27,7 @@ interface OpenAiDelta {
     reasoning_content?: string;
     reasoning?: string;
     encrypted?: boolean;
-    target?: 'message' | 'reasoning' | 'tool_call';
+    target?: string;
     tool_calls?: Array<{
         index?: number;
         function?: { name?: string; arguments?: string };
@@ -61,6 +61,7 @@ export class V2StreamProcessor {
             this.handleLine(this.buffer, messages);
             this.buffer = '';
         }
+        this.flushToolCalls(messages);
         return messages;
     }
 
@@ -124,7 +125,12 @@ export class V2StreamProcessor {
         }
 
         if (obj.usage) {
-            out.push({ type: 'usage', usage: obj.usage as LumoUsage });
+            const usage = obj.usage as LumoUsage;
+            // The serving model id is a top-level field on the chunk.
+            if (usage.model === undefined && typeof obj.model === 'string') {
+                usage.model = obj.model;
+            }
+            out.push({ type: 'usage', usage });
         }
 
         const choices = obj.choices as Array<{ finish_reason?: string; delta?: OpenAiDelta }> | undefined;
@@ -138,32 +144,36 @@ export class V2StreamProcessor {
         if (!choice.delta) {
             return;
         }
-        this.processDelta(choice.delta, out);
+        const topTarget = typeof obj.target === 'string' ? obj.target : undefined;
+        this.processDelta(choice.delta, topTarget, out);
     }
 
-    private processDelta(delta: OpenAiDelta, out: V2StreamMessage[]): void {
-        const target = delta.target ?? 'message';
+    private processDelta(delta: OpenAiDelta, topTarget: string | undefined, out: V2StreamMessage[]): void {
+        // Honor an explicit reasoning target; otherwise content is message text.
+        const rawTarget = delta.target ?? topTarget ?? 'message';
+        const contentTarget: 'message' | 'reasoning' | 'tool_call' =
+            rawTarget === 'reasoning' || rawTarget === 'tool_call' ? rawTarget : 'message';
+
         if (typeof delta.content === 'string' && delta.content.length > 0) {
-            out.push({ type: 'token_data', target: target === 'reasoning' ? 'message' : target, content: delta.content, encrypted: delta.encrypted });
+            out.push({ type: 'token_data', target: contentTarget, content: delta.content, encrypted: delta.encrypted });
         }
         const reasoning = delta.reasoning_content ?? delta.reasoning;
         if (typeof reasoning === 'string' && reasoning.length > 0) {
             out.push({ type: 'token_data', target: 'reasoning', content: reasoning, encrypted: delta.encrypted });
         }
+        // Accumulate tool-call deltas; a single complete call is emitted in finalize()
+        // so the consumer sees full arguments (not an early empty-argument snapshot).
         if (Array.isArray(delta.tool_calls)) {
             for (const tc of delta.tool_calls) {
-                const emitted = this.accumulateToolCall(tc);
-                if (emitted) {
-                    out.push(emitted);
-                }
+                this.accumulateToolCall(tc);
             }
         }
     }
 
-    /** Accumulate a streamed tool-call delta; emit token_data once a name is known. */
+    /** Accumulate one streamed tool-call delta by index. */
     private accumulateToolCall(
         tc: { index?: number; function?: { name?: string; arguments?: string } },
-    ): V2StreamMessage | null {
+    ): void {
         const index = tc.index ?? 0;
         const existing = this.toolCalls.get(index) ?? { name: '', arguments: '' };
         if (tc.function?.name) {
@@ -173,18 +183,24 @@ export class V2StreamProcessor {
             existing.arguments += tc.function.arguments;
         }
         this.toolCalls.set(index, existing);
-        if (!existing.name) {
-            return null;
-        }
-        let args: Record<string, unknown> = {};
-        if (existing.arguments) {
-            try {
-                args = JSON.parse(existing.arguments);
-            } catch {
-                // arguments still streaming; emit best-effort with raw string
-                return { type: 'token_data', target: 'tool_call', content: JSON.stringify({ name: existing.name, arguments: existing.arguments }) };
+    }
+
+    /** Emit one complete token_data tool_call per accumulated index. */
+    private flushToolCalls(out: V2StreamMessage[]): void {
+        for (const tc of this.toolCalls.values()) {
+            if (!tc.name) {
+                continue;
             }
+            let args: unknown = {};
+            if (tc.arguments) {
+                try {
+                    args = JSON.parse(tc.arguments);
+                } catch {
+                    args = tc.arguments; // incomplete/invalid JSON: pass through raw
+                }
+            }
+            out.push({ type: 'token_data', target: 'tool_call', content: JSON.stringify({ name: tc.name, arguments: args }) });
         }
-        return { type: 'token_data', target: 'tool_call', content: JSON.stringify({ name: existing.name, arguments: args }) };
+        this.toolCalls.clear();
     }
 }

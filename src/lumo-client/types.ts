@@ -124,8 +124,10 @@ export interface LumoUsage {
     completion_tokens?: number;
     /** Which tier bucket the request was billed against ('lite' | 'max'). */
     applied_limit_category?: string;
-    /** Remaining per-bucket limits, or null on unlimited plans. */
+    /** Remaining per-bucket limits (lite/max/images), or null on unlimited plans. */
     remaining_limits?: Record<string, number | null> | null;
+    /** Whether an image-generation limit was applied. */
+    image_limit_applied?: boolean;
     /** Serving model id (hashed for encrypted requests). */
     model?: string;
 }

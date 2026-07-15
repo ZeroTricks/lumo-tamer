@@ -87,6 +87,32 @@ describe('V2StreamProcessor', () => {
         expect(last).toEqual({ type: 'token_data', target: 'tool_call', content: JSON.stringify({ name: 'web_search', arguments: { q: 'cats' } }) });
     });
 
+    it('routes content with an explicit reasoning target to reasoning', () => {
+        const line = `data:${JSON.stringify({ choices: [{ delta: { target: 'reasoning', content: 'secret' } }] })}\n`;
+        expect(run(line)).toContainEqual({ type: 'token_data', target: 'reasoning', content: 'secret', encrypted: undefined });
+    });
+
+    it('honors a top-level chunk target', () => {
+        const line = `data:${JSON.stringify({ target: 'reasoning', choices: [{ delta: { content: 't' } }] })}\n`;
+        expect(run(line)).toContainEqual({ type: 'token_data', target: 'reasoning', content: 't', encrypted: undefined });
+    });
+
+    it('copies the top-level model into the usage message', () => {
+        const line = `data:${JSON.stringify({ model: 'lumo-max', choices: [], usage: { completion_tokens: 1 } })}\n`;
+        expect(run(line)).toContainEqual({ type: 'usage', usage: { completion_tokens: 1, model: 'lumo-max' } });
+    });
+
+    it('emits a single complete tool_call only at finalize (not mid-stream)', () => {
+        const p = new V2StreamProcessor();
+        const during = [
+            ...p.processChunk(chunk({ tool_calls: [{ index: 0, function: { name: 'web_search' } }] })),
+            ...p.processChunk(chunk({ tool_calls: [{ index: 0, function: { arguments: '{"q":"x"}' } }] })),
+        ];
+        expect(during.filter((m) => m.type === 'token_data' && m.target === 'tool_call')).toHaveLength(0);
+        const fin = p.finalize();
+        expect(fin).toContainEqual({ type: 'token_data', target: 'tool_call', content: JSON.stringify({ name: 'web_search', arguments: { q: 'x' } }) });
+    });
+
     it('ignores image_data objects', () => {
         const line = `data:${JSON.stringify({ object: 'lumo.image_data', image: { id: 'i', data: 'x' } })}\n`;
         expect(run(line)).toEqual([]);

@@ -118,15 +118,18 @@ export class LumoClient {
         let usage: LumoUsage | undefined;
         let suppressChunks = false;
         let abortEarly = false;
+        let streamEnded = false;
 
-        const decrypt = async (text: string, encrypted?: boolean): Promise<string> => {
+        // Decrypt an encrypted chunk. On failure, return null so the caller drops
+        // the chunk (matching Proton's client) rather than emitting ciphertext.
+        const decrypt = async (text: string, encrypted?: boolean): Promise<string | null> => {
             if (encrypted && encryptionContext) {
                 const adString = `lumo.response.${encryptionContext.requestId}.chunk`;
                 try {
                     return await decryptString(text, encryptionContext.requestKey, adString);
                 } catch (error) {
-                    logger.error({ error }, 'Failed to decrypt chunk');
-                    return text;
+                    logger.error({ error }, 'Failed to decrypt chunk; dropping');
+                    return null;
                 }
             }
             return text;
@@ -137,16 +140,18 @@ export class LumoClient {
                 case 'token_data': {
                     if (msg.target === 'message') {
                         const text = await decrypt(msg.content, msg.encrypted);
+                        if (text === null) break;
                         content += text;
                         if (!suppressChunks) {
                             opts.onChunk?.(text);
                         }
                     } else if (msg.target === 'reasoning') {
                         const text = await decrypt(msg.content, msg.encrypted);
+                        if (text === null) break;
                         reasoning += text;
                         opts.onReasoning?.(text);
                     } else if (msg.target === 'tool_call') {
-                        // Streamed OpenAI tool-call deltas (custom-tool misroute path).
+                        // Complete tool call (custom-tool misroute path); emitted by finalize().
                         if (nativeToolProcessor.feedToolCall(msg.content)) {
                             suppressChunks = true;
                             abortEarly = true;
@@ -157,6 +162,7 @@ export class LumoClient {
                 case 'server_tool_call': {
                     // Native tool call (e.g. proton_info); normalize into the tool processor.
                     const args = msg.arguments !== undefined ? await decrypt(msg.arguments, msg.encrypted) : '';
+                    if (args === null) break;
                     let parsedArgs: unknown = {};
                     try {
                         parsedArgs = args ? JSON.parse(args) : {};
@@ -172,6 +178,7 @@ export class LumoClient {
                 }
                 case 'server_tool_result': {
                     const result = await decrypt(msg.content, msg.encrypted);
+                    if (result === null) break;
                     nativeToolProcessor.feedToolResult(result);
                     break;
                 }
@@ -191,14 +198,17 @@ export class LumoClient {
         try {
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) break;
+                if (done) {
+                    streamEnded = true;
+                    break;
+                }
                 const chunk = decoder.decode(value, { stream: true });
                 for (const msg of processor.processChunk(chunk)) {
                     await processMessage(msg);
                 }
                 if (abortEarly) break;
             }
-            // Flush the decoder and any trailing buffered line.
+            // Flush the decoder and any trailing buffered line + accumulated tool calls.
             const tail = decoder.decode();
             if (tail) {
                 for (const msg of processor.processChunk(tail)) {
@@ -212,7 +222,19 @@ export class LumoClient {
             nativeToolProcessor.finalize();
             return { content, reasoning, usage, native: nativeToolProcessor.getResult() };
         } finally {
-            reader.releaseLock();
+            // Cancel the upstream body if we stopped early (e.g. misrouted-tool abort).
+            if (!streamEnded) {
+                try {
+                    await reader.cancel();
+                } catch {
+                    // ignore
+                }
+            }
+            try {
+                reader.releaseLock();
+            } catch {
+                // ignore
+            }
         }
     }
 
@@ -314,7 +336,8 @@ export class LumoClient {
             : turns;
 
         // Title generation is a separate, concurrent, non-fatal completion.
-        const titlePromise = requestTitle
+        // Only at the top level: a bounce must not launch its own title request.
+        const titlePromise = requestTitle && !isBounce
             ? this.runCompletion(turns, {
                 endpoint,
                 tier: modelTier,
@@ -359,7 +382,13 @@ export class LumoClient {
                 { role: Role.User, content: bounceInstruction },
             ];
 
-            return this.chatWithHistory(bounceTurns, onChunk, options, true);
+            // The bounce runs with isBounce=true (no title of its own); carry the
+            // title from this top-level attempt so it isn't wasted or re-derived
+            // from the synthetic bounce transcript.
+            const bounced = await this.chatWithHistory(bounceTurns, onChunk, options, true);
+            const titleResult = titlePromise ? await titlePromise : null;
+            const title = titleResult?.content ? postProcessTitle(titleResult.content) : bounced.title;
+            return { ...bounced, title };
         }
 
         // Build message data for persistence.
