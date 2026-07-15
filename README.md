@@ -26,6 +26,7 @@ lumo-tamer is a lightweight local proxy that talks to Proton's Lumo API using th
 ## Features
 
 - OpenAI-compatible API server with experimental tool support.
+- Select the Lumo 2.0 model tier (Lite/Max) and thinking mode per request, via the OpenAI `model` and `reasoning_effort` fields.
 - Interactive CLI, let Lumo help you execute commands, read, create and edit files.
 - Sync your conversations with Proton to access them on https://lumo.proton.me or in mobile apps.
 
@@ -195,6 +196,31 @@ server:
 cli:
   enableWebSearch: true
 ```
+
+### Model Tiers and Thinking Mode
+
+lumo-tamer maps standard OpenAI request fields to Lumo 2.0's model tier and answer mode:
+
+- `model`: `lumo` (Proton auto-routes), `lumo-lite`, or `lumo-max`. These are advertised on `/v1/models`; an unknown model returns HTTP 400.
+- `reasoning_effort`: `high` (also `low`/`medium`) turns on thinking mode, `none` turns it off. In the Responses API, use `reasoning.effort` instead.
+
+Defaults and surfacing are configurable:
+
+```yaml
+server:
+  # Tier used when a request omits the model field: auto, lumo-lite, lumo-max
+  defaultModelTier: "auto"
+  # Models advertised on /v1/models and accepted in the model field
+  allowedModels: ["lumo", "lumo-lite", "lumo-max"]
+  reasoning:
+    # Used when a request omits reasoning_effort: "none" or "high"
+    default: "none"
+    # Forward Lumo's thinking tokens as delta.reasoning_content (streaming)
+    # or message.reasoning_content (non-streaming)
+    surfaceThinking: false
+```
+
+> **Note:** Availability of `lumo-max` and thinking mode depends on your Proton plan. Requests are end-to-end encrypted the same way as the rest of lumo-tamer.
 
 ### Instructions
 
