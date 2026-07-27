@@ -99,7 +99,31 @@ commands:
 server:
   port: 3003
   apiKey: "your-secret-api-key-here"
+  # Model echoed back when a request omits the model field.
   apiModelName: "lumo"
+
+  # Model tier selection (Lumo 2.0).
+  # The inbound OpenAI "model" field picks the tier:
+  #   lumo      -> Proton routes automatically
+  #   lumo-lite -> Lumo 2.0 Lite (fast, everyday)
+  #   lumo-max  -> Lumo 2.0 Max (high-performance)
+  # Tier used when a request omits the model field (auto = lumo / Proton routes):
+  defaultModelTier: "auto"
+  # Models advertised on /v1/models and accepted in the "model" field.
+  # Unknown models are rejected with HTTP 400.
+  allowedModels:
+    - "lumo"
+    - "lumo-lite"
+    - "lumo-max"
+
+  # Thinking / reasoning mode (Lumo 2.0).
+  reasoning:
+    # Used when the client does not send reasoning_effort. "none" or "high".
+    # (Inbound reasoning_effort low/medium/high all map to high.)
+    default: "none"
+    # Forward Lumo's thinking tokens to the client as delta.reasoning_content
+    # (streaming) or message.reasoning_content (non-streaming).
+    surfaceThinking: false
 
   # Max request body size
   # Increase if clients send larger tool/context payloads, but be aware:

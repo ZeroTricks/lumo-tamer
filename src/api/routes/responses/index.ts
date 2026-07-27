@@ -4,7 +4,8 @@ import { logger } from '../../../app/logger.js';
 import { handleRequest } from './request-handlers.js';
 import { convertOpenAIResponseMessages } from '../../message-converter.js';
 import { buildInstructions } from '../../instructions.js';
-import { getConversationsConfig, getServerInstructionsConfig } from '../../../app/config.js';
+import { getConversationsConfig, getServerInstructionsConfig, getServerConfig } from '../../../app/config.js';
+import { isModelAllowed, normalizeModelId, isValidReasoningEffort } from '../../../lumo-client/model-tier.js';
 import { getMetrics } from '../../../app/metrics.js';
 import { trackCustomToolCompletion } from '../../tools/call-id.js';
 import { sendInvalidRequest, sendServerError } from '../../error-handler.js';
@@ -94,6 +95,27 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
         if (!hasUserMessage) {
           return sendInvalidRequest(res, 'input array must include at least one user message', 'input', 'missing_user_message');
         }
+      }
+
+      // Validate model + reasoning effort before any side effects.
+      if (request.model !== undefined && request.model !== null) {
+        const allowedModels = getServerConfig().allowedModels;
+        if (typeof request.model !== 'string' || !isModelAllowed(normalizeModelId(request.model), allowedModels)) {
+          return sendInvalidRequest(
+            res,
+            `Unknown model '${String(request.model)}'. Allowed models: ${allowedModels.join(', ')}`,
+            'model',
+            'model_not_found',
+          );
+        }
+      }
+      if (!isValidReasoningEffort(request.reasoning?.effort)) {
+        return sendInvalidRequest(
+          res,
+          `Invalid reasoning.effort '${String(request.reasoning?.effort)}'. Allowed: none, low, medium, high`,
+          'reasoning.effort',
+          'invalid_reasoning_effort',
+        );
       }
 
       // ===== STEP 3: Convert input to turns =====

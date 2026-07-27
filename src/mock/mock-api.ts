@@ -35,6 +35,56 @@ type Scenario = MockConfig['scenario'];
 const callCounts = new Map<string, number>();
 const MAX_CALLS = 10;
 
+const v2chunk = (fields: Record<string, unknown>) =>
+    `data: ${JSON.stringify({ object: 'CompletionChunk', model: 'lumo-mock', ...fields })}\n\n`;
+const v2object = (obj: Record<string, unknown>) => `data: ${JSON.stringify(obj)}\n\n`;
+
+/**
+ * Translate a legacy generation_request SSE line (the format the vendored/custom
+ * scenarios still emit) into the Lumo 2.0 chat/completions OpenAI-style SSE the
+ * client now parses. Keeps scenarios untouched while the mock speaks v2.
+ */
+function translateToV2(legacyChunk: string): string {
+    const trimmed = legacyChunk.replace(/^data:\s*/, '').trim();
+    if (!trimmed) return '';
+    let msg: Record<string, unknown>;
+    try {
+        msg = JSON.parse(trimmed);
+    } catch {
+        return '';
+    }
+    switch (msg.type) {
+        case 'token_data': {
+            const content = typeof msg.content === 'string' ? msg.content : '';
+            if (msg.target === 'message') return v2chunk({ choices: [{ index: 0, delta: { content } }] });
+            if (msg.target === 'reasoning') return v2chunk({ choices: [{ index: 0, delta: { reasoning: content } }] });
+            if (msg.target === 'title') return ''; // v2 titles are a separate completion
+            if (msg.target === 'tool_call') {
+                try {
+                    const parsed = JSON.parse(content);
+                    const args = JSON.stringify(parsed.parameters ?? parsed.arguments ?? {});
+                    return v2object({ object: 'chat.tool_call', tool_call: { name: parsed.name, arguments: args } });
+                } catch {
+                    return '';
+                }
+            }
+            if (msg.target === 'tool_result') {
+                return v2object({ object: 'chat.tool_result', tool_result: { content } });
+            }
+            return '';
+        }
+        case 'done':
+            return 'data: [DONE]\n\n';
+        case 'error':
+        case 'timeout':
+        case 'rejected':
+        case 'harmful':
+            return v2chunk({ error: { code: msg.type, message: (msg.message as string) ?? String(msg.type) } });
+        default:
+            return ''; // ingesting/queued and other no-ops
+    }
+}
+
 function createStream(scenario: string, generator: ScenarioGenerator, options: ProtonApiOptions): ReadableStream<Uint8Array> {
     const encoder = new TextEncoder();
     return new ReadableStream({
@@ -45,7 +95,7 @@ function createStream(scenario: string, generator: ScenarioGenerator, options: P
             if (callNum > MAX_CALLS) {
                 logger.warn({ scenario, callNum }, `Mock safety limit: ${MAX_CALLS} calls exceeded`);
                 controller.enqueue(encoder.encode(
-                    formatSSEMessage({ type: 'error', message: `Mock safety limit: ${MAX_CALLS} calls exceeded` })
+                    v2chunk({ error: { code: 'error', message: `Mock safety limit: ${MAX_CALLS} calls exceeded` } })
                 ));
                 controller.close();
                 return;
@@ -53,7 +103,8 @@ function createStream(scenario: string, generator: ScenarioGenerator, options: P
 
             try {
                 for await (const chunk of generator(options)) {
-                    controller.enqueue(encoder.encode(chunk));
+                    const v2 = translateToV2(chunk);
+                    if (v2) controller.enqueue(encoder.encode(v2));
                 }
                 controller.close();
             } catch (error) {

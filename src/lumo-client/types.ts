@@ -29,6 +29,22 @@ export interface ProtonApiOptions {
 
 export type ProtonApi = (options: ProtonApiOptions) => Promise<ReadableStream<Uint8Array> | unknown>;
 
+/**
+ * Error thrown by the ProtonApi transport for non-2xx responses.
+ * Carries the full Proton error context so callers can decode terminal errors
+ * (e.g. app-version rejection, tier/quota limits) from the response body.
+ */
+export interface ProtonApiError extends Error {
+    /** HTTP status code */
+    status?: number;
+    /** Proton API error code (from the response body's `Code` field) */
+    Code?: number;
+    /** Parsed JSON error body, if the response was JSON */
+    data?: unknown;
+    /** Raw response body text */
+    body?: string;
+}
+
 // Cached user keys structure (for persistence without core/v4/users scope)
 export interface CachedUserKey {
     ID: string;
@@ -96,6 +112,26 @@ export interface AssistantMessageData {
 
 // LumoClient types
 
+/** OpenAI-style model id selecting the Lumo tier. */
+export type LumoModelTier = 'auto' | 'lumo-lite' | 'lumo-max';
+
+/**
+ * Usage/limit info from the chat/completions `usage` SSE chunk.
+ * Proton reports completion tokens + limit metadata, but NOT prompt or
+ * reasoning token counts, so those are intentionally absent.
+ */
+export interface LumoUsage {
+    completion_tokens?: number;
+    /** Which tier bucket the request was billed against ('lite' | 'max'). */
+    applied_limit_category?: string;
+    /** Remaining per-bucket limits (lite/max/images), or null on unlimited plans. */
+    remaining_limits?: Record<string, number | null> | null;
+    /** Whether an image-generation limit was applied. */
+    image_limit_applied?: boolean;
+    /** Serving model id (hashed for encrypted requests). */
+    model?: string;
+}
+
 export interface LumoClientOptions {
     enableEncryption?: boolean;
     endpoint?: string;
@@ -104,12 +140,22 @@ export interface LumoClientOptions {
     instructions?: string;
     /** Where to inject instructions: 'first' or 'last' user turn. Default: 'first'. */
     injectInstructionsInto?: 'first' | 'last';
+    /** Model tier (Lite/Max). Defaults to 'auto'. */
+    modelTier?: LumoModelTier;
+    /** Thinking mode: request reasoning (reasoning_effort:'high'). */
+    enableReasoning?: boolean;
+    /** Sink for reasoning/thinking chunks (always drained, even if unused). */
+    onReasoning?: (content: string) => void;
 }
 
 /** Result from a chat request. */
 export interface ChatResult {
     /** Assistant message data ready for persistence */
     message: AssistantMessageData;
+    /** Accumulated reasoning/thinking text (when reasoning_effort was high) */
+    reasoning?: string;
+    /** Usage/limit metadata from the final `usage` chunk */
+    usage?: LumoUsage;
     /** Generated conversation title (for new conversations) */
     title?: string;
     /** Whether the native tool call failed server-side (tool_result contained error) */

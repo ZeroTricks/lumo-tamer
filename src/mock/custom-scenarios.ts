@@ -9,9 +9,18 @@ import { Role, type Turn, type ProtonApiOptions } from '../lumo-client/types.js'
 import { formatSSEMessage, delay, type ScenarioGenerator } from './mock-api.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
 
-/** Extract turns from the mock request payload (unencrypted only). */
+/** Extract turns from the mock request payload (unencrypted only).
+ *  Supports the Lumo 2.0 chat/completions body (`messages`) and the legacy
+ *  generation_request body (`Prompt.turns`). */
 function getTurns(options: ProtonApiOptions): Turn[] {
-    return (options.data as any)?.Prompt?.turns ?? [];
+    const body = options.data as {
+        messages?: Array<{ role: Turn['role']; content?: string }>;
+        Prompt?: { turns?: Turn[] };
+    };
+    if (Array.isArray(body?.messages)) {
+        return body.messages.map((m) => ({ role: m.role, content: m.content })) as Turn[];
+    }
+    return body?.Prompt?.turns ?? [];
 }
 
 /** Find the last turn with a given role. */

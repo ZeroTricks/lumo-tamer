@@ -1,6 +1,9 @@
 /**
- * Simple Lumo API client
- * Minimal implementation with U2L encryption support
+ * Lumo API client (Lumo 2.0).
+ *
+ * Talks to Proton's unified `ai/v1/chat/completions` endpoint with optional U2L
+ * encryption, streams the OpenAI-style SSE response, surfaces reasoning/thinking,
+ * detects native tool calls, and bounces misrouted custom tools.
  */
 
 import { decryptString } from '@lumo/crypto/index.js';
@@ -13,25 +16,26 @@ import {
     generateRequestKey,
     RequestEncryptionParams,
 } from '@lumo/lib/lumo-api-client/core/encryptionParams.js';
-import { StreamProcessor } from '@lumo/lib/lumo-api-client/core/streaming.js';
 import { logger } from '../app/logger.js';
 import {
     Role,
     type AesGcmCryptoKey,
     type ProtonApi,
-    type GenerationResponseMessage,
-    type LumoApiGenerationRequest,
     type RequestId,
     type ToolName,
     type Turn,
     type ParsedToolCall,
     type AssistantMessageData,
     type LumoClientOptions,
+    type LumoModelTier,
+    type LumoUsage,
     type ChatResult,
 } from './types.js';
+import { buildChatCompletionsBody, LUMO_CHAT_ENDPOINT, type LumoCompletionTarget } from './v2-body.js';
+import { V2StreamProcessor } from './v2-stream.js';
 import { getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
 import { injectInstructionsIntoTurns } from './instructions.js';
-import { NativeToolCallProcessor } from '../api/tools/native-tool-call-processor.js';
+import { NativeToolCallProcessor, type NativeToolCallResult } from '../api/tools/native-tool-call-processor.js';
 import { postProcessTitle } from '@lumo/lib/lumo-api-client/utils.js';
 
 // Re-export types for external consumers
@@ -39,7 +43,20 @@ export type { LumoClientOptions, ChatResult };
 
 const DEFAULT_INTERNAL_TOOLS: ToolName[] = ['proton_info'];
 const DEFAULT_EXTERNAL_TOOLS: ToolName[] = ['web_search', 'weather', 'stock', 'cryptocurrency'];
-const DEFAULT_ENDPOINT = 'ai/v1/chat';
+
+/** Encryption context for decrypting a response stream. */
+interface EncryptionContext {
+    requestKey: AesGcmCryptoKey;
+    requestId: RequestId;
+}
+
+/** Raw result of a single chat/completions request. */
+interface CompletionResult {
+    content: string;
+    reasoning: string;
+    usage?: LumoUsage;
+    native: NativeToolCallResult;
+}
 
 /** Build the bounce instruction: config text + the misrouted tool call as JSON example.
  *  Includes the prefix in the example JSON so Lumo outputs it correctly. */
@@ -68,154 +85,217 @@ export class LumoClient {
 
     /**
      * Send a message and stream the response
-     * @param message - User message
-     * @param onChunk - Optional callback for each text chunk
-     * @param options - Request options
-     * @returns ChatResult with response text and optional title
      */
     async chat(
         message: string,
         onChunk?: (content: string) => void,
         options: LumoClientOptions = {}
     ): Promise<ChatResult> {
-
         const turns: Turn[] = [{ role: Role.User, content: message }];
         return this.chatWithHistory(turns, onChunk, options);
-
     }
 
     /**
-     * Process SSE stream and extract response text and optional title
-     *
-     * Title generation inspired by WebClients redux.ts lines 49-110
+     * Process the OpenAI-style SSE stream: decrypt content/reasoning, drain
+     * reasoning to its sink, feed native tool calls/results, capture usage.
      */
     private async processStream(
         stream: ReadableStream<Uint8Array>,
-        onChunk?: (content: string) => void,
-        encryptionContext?: {
-            enableEncryption: boolean;
-            requestKey?: AesGcmCryptoKey;
-            requestId?: RequestId;
+        encryptionContext: EncryptionContext | undefined,
+        opts: {
+            onChunk?: (content: string) => void;
+            onReasoning?: (content: string) => void;
+            isBounce: boolean;
         },
-        /** When true, ignore misrouted tool calls (they're stale leftovers in bounce responses). */
-        isBounce = false,
-    ): Promise<ChatResult> {
+    ): Promise<CompletionResult> {
         const reader = stream.getReader();
         const decoder = new TextDecoder('utf-8');
-        const processor = new StreamProcessor();
-        let fullResponse = '';
-        let fullTitle = '';
+        const processor = new V2StreamProcessor();
+        const nativeToolProcessor = new NativeToolCallProcessor(opts.isBounce);
 
-        // Native tool call processing (SSE tool_call/tool_result targets)
-        const nativeToolProcessor = new NativeToolCallProcessor(isBounce);
+        let content = '';
+        let reasoning = '';
+        let usage: LumoUsage | undefined;
         let suppressChunks = false;
         let abortEarly = false;
+        let streamEnded = false;
 
-        const processMessage = async (msg: GenerationResponseMessage) => {
-            if (msg.type === 'token_data') {
-                let content = msg.content;
-
-                // Decrypt if needed
-                if (
-                    msg.encrypted &&
-                    encryptionContext?.enableEncryption &&
-                    encryptionContext.requestKey &&
-                    encryptionContext.requestId
-                ) {
-                    const adString = `lumo.response.${encryptionContext.requestId}.chunk`;
-                    try {
-                        content = await decryptString(
-                            content,
-                            encryptionContext.requestKey,
-                            adString
-                        );
-                    } catch (error) {
-                        logger.error(error, 'Failed to decrypt chunk:');
-                        // Continue with encrypted content
-                    }
+        // Decrypt an encrypted chunk. On failure, return null so the caller drops
+        // the chunk (matching Proton's client) rather than emitting ciphertext.
+        const decrypt = async (text: string, encrypted?: boolean): Promise<string | null> => {
+            if (encrypted && encryptionContext) {
+                const adString = `lumo.response.${encryptionContext.requestId}.chunk`;
+                try {
+                    return await decryptString(text, encryptionContext.requestKey, adString);
+                } catch (error) {
+                    logger.error({ error }, 'Failed to decrypt chunk; dropping');
+                    return null;
                 }
+            }
+            return text;
+        };
 
-                if (msg.target === 'message') {
-                    fullResponse += content;
-                    if (!suppressChunks) {
-                        onChunk?.(content);
+        const processMessage = async (msg: ReturnType<V2StreamProcessor['processChunk']>[number]) => {
+            switch (msg.type) {
+                case 'token_data': {
+                    if (msg.target === 'message') {
+                        const text = await decrypt(msg.content, msg.encrypted);
+                        if (text === null) break;
+                        content += text;
+                        if (!suppressChunks) {
+                            opts.onChunk?.(text);
+                        }
+                    } else if (msg.target === 'reasoning') {
+                        const text = await decrypt(msg.content, msg.encrypted);
+                        if (text === null) break;
+                        reasoning += text;
+                        opts.onReasoning?.(text);
+                    } else if (msg.target === 'tool_call') {
+                        // Complete tool call (custom-tool misroute path); emitted by finalize().
+                        if (nativeToolProcessor.feedToolCall(msg.content)) {
+                            suppressChunks = true;
+                            abortEarly = true;
+                        }
                     }
-                } else if (msg.target === 'title') {
-                    // Accumulate title chunks (title streams before message)
-                    fullTitle += content;
-                } else if (msg.target === 'tool_call') {
-                    if (nativeToolProcessor.feedToolCall(content)) {
+                    break;
+                }
+                case 'server_tool_call': {
+                    // Native tool call (e.g. proton_info); normalize into the tool processor.
+                    const args = msg.arguments !== undefined ? await decrypt(msg.arguments, msg.encrypted) : '';
+                    if (args === null) break;
+                    let parsedArgs: unknown = {};
+                    try {
+                        parsedArgs = args ? JSON.parse(args) : {};
+                    } catch {
+                        parsedArgs = args;
+                    }
+                    const json = JSON.stringify({ name: msg.name, arguments: parsedArgs });
+                    if (nativeToolProcessor.feedToolCall(json)) {
                         suppressChunks = true;
                         abortEarly = true;
                     }
-                } else if (msg.target === 'tool_result') {
-                    nativeToolProcessor.feedToolResult(content);
+                    break;
                 }
-            } else if (
-                msg.type === 'error' ||
-                msg.type === 'rejected' ||
-                msg.type === 'harmful' ||
-                msg.type === 'timeout'
-            ) {
-                const detail = (msg as any).message;
-                throw new Error(`API returned ${msg.type}${detail ? `: ${detail}` : ''}`);
+                case 'server_tool_result': {
+                    const result = await decrypt(msg.content, msg.encrypted);
+                    if (result === null) break;
+                    nativeToolProcessor.feedToolResult(result);
+                    break;
+                }
+                case 'usage':
+                    usage = msg.usage;
+                    break;
+                case 'harmful':
+                    throw new Error('API returned harmful');
+                case 'error':
+                    throw new Error(`API returned error${msg.message ? `: ${msg.message}` : ''}`);
+                case 'done':
+                    abortEarly = true;
+                    break;
             }
         };
 
         try {
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) break;
-
+                if (done) {
+                    streamEnded = true;
+                    break;
+                }
                 const chunk = decoder.decode(value, { stream: true });
-                const messages = processor.processChunk(chunk);
-
-                for (const msg of messages) {
+                for (const msg of processor.processChunk(chunk)) {
                     await processMessage(msg);
                 }
                 if (abortEarly) break;
             }
-
-            // Process any remaining data
-            const finalMessages = processor.finalize();
-            for (const msg of finalMessages) {
+            // Flush the decoder and any trailing buffered line + accumulated tool calls.
+            const tail = decoder.decode();
+            if (tail) {
+                for (const msg of processor.processChunk(tail)) {
+                    await processMessage(msg);
+                }
+            }
+            for (const msg of processor.finalize()) {
                 await processMessage(msg);
             }
 
-            // Finalize tracking and get result
             nativeToolProcessor.finalize();
-            const nativeResult = nativeToolProcessor.getResult();
-
-            // Build message data for persistence
-            // Only include native tool data if not misrouted (misrouted calls are bounced)
-            const message: AssistantMessageData = { content: fullResponse };
-            if (nativeResult.toolCall && !nativeResult.misrouted) {
-                message.toolCall = JSON.stringify({
-                    name: nativeResult.toolCall.name,
-                    arguments: nativeResult.toolCall.arguments,
-                });
-                if (nativeResult.toolResult) {
-                    message.toolResult = nativeResult.toolResult;
+            return { content, reasoning, usage, native: nativeToolProcessor.getResult() };
+        } finally {
+            // Cancel the upstream body if we stopped early (e.g. misrouted-tool abort).
+            if (!streamEnded) {
+                try {
+                    await reader.cancel();
+                } catch {
+                    // ignore
                 }
             }
-
-            return {
-                message,
-                title: fullTitle || undefined,
-                nativeToolCallFailed: nativeResult.toolCall ? nativeResult.failed : undefined,
-                misrouted: nativeResult.misrouted,
-                // Keep parsed tool call for bounce handling (internal use only)
-                _nativeToolCallForBounce: nativeResult.misrouted ? nativeResult.toolCall : undefined,
-            };
-        } finally {
-            reader.releaseLock();
+            try {
+                reader.releaseLock();
+            } catch {
+                // ignore
+            }
         }
     }
 
+    /** Encrypt (optionally), build the body, POST, and process one completion. */
+    private async runCompletion(
+        turns: Turn[],
+        params: {
+            endpoint: string;
+            tier: LumoModelTier;
+            enableReasoning: boolean;
+            tools: ToolName[];
+            enableEncryption: boolean;
+            target: LumoCompletionTarget;
+            onChunk?: (content: string) => void;
+            onReasoning?: (content: string) => void;
+            isBounce: boolean;
+        },
+    ): Promise<CompletionResult> {
+        let processedTurns = turns;
+        let encryption: { requestKeyEncB64: string; requestId: string } | undefined;
+        let encryptionContext: EncryptionContext | undefined;
+
+        if (params.enableEncryption) {
+            const requestKey = await generateRequestKey();
+            const requestId = generateRequestId();
+            const encryptionParams = new RequestEncryptionParams(requestKey, requestId);
+            const requestKeyEncB64 = await encryptionParams.encryptRequestKey(DEFAULT_LUMO_PUB_KEY);
+            processedTurns = await encryptTurns(turns, encryptionParams);
+            encryption = { requestKeyEncB64, requestId: encryptionParams.requestId };
+            encryptionContext = { requestKey: encryptionParams.requestKey, requestId: encryptionParams.requestId };
+        }
+
+        const body = buildChatCompletionsBody({
+            turns: processedTurns,
+            tier: params.tier,
+            enableReasoning: params.enableReasoning,
+            tools: params.tools,
+            encryption,
+            encrypted: params.enableEncryption,
+            target: params.target,
+        });
+
+        const stream = (await this.protonApi({
+            url: params.endpoint,
+            method: 'post',
+            data: body,
+            output: 'stream',
+        })) as ReadableStream<Uint8Array>;
+
+        return this.processStream(stream, encryptionContext, {
+            onChunk: params.onChunk,
+            onReasoning: params.onReasoning,
+            isBounce: params.isBounce,
+        });
+    }
+
     /**
-     * Multi-turn conversation support
+     * Multi-turn conversation support.
      *
-     * Title generation inspired by WebClients helper.ts:596 and client.ts:110
+     * Titles use a separate `lumo.target:'title'` completion (Lumo 2.0 no longer
+     * co-streams title with the message); it runs concurrently and is non-fatal.
      */
     async chatWithHistory(
         turns: Turn[],
@@ -226,10 +306,13 @@ export class LumoClient {
     ): Promise<ChatResult> {
         const {
             enableEncryption = this.defaultOptions?.enableEncryption ?? true,
-            endpoint = DEFAULT_ENDPOINT,
+            endpoint = LUMO_CHAT_ENDPOINT,
             requestTitle = false,
             instructions,
             injectInstructionsInto = 'first',
+            modelTier = this.defaultOptions?.modelTier ?? 'auto',
+            enableReasoning = this.defaultOptions?.enableReasoning ?? false,
+            onReasoning = this.defaultOptions?.onReasoning,
         } = options;
 
         const turn = turns[turns.length - 1];
@@ -247,87 +330,89 @@ export class LumoClient {
             ? [...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]
             : DEFAULT_INTERNAL_TOOLS;
 
-        // Inject instructions into turns at the last moment (before encryption/API call)
-        // This keeps stored conversations clean - instructions are transient, not persisted
+        // Inject instructions at the last moment (kept out of persisted turns).
         const turnsWithInstructions = instructions
             ? injectInstructionsIntoTurns(turns, instructions, injectInstructionsInto)
             : turns;
 
-        let encryptionParams: RequestEncryptionParams | undefined;
-        let processedTurns: Turn[] = turnsWithInstructions;
-        let requestKeyEncB64: string | undefined;
+        // Title generation is a separate, concurrent, non-fatal completion.
+        // Only at the top level: a bounce must not launch its own title request.
+        const titlePromise = requestTitle && !isBounce
+            ? this.runCompletion(turns, {
+                endpoint,
+                tier: modelTier,
+                enableReasoning: false,
+                tools: [],
+                enableEncryption,
+                target: 'title',
+                isBounce: true, // no bounce handling for the title request
+            }).catch((error) => {
+                logger.warn({ error }, 'Title generation failed');
+                return null;
+            })
+            : null;
 
-        if (enableEncryption) {
-            const requestKey = await generateRequestKey();
-            const requestId = generateRequestId();
-            encryptionParams = new RequestEncryptionParams(requestKey, requestId);
-            requestKeyEncB64 = await encryptionParams.encryptRequestKey(DEFAULT_LUMO_PUB_KEY);
-            processedTurns = await encryptTurns(turnsWithInstructions, encryptionParams);
-        }
-
-        // Request title alongside message for new conversations
-        // See WebClients client.ts:110: targets = requestTitle ? ['title', 'message'] : ['message']
-        const targets: Array<'title' | 'message'> = requestTitle ? ['title', 'message'] : ['message'];
-
-        const request: LumoApiGenerationRequest = {
-            type: 'generation_request',
-            turns: processedTurns,
-            options: { tools },
-            targets,
-            ...(enableEncryption && requestKeyEncB64 && encryptionParams
-                ? {
-                    request_key: requestKeyEncB64,
-                    request_id: encryptionParams.requestId,
-                }
-                : {}),
-        };
-
-        const payload = { Prompt: request };
-
-        const stream = (await this.protonApi({
-            url: endpoint,
-            method: 'post',
-            data: payload,
-            output: 'stream',
-        })) as ReadableStream<Uint8Array>;
-
-        const result = await this.processStream(stream, onChunk, {
+        const main = await this.runCompletion(turnsWithInstructions, {
+            endpoint,
+            tier: modelTier,
+            enableReasoning,
+            tools,
             enableEncryption,
-            requestKey: encryptionParams?.requestKey,
-            requestId: encryptionParams?.requestId,
-        }, isBounce);
+            target: 'message',
+            onChunk,
+            onReasoning,
+            isBounce,
+        });
 
-        // Log response
         if (logConfig.messageContent) {
-            const responsePreview = result.message.content.length > 200
-                ? result.message.content.substring(0, 200) + '...'
-                : result.message.content;
+            const responsePreview = main.content.length > 200
+                ? main.content.substring(0, 200) + '...'
+                : main.content;
             logger.info(`[Lumo] ${responsePreview}`);
-            if (result.title) {
-                logger.debug({ title: result.title }, 'Generated title');
-            }
         }
 
-        // Bounce misrouted tool calls: ask Lumo to re-output as JSON text
-        if (!isBounce && result.misrouted && result._nativeToolCallForBounce) {
-            const bounceInstruction = buildBounceInstruction(result._nativeToolCallForBounce);
-            logger.info({ tool: result._nativeToolCallForBounce.name }, 'Bouncing misrouted tool call');
+        // Bounce misrouted tool calls: ask Lumo to re-output as JSON text.
+        if (!isBounce && main.native.misrouted && main.native.toolCall) {
+            const bounceInstruction = buildBounceInstruction(main.native.toolCall);
+            logger.info({ tool: main.native.toolCall.name }, 'Bouncing misrouted tool call');
 
             const bounceTurns: Turn[] = [
                 ...turns,
-                { role: Role.Assistant, content: result.message.content },
+                { role: Role.Assistant, content: main.content },
                 { role: Role.User, content: bounceInstruction },
             ];
 
-            return this.chatWithHistory(bounceTurns, onChunk, options, true);
+            // The bounce runs with isBounce=true (no title of its own); carry the
+            // title from this top-level attempt so it isn't wasted or re-derived
+            // from the synthetic bounce transcript.
+            const bounced = await this.chatWithHistory(bounceTurns, onChunk, options, true);
+            const titleResult = titlePromise ? await titlePromise : null;
+            const title = titleResult?.content ? postProcessTitle(titleResult.content) : bounced.title;
+            return { ...bounced, title };
         }
 
-        // Post-process title (remove quotes, trim, limit length)
+        // Build message data for persistence.
+        const message: AssistantMessageData = { content: main.content };
+        if (main.native.toolCall && !main.native.misrouted) {
+            message.toolCall = JSON.stringify({
+                name: main.native.toolCall.name,
+                arguments: main.native.toolCall.arguments,
+            });
+            if (main.native.toolResult) {
+                message.toolResult = main.native.toolResult;
+            }
+        }
+
+        const titleResult = titlePromise ? await titlePromise : null;
+        const title = titleResult?.content ? postProcessTitle(titleResult.content) : undefined;
+
         return {
-            ...result,
-            title: result.title ? postProcessTitle(result.title) : undefined,
-            // Clear internal field from final result
-            _nativeToolCallForBounce: undefined,
+            message,
+            reasoning: main.reasoning || undefined,
+            usage: main.usage,
+            title,
+            nativeToolCallFailed: main.native.toolCall ? main.native.failed : undefined,
+            misrouted: main.native.misrouted,
         };
     }
 }

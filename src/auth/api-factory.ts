@@ -4,7 +4,7 @@
  * Supports automatic 401 retry with token refresh via onAuthError callback.
  */
 
-import type { ProtonApi, ProtonApiOptions } from '../lumo-client/types.js';
+import type { ProtonApi, ProtonApiError, ProtonApiOptions } from '../lumo-client/types.js';
 import { APP_VERSION_HEADER } from '@lumo/config.js';
 import { PROTON_URLS } from '../app/urls.js';
 import { logger } from '../app/logger.js';
@@ -130,18 +130,23 @@ export function createProtonApi(options: ApiFactoryOptions): ProtonApi {
             // Try to extract Proton's error message from JSON response
             let protonError: string | undefined;
             let protonCode: number | undefined;
+            let parsedBody: unknown;
             try {
-                const parsed = JSON.parse(errorBody);
-                protonError = parsed.Error;
-                protonCode = parsed.Code;
+                parsedBody = JSON.parse(errorBody);
+                protonError = (parsedBody as { Error?: string }).Error;
+                protonCode = (parsedBody as { Code?: number }).Code;
             } catch { /* not JSON */ }
 
             const error = new Error(
                 protonError
                     || `API error: ${response.status} ${response.statusText}`
             );
-            (error as any).status = response.status;
-            (error as any).Code = protonCode;
+            // Preserve full error context so callers (e.g. the chat/completions
+            // terminal-error decoder) can inspect the Proton response body.
+            (error as ProtonApiError).status = response.status;
+            (error as ProtonApiError).Code = protonCode;
+            (error as ProtonApiError).data = parsedBody;
+            (error as ProtonApiError).body = errorBody;
             throw error;
         }
 
