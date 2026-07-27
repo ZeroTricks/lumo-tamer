@@ -222,6 +222,11 @@ server:
 
 > **Note:** Availability of `lumo-max` and thinking mode depends on your Proton plan. Requests are end-to-end encrypted the same way as the rest of lumo-tamer.
 
+**Known limitations:**
+- `low`/`medium`/`high` effort values are equivalent: Lumo only has binary thinking on/off.
+- `"none"` is a lumo-tamer extension; standard OpenAI clients don't send it (the config default covers that case).
+- `reasoning_content` follows Deepseek's convention, not the OpenAI spec. It works with clients that support it (Cursor, Open WebUI with Deepseek config). For the Responses API, reasoning is not yet surfaced.
+
 ### Instructions
 
 Customize instructions with `server.instructions.template` and `cli.instructions.template`. See [`config.defaults.yaml`](config.defaults.yaml) for more options.
@@ -283,7 +288,7 @@ The server implements a subset of OpenAI-compatible endpoints and has so far bee
 |----------|-------------|
 | `POST /v1/chat/completions` | [OpenAI chat completions](https://platform.openai.com/docs/api-reference/chat/create) |
 | `POST /v1/responses` | [OpenAI responses API](https://platform.openai.com/docs/api-reference/responses/create) |
-| `GET /v1/models` | List available models ('lumo') |
+| `GET /v1/models` | List available models (`lumo`, `lumo-lite`, `lumo-max`) |
 | `GET /health` | Health check |
 | `GET /metrics` | [Prometheus metrics](docs/development.md#metrics) |
 
