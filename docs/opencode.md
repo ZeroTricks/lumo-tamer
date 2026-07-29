@@ -9,6 +9,12 @@ Add Lumo to `models.providers` in your OpenCode `opencode.json` config:
       "models": {
         "lumo": {
           "name": "Lumo"
+        },
+        "lumo-lite": {
+          "name": "lumo-lite"
+        },
+        "lumo-max": {
+          "name": "lumo-max"
         }
       },
       "name": "Lumo (local)",
