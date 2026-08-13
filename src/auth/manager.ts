@@ -36,6 +36,8 @@ export class AuthManager {
     private refreshTimer?: NodeJS.Timeout;
     private protonApi?: ProtonApiWithRefresh;
     private isRefreshing = false;
+    private lastRefreshFailure: { at: string; error: string } | null = null;
+    private consecutiveFailures = 0;
 
     constructor(options: AuthManagerOptions) {
         this.provider = options.provider;
@@ -93,8 +95,13 @@ export class AuthManager {
         this.refreshTimer = setInterval(async () => {
             try {
                 await this.refreshNow();
+                this.lastRefreshFailure = null;
+                this.consecutiveFailures = 0;
             } catch (error) {
-                logger.error({ error }, 'Scheduled token refresh failed');
+                const message = error instanceof Error ? error.message : String(error);
+                this.lastRefreshFailure = { at: new Date().toISOString(), error: message };
+                this.consecutiveFailures++;
+                logger.error({ error, consecutiveFailures: this.consecutiveFailures }, 'Scheduled token refresh failed');
             }
         }, intervalMs);
 
@@ -159,9 +166,28 @@ export class AuthManager {
                 accessToken: this.getAccessToken(),
             };
         } catch (error) {
-            logger.error({ error }, 'Failed to refresh tokens after 401');
+            const message = error instanceof Error ? error.message : String(error);
+            this.lastRefreshFailure = { at: new Date().toISOString(), error: message };
+            this.consecutiveFailures++;
+            logger.error({ error, consecutiveFailures: this.consecutiveFailures }, 'Failed to refresh tokens after 401');
             return null;
         }
+    }
+
+    /**
+     * Return combined health info for the /health endpoint.
+     */
+    getHealth() {
+        const status = this.provider.getStatus();
+        return {
+            available: true,
+            method: status.method,
+            valid: status.valid,
+            details: status.details,
+            warnings: status.warnings,
+            lastRefreshFailure: this.lastRefreshFailure,
+            consecutiveFailures: this.consecutiveFailures,
+        };
     }
 
     /**
