@@ -169,14 +169,18 @@ type MergedConfig = ServerMergedConfig | CliMergedConfig;
 
 // Cache user config (loaded once)
 let userConfigCache: Record<string, unknown> | null = null;
+let usingConfigDefaults = false;
+
 function loadUserYaml(): Record<string, unknown> {
   if (userConfigCache !== null) return userConfigCache;
 
   userConfigCache = loadConfigYaml();
-  if (Object.keys(userConfigCache).length === 0) {
-    console.log('No config.yaml found, using defaults from config.defaults.yaml');
-  }
+  if (Object.keys(userConfigCache).length === 0) usingConfigDefaults = true;
   return userConfigCache;
+}
+
+export function isUsingConfigDefaults(): boolean {
+  return usingConfigDefaults;
 }
 
 function loadMergedConfig(mode: ConfigMode): MergedConfig {
