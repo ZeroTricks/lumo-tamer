@@ -10,6 +10,10 @@ import '../src/shims/uint8array-base64-polyfill.js';
 
 import { initConfig } from '../src/app/config.js';
 import { initLogger } from '../src/app/logger.js';
+import { initHome } from '../src/app/paths.js';
+
+// Initialize home directory (uses platform default in tests)
+initHome();
 
 // Load config.defaults.yaml (server mode gives us all config sections)
 initConfig('server');

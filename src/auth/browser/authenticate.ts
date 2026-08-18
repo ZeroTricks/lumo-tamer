@@ -17,7 +17,7 @@ import { PROTON_URLS } from '../../app/urls.js';
 import { logger } from '../../app/logger.js';
 import { decryptPersistedSession } from '../session-keys.js';
 import { writeVault, type VaultKeyConfig } from '../vault/index.js';
-import { resolveProjectPath } from '../../app/paths.js';
+import { getVaultPath } from '../../app/paths.js';
 
 export interface ExtractionOptions {
     /** CDP endpoint to connect to browser */
@@ -724,7 +724,7 @@ export async function runBrowserAuthentication(): Promise<ExtractionResult> {
     });
 
     // Write tokens to encrypted vault
-    const vaultPath = resolveProjectPath(authConfig.vault.path);
+    const vaultPath = getVaultPath();
     const keyConfig: VaultKeyConfig = {
         keychain: authConfig.vault.keychain,
         keyFilePath: authConfig.vault.keyFilePath,

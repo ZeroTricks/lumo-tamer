@@ -7,7 +7,7 @@
 
 import { authConfig } from '../../app/config.js';
 import { logger } from '../../app/logger.js';
-import { resolveProjectPath } from '../../app/paths.js';
+import { resolveProjectPath, getVaultPath } from '../../app/paths.js';
 import { runProtonAuth } from './proton-auth-cli.js';
 import { readVault, writeVault, type VaultKeyConfig } from '../vault/index.js';
 import type { StoredTokens } from '../types.js';
@@ -24,7 +24,7 @@ export async function runLoginAuthentication(): Promise<void> {
     // Run the Go binary (interactive prompts for credentials)
     const result = await runProtonAuth(binaryPath);
 
-    const vaultPath = resolveProjectPath(authConfig.vault.path);
+    const vaultPath = getVaultPath();
     const keyConfig: VaultKeyConfig = {
         keychain: authConfig.vault.keychain,
         keyFilePath: authConfig.vault.keyFilePath,

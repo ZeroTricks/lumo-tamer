@@ -10,7 +10,7 @@
 
 import { existsSync, statSync, readFileSync, writeFileSync } from 'fs';
 import { parseDocument, parse, Document } from 'yaml';
-import { resolveProjectPath } from './paths.js';
+import { resolveProjectPath, getConfigPath } from './paths.js';
 
 /**
  * Exit with a fatal error message.
@@ -45,9 +45,7 @@ export interface ConfigFileStatus {
   error: string | null;
 }
 
-export function getConfigPath(): string {
-  return resolveProjectPath('config.yaml');
-}
+export { getConfigPath } from './paths.js';
 
 /**
  * Check config file status at a given path without reading content.

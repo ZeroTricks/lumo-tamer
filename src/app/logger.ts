@@ -1,6 +1,6 @@
 import pino from 'pino';
 import type { LogConfig } from './config.js';
-import { resolveProjectPath } from './paths.js';
+import { getLogPath } from './paths.js';
 import { installConsoleShim } from '../shims/console.js';
 
 // Determine transport based on config
@@ -11,7 +11,7 @@ function getTransport(config: LogConfig): pino.TransportSingleOptions | pino.Tra
         {
           target: 'pino/file',
           options: {
-            destination: resolveProjectPath(config.filePath),
+            destination: getLogPath(config.filePath),
             mkdir: true,
           },
         },
