@@ -396,6 +396,9 @@ async function connectAndGetPage(
                 /lumo\.proton\.me\/(u\/|chat|c\/|$)/,
                 { timeout: loginTimeout }
             );
+            // Lumo 2.0 can land on /u/<id>/guest briefly after navigation before
+            // redirecting to the real session path; wait a second time if so.
+            // Note: this second wait also consumes up to loginTimeout.
             if (/\/guest/i.test(page.url())) {
                 await page.waitForURL(
                     /lumo\.proton\.me\/u\//,

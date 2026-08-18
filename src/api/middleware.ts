@@ -4,7 +4,9 @@ import { getMetrics, type MetricsService } from '../app/metrics.js';
 
 export function setupAuthMiddleware(apiKey: string): RequestHandler {
   return (req, res, next) => {
-    // Skip auth for health and metrics endpoints
+    // Skip auth for health and metrics endpoints.
+    // Note: /health exposes auth status details (method, warnings, last error).
+    // Keep this endpoint on a non-public port if that's a concern.
     if (req.path === '/health' || req.path === '/metrics') {
       return next();
     }

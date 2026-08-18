@@ -161,6 +161,8 @@ export class AuthManager {
     private async handleAuthError(): Promise<{ uid: string; accessToken: string } | null> {
         try {
             await this.refreshNow();
+            this.lastRefreshFailure = null;
+            this.consecutiveFailures = 0;
             return {
                 uid: this.provider.getUid(),
                 accessToken: this.getAccessToken(),
@@ -176,6 +178,9 @@ export class AuthManager {
 
     /**
      * Return combined health info for the /health endpoint.
+     * /health is unauthenticated, so keep this free of secrets.
+     * lastRefreshFailure.error is a raw Error.message — if Proton ever
+     * includes token fragments in error responses, that would leak here.
      */
     getHealth() {
         const status = this.provider.getStatus();

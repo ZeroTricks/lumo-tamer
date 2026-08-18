@@ -26,7 +26,7 @@ export function resolveProjectPath(path: string): string {
   if (isAbsolute(path)) return path;
   if (path.startsWith('~')) {
     const home = process.env.HOME || process.env.USERPROFILE || '';
-    return path.replace('~', home);
+    return join(home, path.slice(2)); // slice(2) removes "~/" — join normalizes separators
   }
   return join(PROJECT_ROOT, path);
 }

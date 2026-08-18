@@ -6,7 +6,7 @@ export function createHealthRouter(deps: EndpointDependencies): Router {
 
   router.get('/health', (req: Request, res: Response) => {
     const authManager = deps.authManager;
-    const auth = authManager?.getHealth?.() ?? { available: false };
+    const auth = authManager?.getHealth() ?? { available: false };
 
     res.json({
       status: 'ok',
