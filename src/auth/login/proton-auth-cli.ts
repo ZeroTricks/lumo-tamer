@@ -19,8 +19,8 @@ export async function runProtonAuth(
     binaryPath: string,
     outputPath?: string
 ): Promise<SRPAuthResult> {
-    // On Windows, Go builds produce proton-auth.exe; append if missing.
-    if (process.platform === 'win32' && !binaryPath.endsWith('.exe')) {
+    // On Windows, Go builds produce proton-auth.exe; try that if the configured path doesn't exist.
+    if (process.platform === 'win32' && !existsSync(binaryPath) && !binaryPath.endsWith('.exe')) {
         binaryPath += '.exe';
     }
 
