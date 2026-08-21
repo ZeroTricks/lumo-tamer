@@ -27,6 +27,18 @@ export class ChatCompletionEventEmitter {
     this.res.write(`data: ${JSON.stringify(chunk)}\n\n`);
   }
 
+  emitReasoningDelta(reasoning: string): void {
+    if (!reasoning) return;
+    const chunk: OpenAIStreamChunk = {
+      id: this.id,
+      object: 'chat.completion.chunk',
+      created: this.created,
+      model: this.model,
+      choices: [{ index: 0, delta: { reasoning_content: reasoning }, finish_reason: null }],
+    };
+    this.res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+  }
+
   emitToolCallDelta(callId: string, name: string, args: Record<string, unknown>): void {
     const chunk: OpenAIStreamChunk = {
       id: this.id,

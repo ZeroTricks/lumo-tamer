@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse } from '../../types.js';
-import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig } from '../../../app/config.js';
+import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig, getReasoningConfig } from '../../../app/config.js';
+import { modelToTier, normalizeModelId, isModelAllowed, resolveReasoning, isValidReasoningEffort } from '../../../lumo-client/model-tier.js';
+import type { LumoModelTier } from '../../../lumo-client/types.js';
 import { logger } from '../../../app/logger.js';
 import { convertOpenAIChatMessages, extractSystemMessage } from '../../message-converter.js';
 import { buildInstructions } from '../../instructions.js';
@@ -79,6 +81,27 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
         return sendInvalidRequest(res, 'At least one user message is required', 'messages', 'missing_user_message');
       }
 
+      // Validate model + reasoning_effort before any side effects (persistence, SSE, queue).
+      if (request.model !== undefined && request.model !== null) {
+        const allowedModels = getServerConfig().allowedModels;
+        if (typeof request.model !== 'string' || !isModelAllowed(normalizeModelId(request.model), allowedModels)) {
+          return sendInvalidRequest(
+            res,
+            `Unknown model '${String(request.model)}'. Allowed models: ${allowedModels.join(', ')}`,
+            'model',
+            'model_not_found',
+          );
+        }
+      }
+      if (!isValidReasoningEffort(request.reasoning_effort)) {
+        return sendInvalidRequest(
+          res,
+          `Invalid reasoning_effort '${String(request.reasoning_effort)}'. Allowed: none, low, medium, high`,
+          'reasoning_effort',
+          'invalid_reasoning_effort',
+        );
+      }
+
       // ===== Generate conversation ID for persistence =====
       // Chat Completions has no conversation parameter per OpenAI spec.
       // We use deriveIdFromUser to track conversations for Proton sync.
@@ -140,8 +163,17 @@ async function handleChatRequest(
 ): Promise<void> {
   const id = generateChatCompletionId();
   const created = Math.floor(Date.now() / 1000);
-  const model = request.model || getServerConfig().apiModelName;
+  const serverConfig = getServerConfig();
+  const model = request.model || serverConfig.apiModelName;
   const ctx = buildRequestContext(deps, conversationId, request.tools);
+
+  // Resolve tier (Lite/Max) and thinking mode from the inbound request.
+  const tier: LumoModelTier = request.model
+    ? modelToTier(normalizeModelId(request.model))
+    : serverConfig.defaultModelTier;
+  const reasoningConfig = getReasoningConfig();
+  const enableReasoning = resolveReasoning(request.reasoning_effort, reasoningConfig.default === 'high');
+  const surfaceThinking = reasoningConfig.surfaceThinking;
 
   // Streaming setup
   const emitter = streaming ? new ChatCompletionEventEmitter(res, id, created, model) : null;
@@ -150,6 +182,7 @@ async function handleChatRequest(
   }
 
   let accumulatedText = '';
+  let reasoningContent: string | undefined;
   let toolCalls: typeof processor.toolCallsEmitted | undefined;
 
   const processor = createStreamingToolProcessor(ctx.hasCustomTools, {
@@ -175,10 +208,18 @@ async function handleChatRequest(
           requestTitle: ctx.requestTitle,
           instructions,
           injectInstructionsInto,
+          modelTier: tier,
+          enableReasoning,
+          onReasoning: surfaceThinking && emitter
+            ? (text) => emitter.emitReasoningDelta(text)
+            : undefined,
         })
       );
 
       logger.debug('[Server] Stream completed');
+      if (surfaceThinking && !streaming && result.reasoning) {
+        reasoningContent = result.reasoning;
+      }
       processor.finalize();
       persistTitle(result, deps, conversationId);
       toolCalls = processor.toolCallsEmitted.length > 0 ? processor.toolCallsEmitted : undefined;
@@ -216,6 +257,7 @@ async function handleChatRequest(
             role: 'assistant',
             content: accumulatedText,
             ...(toolCalls ? { tool_calls: toolCalls } : {}),
+            ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
           },
           finish_reason: toolCalls ? 'tool_calls' : 'stop',
         }],

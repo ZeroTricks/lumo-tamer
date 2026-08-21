@@ -52,7 +52,7 @@ export class Application {
       setConversationStore(result.conversationStore);
     } else {
       // Use fallback in-memory store
-      getFallbackStore();
+      setConversationStore(getFallbackStore());
     }
 
     this.protonApi = createMockProtonApi(mockConfig.scenario);

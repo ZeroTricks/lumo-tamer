@@ -26,6 +26,7 @@ lumo-tamer is a lightweight local proxy that talks to Proton's Lumo API using th
 ## Features
 
 - OpenAI-compatible API server with experimental tool support.
+- Select the Lumo 2.0 model tier (Lite/Max) and thinking mode per request, via the OpenAI `model` and `reasoning_effort` fields.
 - Interactive CLI, let Lumo help you execute commands, read, create and edit files.
 - Sync your conversations with Proton to access them on https://lumo.proton.me or in mobile apps.
 
@@ -196,6 +197,36 @@ cli:
   enableWebSearch: true
 ```
 
+### Model Tiers and Thinking Mode
+
+lumo-tamer maps standard OpenAI request fields to Lumo 2.0's model tier and answer mode:
+
+- `model`: `lumo` (Proton auto-routes), `lumo-lite`, or `lumo-max`. These are advertised on `/v1/models`; an unknown model returns HTTP 400.
+- `reasoning_effort`: `high` (also `low`/`medium`) turns on thinking mode, `none` turns it off. In the Responses API, use `reasoning.effort` instead.
+
+Defaults and surfacing are configurable:
+
+```yaml
+server:
+  # Tier used when a request omits the model field: auto, lumo-lite, lumo-max
+  defaultModelTier: "auto"
+  # Models advertised on /v1/models and accepted in the model field
+  allowedModels: ["lumo", "lumo-lite", "lumo-max"]
+  reasoning:
+    # Used when a request omits reasoning_effort: "none" or "high"
+    default: "none"
+    # Forward Lumo's thinking tokens as delta.reasoning_content (streaming)
+    # or message.reasoning_content (non-streaming)
+    surfaceThinking: false
+```
+
+> **Note:** Availability of `lumo-max` and thinking mode depends on your Proton plan. Requests are end-to-end encrypted the same way as the rest of lumo-tamer.
+
+**Known limitations:**
+- `low`/`medium`/`high` effort values are equivalent: Lumo only has binary thinking on/off.
+- `"none"` is a lumo-tamer extension; standard OpenAI clients don't send it (the config default covers that case).
+- `reasoning_content` follows Deepseek's convention, not the OpenAI spec. It works with clients that support it (Cursor, Open WebUI with Deepseek config). For the Responses API, reasoning is not yet surfaced.
+
 ### Instructions
 
 Customize instructions with `server.instructions.template` and `cli.instructions.template`. See [`config.defaults.yaml`](config.defaults.yaml) for more options.
@@ -257,7 +288,7 @@ The server implements a subset of OpenAI-compatible endpoints and has so far bee
 |----------|-------------|
 | `POST /v1/chat/completions` | [OpenAI chat completions](https://platform.openai.com/docs/api-reference/chat/create) |
 | `POST /v1/responses` | [OpenAI responses API](https://platform.openai.com/docs/api-reference/responses/create) |
-| `GET /v1/models` | List available models ('lumo') |
+| `GET /v1/models` | List available models (`lumo`, `lumo-lite`, `lumo-max`) |
 | `GET /health` | Health check |
 | `GET /metrics` | [Prometheus metrics](docs/development.md#metrics) |
 
@@ -275,6 +306,8 @@ See the [full guide](docs/howto-home-assistant.md). TLDR:
 ### OpenClaw
 Add Lumo to `models.providers` in your OpenClaw config. [Example](docs/openclaw.md).
 
+### OpenCode
+Add Lumo to `models.providers` in your `opencode.json` configuration file. [Example](docs/opencode.md).
 
 ### Nanocoder
 Status: very experimental.
@@ -308,11 +341,11 @@ To test an API client, increase log levels on both the client and lumo-tamer: `s
 Please share your experiences with new API clients (both issues and successes) in [the project discussions](https://github.com/ZeroTricks/lumo-tamer/discussions/new?category=general)!
 
 
-### Docker
+## Docker
 
 It is recommended to run lumo-tamer's server in a Docker container.
 
-#### Install
+### Install
 
 ```bash
 git clone https://github.com/ZeroTricks/lumo-tamer.git
@@ -324,7 +357,7 @@ openssl rand -base64 32 > secrets/lumo-vault-key
 chmod 600 secrets/lumo-vault-key
 ```
 
-#### Configure
+### Configure
 
 Create `config.yaml`:
 
@@ -335,7 +368,7 @@ server:
 
 > **Security:** Keep your API key private and make sure lumo-tamer is only accessible from your local network, not the internet. Disable docker port forwarding if API clients belong to the same docker network.
 
-#### Authenticate
+### Authenticate
 
 ```bash
 docker compose run --rm -it tamer auth login
@@ -355,7 +388,7 @@ Log in to Proton in a regular browser from the same IP first. This often clears 
 Proton's security model doesn't allow for a simple OAuth authentication. Your credentials are not saved or logged, and security tokens are stored encrypted. [Read further](docs/authentication.md#security) for more information or other authentication methods.
 </details>
 
-#### Run
+### Run
 Server:
 ```bash
 docker compose up tamer # starts server by default

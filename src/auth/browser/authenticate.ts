@@ -361,8 +361,15 @@ async function connectAndGetPage(
 
     logger.info({ pageCount: pages.length }, 'Found pages in browser context');
 
-    // Check if already on Lumo
-    let page = pages.find(p => p.url().includes('lumo.proton.me'));
+    // Prefer an already-logged-in Lumo tab (Lumo 2.0 uses /u/<n>/… paths).
+    const isLumoLoggedIn = (url: string) =>
+        /lumo\.proton\.me/i.test(url) &&
+        !/\/guest/i.test(url) &&
+        !/account\.proton/i.test(url);
+
+    let page =
+        pages.find(p => isLumoLoggedIn(p.url())) ||
+        pages.find(p => p.url().includes('lumo.proton.me'));
 
     if (!page) {
         logger.info({ targetUrl }, 'No Lumo page found, navigating...');
@@ -373,16 +380,34 @@ async function connectAndGetPage(
     const currentUrl = page.url();
     logger.info({ currentUrl }, 'Current URL');
 
-    // Check if logged in
-    if (currentUrl.includes('account.proton') || currentUrl.includes('/login')) {
+    // Check if logged in (account host, login path, or Lumo guest landing)
+    const needsLogin =
+        currentUrl.includes('account.proton') ||
+        currentUrl.includes('/login') ||
+        /lumo\.proton\.me\/guest/i.test(currentUrl);
+
+    if (needsLogin) {
         logger.warn('Not logged in. Please log in manually in the browser.');
         logger.info('Waiting for login...');
 
         try {
-            await page.waitForURL(/lumo\.proton\.me\/(chat|c\/|$)/, { timeout: loginTimeout });
-            logger.info('Login detected!');
+            // Lumo 1.x: /chat, /c/…  |  Lumo 2.0: /u/<id>/…
+            await page.waitForURL(
+                /lumo\.proton\.me\/(u\/|chat|c\/|$)/,
+                { timeout: loginTimeout }
+            );
+            // Lumo 2.0 can land on /u/<id>/guest briefly after navigation before
+            // redirecting to the real session path; wait a second time if so.
+            // Note: this second wait also consumes up to loginTimeout.
+            if (/\/guest/i.test(page.url())) {
+                await page.waitForURL(
+                    /lumo\.proton\.me\/u\//,
+                    { timeout: loginTimeout }
+                );
+            }
+            logger.info({ url: page.url() }, 'Login detected!');
         } catch {
-            await browser.close();
+            // Avoid browser.close() on CDP — it can tear down the debug session.
             throw new Error('Login timeout. Please log in and try again.');
         }
     }

@@ -27,21 +27,22 @@ describe('GET /health', () => {
 });
 
 describe('GET /v1/models', () => {
-  it('returns list with single model', async () => {
+  it('returns the list of allowed model tiers', async () => {
     const res = await fetch(`${ts.baseUrl}/v1/models`);
     expect(res.status).toBe(200);
 
     const body = await res.json();
     expect(body.object).toBe('list');
-    expect(body.data).toHaveLength(1);
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
     expect(body.data[0].object).toBe('model');
     expect(body.data[0].owned_by).toBe('proton');
   });
 
-  it('model id matches config apiModelName', async () => {
+  it('advertises the tier models from config.allowedModels', async () => {
     const res = await fetch(`${ts.baseUrl}/v1/models`);
     const body = await res.json();
-    // Default from config.defaults.yaml
-    expect(body.data[0].id).toBe('lumo');
+    const ids = body.data.map((m: { id: string }) => m.id);
+    // Defaults from config.defaults.yaml
+    expect(ids).toEqual(['lumo', 'lumo-lite', 'lumo-max']);
   });
 });

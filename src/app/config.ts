@@ -1,5 +1,18 @@
 import { z } from 'zod';
 import merge from 'lodash/merge.js';
+import mergeWith from 'lodash/mergeWith.js';
+
+/**
+ * Merge config layers, but REPLACE arrays wholesale instead of merging them by
+ * index. Index-wise array merge means a user override like
+ * `allowedModels: ["lumo-max"]` would leave the other defaults in place; config
+ * arrays should fully replace the default.
+ */
+function mergeConfigLayers(...sources: unknown[]): Record<string, unknown> {
+  return mergeWith({}, ...sources, (_objValue: unknown, srcValue: unknown) =>
+    Array.isArray(srcValue) ? srcValue : undefined,
+  );
+}
 import bytes from 'bytes';
 import { fatalExit, loadConfigYaml, loadDefaultsYaml } from './config-file.js';
 
@@ -127,6 +140,12 @@ const serverMergedConfigSchema = z.object({
   port: z.number().int().positive(),
   apiKey: z.string().min(1, 'server.apiKey is required'),
   apiModelName: z.string().min(1),
+  defaultModelTier: z.enum(['auto', 'lumo-lite', 'lumo-max']),
+  allowedModels: z.array(z.string().min(1)).min(1),
+  reasoning: z.object({
+    default: z.enum(['none', 'high']),
+    surfaceThinking: z.boolean(),
+  }),
 });
 
 // CLI merged config schema
@@ -150,14 +169,18 @@ type MergedConfig = ServerMergedConfig | CliMergedConfig;
 
 // Cache user config (loaded once)
 let userConfigCache: Record<string, unknown> | null = null;
+let usingConfigDefaults = false;
+
 function loadUserYaml(): Record<string, unknown> {
   if (userConfigCache !== null) return userConfigCache;
 
   userConfigCache = loadConfigYaml();
-  if (Object.keys(userConfigCache).length === 0) {
-    console.log('No config.yaml found, using defaults from config.defaults.yaml');
-  }
+  if (Object.keys(userConfigCache).length === 0) usingConfigDefaults = true;
   return userConfigCache;
+}
+
+export function isUsingConfigDefaults(): boolean {
+  return usingConfigDefaults;
 }
 
 function loadMergedConfig(mode: ConfigMode): MergedConfig {
@@ -167,12 +190,12 @@ function loadMergedConfig(mode: ConfigMode): MergedConfig {
     const userModeConfig = (mode === 'server' ? userConfig.server : userConfig.cli) as Record<string, unknown> | undefined;
 
     // Stage 1: defaults -> user (for all keys including mode-specific)
-    const merged = merge({}, configDefaults, defaultModeConfig, userConfig, userModeConfig);
+    const merged = mergeConfigLayers(configDefaults, defaultModeConfig, userConfig, userModeConfig);
 
     // Stage 2: apply user mode overrides for shared keys only
     for (const key of SHARED_KEYS) {
       if (userModeConfig?.[key]) {
-        merged[key] = merge({}, merged[key], userModeConfig[key]);
+        merged[key] = mergeConfigLayers(merged[key], userModeConfig[key]);
       }
     }
 
@@ -245,6 +268,11 @@ export function getServerInstructionsConfig() {
 export function getMetricsConfig() {
   const cfg = getServerConfig();
   return cfg.metrics;
+}
+
+export function getReasoningConfig() {
+  const cfg = getServerConfig();
+  return cfg.reasoning;
 }
 
 // CLI-specific getters

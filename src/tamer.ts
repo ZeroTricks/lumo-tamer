@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import arg from 'arg';
-import { initConfig, getLogConfig } from './app/config.js';
+import { initConfig, getLogConfig, isUsingConfigDefaults } from './app/config.js';
+import { getConfigPath } from './app/config-file.js';
 import { initLogger, logger } from './app/logger.js';
 import { printAuthHelp, printHelp, printServerHelp } from './app/terminal.js';
 import './shims/uint8array-base64-polyfill.js';
@@ -19,6 +20,7 @@ const args = arg({
 const mode = args._[0] === 'server' ? 'server' : 'cli';
 initConfig(mode);
 initLogger(getLogConfig());
+if (isUsingConfigDefaults()) logger.info(`No config.yaml found at ${getConfigPath()}, using defaults.`);
 
 // Handle --help for main command and subcommands
 if (args['--help'] || args._.includes('--help') || args._.includes('-h')) {

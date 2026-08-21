@@ -66,6 +66,8 @@ export interface OpenAIChatRequest {
   stream?: boolean;
   temperature?: number;
   max_tokens?: number;
+  // Thinking mode: 'none' disables; 'low'/'medium'/'high' enable reasoning.
+  reasoning_effort?: 'none' | 'low' | 'medium' | 'high' | null;
   tools?: OpenAITool[];
   user?: string;
   // Custom extension for conversation persistence
@@ -77,6 +79,8 @@ export interface ChatMessageWithTools {
   role: 'assistant';
   content: string | null;
   tool_calls?: OpenAIToolCall[];
+  // Thinking/reasoning text (when surfaceThinking is enabled).
+  reasoning_content?: string;
 }
 
 export interface OpenAIChatResponse {
@@ -111,6 +115,8 @@ export interface StreamingToolCallDelta {
 export interface StreamingDelta {
   role?: 'assistant';
   content?: string;
+  // Thinking/reasoning text (when surfaceThinking is enabled).
+  reasoning_content?: string;
   tool_calls?: StreamingToolCallDelta[];
 }
 
@@ -141,6 +147,8 @@ export interface OpenAIResponseRequest {
   model?: string;
   input?: string | Array<OpenAIResponseMessage>;
   instructions?: string;
+  // Thinking mode (Responses API places effort under reasoning.effort).
+  reasoning?: { effort?: 'none' | 'low' | 'medium' | 'high' | null };
   stream?: boolean;
   temperature?: number;
   max_output_tokens?: number;
