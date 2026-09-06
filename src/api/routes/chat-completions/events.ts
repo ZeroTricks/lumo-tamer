@@ -61,13 +61,14 @@ export class ChatCompletionEventEmitter {
     this.res.write(`data: ${JSON.stringify(chunk)}\n\n`);
   }
 
-  emitDone(toolCalls: OpenAIToolCall[] | undefined): void {
-    const finalChunk: OpenAIStreamChunk = {
+  emitDone(toolCalls: OpenAIToolCall[] | undefined, usage?: Record<string, unknown> | null): void {
+    const finalChunk: OpenAIStreamChunk & { usage?: Record<string, unknown> | null } = {
       id: this.id,
       object: 'chat.completion.chunk',
       created: this.created,
       model: this.model,
       choices: [{ index: 0, delta: {}, finish_reason: toolCalls ? 'tool_calls' : 'stop' }],
+      ...(usage ? { usage } : {}),
     };
     this.res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
     this.res.write('data: [DONE]\n\n');

@@ -18,6 +18,7 @@ import {
   persistAssistantTurn,
   generateChatCompletionId,
   mapToolCallsForPersistence,
+  buildOpenAIUsage,
   tryExecuteCommand,
   setSSEHeaders,
 } from '../shared.js';
@@ -183,6 +184,7 @@ async function handleChatRequest(
 
   let accumulatedText = '';
   let reasoningContent: string | undefined;
+  let resultUsage: ReturnType<typeof buildOpenAIUsage> = null;
   let toolCalls: typeof processor.toolCallsEmitted | undefined;
 
   const processor = createStreamingToolProcessor(ctx.hasCustomTools, {
@@ -221,6 +223,7 @@ async function handleChatRequest(
         reasoningContent = result.reasoning;
       }
       processor.finalize();
+      resultUsage = buildOpenAIUsage(result.usage, turns, accumulatedText);
       persistTitle(result, deps, conversationId);
       toolCalls = processor.toolCallsEmitted.length > 0 ? processor.toolCallsEmitted : undefined;
 
@@ -244,7 +247,7 @@ async function handleChatRequest(
   // Build and send response (shared for both command and normal flow)
   try {
     if (emitter) {
-      emitter.emitDone(toolCalls);
+      emitter.emitDone(toolCalls, resultUsage);
     } else {
       const response: OpenAIChatResponse = {
         id,
@@ -261,6 +264,7 @@ async function handleChatRequest(
           },
           finish_reason: toolCalls ? 'tool_calls' : 'stop',
         }],
+        ...(resultUsage ? { usage: resultUsage } : {}),
       };
       res.json(response);
     }

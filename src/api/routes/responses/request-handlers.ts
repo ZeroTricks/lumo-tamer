@@ -24,6 +24,7 @@ import {
   generateItemId,
   generateFunctionCallId,
   mapToolCallsForPersistence,
+  buildOpenAIUsage,
   tryExecuteCommand,
   setSSEHeaders,
   type ToolCallForPersistence,
@@ -92,7 +93,7 @@ function createCompletedResponse(
   createdAt: number,
   request: OpenAIResponseRequest,
   output: OutputItem[]
-): OpenAIResponse {
+, usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null): OpenAIResponse {
   return {
     id: responseId,
     object: 'response',
@@ -122,7 +123,15 @@ function createCompletedResponse(
     tools: request.tools ?? [],
     top_p: 1.0,
     truncation: 'auto',
-    usage: null,
+    usage: usage
+      ? {
+          input_tokens: usage.prompt_tokens,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens: usage.completion_tokens,
+          output_tokens_details: { reasoning_tokens: 0 },
+          total_tokens: usage.total_tokens,
+        }
+      : null,
     user: request.user ?? null,
     metadata: request.metadata || {},
   };
@@ -169,6 +178,7 @@ export async function handleRequest(
   logger.debug({ hasCustomTools: ctx.hasCustomTools, toolCount: request.tools?.length }, '[Server] Tool detector state');
 
   let accumulatedText = '';
+  let resultUsage: ReturnType<typeof buildOpenAIUsage> = null;
   let toolCallsForPersist: ToolCallForPersistence[] | undefined;
 
   // Check for command before calling Lumo
@@ -202,6 +212,7 @@ export async function handleRequest(
 
       logger.debug('[Server] Stream completed');
       processor.finalize();
+      resultUsage = buildOpenAIUsage(result.usage, turns, accumulatedText);
       persistTitle(result, deps, conversationId);
       toolCallsForPersist = mapToolCallsForPersistence(processor.toolCallsEmitted);
 
@@ -221,7 +232,7 @@ export async function handleRequest(
   // Build and send response (shared for both command and normal flow)
   try {
     const output = buildOutputItems({ text: accumulatedText, itemId, toolCalls: toolCallsForPersist });
-    const response = createCompletedResponse(id, createdAt, request, output);
+    const response = createCompletedResponse(id, createdAt, request, output, resultUsage);
 
     if (emitter) {
       emitter.emitOutputTextDone(itemId, 0, 0, accumulatedText);
