@@ -330,6 +330,12 @@ export class LumoClient {
             ? [...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]
             : DEFAULT_INTERNAL_TOOLS;
 
+        // Merge client-provided custom tool names into the real tools array.
+        const customNames = (options.toolNames ?? []) as ToolName[];
+        const mergedTools: ToolName[] = customNames.length > 0
+            ? Array.from(new Set([...tools, ...customNames]))
+            : tools;
+
         // Inject instructions at the last moment (kept out of persisted turns).
         const turnsWithInstructions = instructions
             ? injectInstructionsIntoTurns(turns, instructions, injectInstructionsInto)
@@ -356,7 +362,7 @@ export class LumoClient {
             endpoint,
             tier: modelTier,
             enableReasoning,
-            tools,
+            tools: mergedTools,
             enableEncryption,
             target: 'message',
             onChunk,

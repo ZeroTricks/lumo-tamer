@@ -146,6 +146,9 @@ export interface LumoClientOptions {
     enableReasoning?: boolean;
     /** Sink for reasoning/thinking chunks (always drained, even if unused). */
     onReasoning?: (content: string) => void;
+    /** Extra custom tool names to register with Lumo as real tools
+     *  (in addition to native tools), enabling first-class multi-step calls. */
+    toolNames?: string[];
 }
 
 /** Result from a chat request. */

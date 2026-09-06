@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse } from '../../types.js';
-import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig, getReasoningConfig } from '../../../app/config.js';
+import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig, getReasoningConfig, getCustomToolsConfig } from '../../../app/config.js';
 import { modelToTier, normalizeModelId, isModelAllowed, resolveReasoning, isValidReasoningEffort } from '../../../lumo-client/model-tier.js';
 import type { LumoModelTier } from '../../../lumo-client/types.js';
 import { logger } from '../../../app/logger.js';
@@ -167,6 +167,7 @@ async function handleChatRequest(
   const serverConfig = getServerConfig();
   const model = request.model || serverConfig.apiModelName;
   const ctx = buildRequestContext(deps, conversationId, request.tools);
+  const customPrefix = getCustomToolsConfig().prefix ?? '';
 
   // Resolve tier (Lite/Max) and thinking mode from the inbound request.
   const tier: LumoModelTier = request.model
@@ -212,6 +213,14 @@ async function handleChatRequest(
           injectInstructionsInto,
           modelTier: tier,
           enableReasoning,
+          // Pass custom tool names so Lumo treats them as
+          // first-class functions and can invoke them across a multi-step loop.
+          toolNames: ctx.hasCustomTools && request.tools
+            ? request.tools
+                .map(t => t.function?.name ?? (t as { name?: string }).name)
+                .filter((n): n is string => Boolean(n))
+                .map(n => `${customPrefix}${n}`)
+            : undefined,
           onReasoning: surfaceThinking && emitter
             ? (text) => emitter.emitReasoningDelta(text)
             : undefined,
