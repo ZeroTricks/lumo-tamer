@@ -104,6 +104,38 @@ describe('StreamingToolDetector', () => {
       expect(allToolCalls).toHaveLength(0);
       expect(allText).toContain('incomplete');
     });
+
+    it('detects the closing fence when it is split across chunks with trailing content in the same chunk (regression)', () => {
+      // This reproduces a real-world failure: the model's closing "```" is
+      // split as "``" (end of one chunk) + "`" immediately followed by more
+      // text in the very next chunk. The old implementation only checked
+      // `pendingText` in isolation and only recognized the fallback when the
+      // buffer ended in EXACTLY "```" with nothing after - so this exact
+      // shape leaked the closing fence into the "JSON" and broke parsing.
+      const detector = new StreamingToolDetector();
+      const { allText, allToolCalls } = processAll(detector, [
+        '```json\n{"name":"write_file","arguments":{"path":"a.txt"}}\n``',
+        '`\nAnd here is some more explanation.',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0]).toEqual({ name: 'write_file', arguments: { path: 'a.txt' } });
+      expect(allText).toContain('And here is some more explanation.');
+      expect(allText).not.toContain('write_file');
+    });
+
+    it('detects the closing fence split one character at a time across three chunks', () => {
+      const detector = new StreamingToolDetector();
+      const { allText, allToolCalls } = processAll(detector, [
+        '```json\n{"name":"read_file","arguments":{}}\n`',
+        '`',
+        '`\nDone talking.',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].name).toBe('read_file');
+      expect(allText).toContain('Done talking.');
+    });
   });
 
   describe('raw JSON detection', () => {

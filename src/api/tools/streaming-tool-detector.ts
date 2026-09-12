@@ -51,6 +51,7 @@ export class StreamingToolDetector {
   // Patterns for detection
   private static readonly CODE_FENCE_START = /```(?:json)?\s*$/;
   private static readonly CODE_FENCE_END = /```/;
+  private static readonly CODE_FENCE_MARKER = '```';
   private static readonly RAW_JSON_START = /\{[\s"']/;
 
   private showSnippet(index: number) {
@@ -153,30 +154,39 @@ export class StreamingToolDetector {
 
   /**
    * Process code fence state - accumulate until closing ```.
+   *
+   * The closing fence can be split across a chunk boundary (e.g. the buffer
+   * ends with "``" and the next chunk starts with "`" followed immediately
+   * by more content in the *same* chunk). Checking `pendingText` in
+   * isolation misses that case, so we search across a small carried-over
+   * tail of `buffer` plus the new `pendingText` instead.
    */
   private processCodeFenceState(result: ProcessResult): void {
-    // First check pendingText for closing fence
-    const endMatch = this.pendingText.match(/```/);
-    if (endMatch && endMatch.index !== undefined) {
+    const overlap = StreamingToolDetector.CODE_FENCE_MARKER.length - 1; // 2
+    const carry = this.buffer.slice(-overlap);
+    const searchable = carry + this.pendingText;
+    const match = searchable.match(StreamingToolDetector.CODE_FENCE_END);
 
-      logger.debug(`Code block ending found: ${this.showSnippet(endMatch.index)}`);
+    if (match && match.index !== undefined) {
+      logger.debug(`Code block ending found: ${this.showSnippet(match.index)}`);
 
-      // Found closing fence in pendingText
-      this.buffer += this.pendingText.slice(0, endMatch.index);
-      this.pendingText = this.pendingText.slice(endMatch.index + 3);
+      // Index of the fence relative to pendingText; negative if the fence
+      // starts inside the carried-over tail of buffer.
+      const idxInPending = match.index - carry.length;
+      if (idxInPending < 0) {
+        this.buffer = this.buffer.slice(0, this.buffer.length + idxInPending);
+      } else {
+        this.buffer += this.pendingText.slice(0, idxInPending);
+      }
+      this.pendingText = this.pendingText.slice(idxInPending + StreamingToolDetector.CODE_FENCE_MARKER.length);
       this.completeCodeFence(result);
       return;
     }
 
-    // No closing fence in pendingText - buffer it and check if buffer now ends with ```
+    // No closing fence found even accounting for the boundary - buffer this
+    // chunk and wait for more data.
     this.buffer += this.pendingText;
     this.pendingText = '';
-
-    if (this.buffer.endsWith('```')) {
-      logger.debug('Code block ending found at end of buffer');
-      this.buffer = this.buffer.slice(0, -3);
-      this.completeCodeFence(result);
-    }
   }
 
   /** Complete a code fence: parse buffer as tool call or emit as text. */
