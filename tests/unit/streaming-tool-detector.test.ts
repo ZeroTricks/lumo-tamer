@@ -302,4 +302,71 @@ describe('StreamingToolDetector', () => {
       expect(allToolCalls).toHaveLength(0);
     });
   });
+
+  describe('parallel tool calls (JSON array)', () => {
+    it('detects parallel tool calls in a fenced JSON array', () => {
+      const matcher = new ToolMatcher([tool('get_weather'), tool('get_time')]);
+      const detector = new StreamingToolDetector(matcher);
+
+      const { allToolCalls } = processAll(detector, [
+        '```json\n',
+        '[{"name":"get_weather","arguments":{"city":"Paris"}},',
+        '{"name":"get_time","arguments":{"tz":"CET"}}]\n```',
+      ]);
+
+      expect(allToolCalls).toHaveLength(2);
+      expect(allToolCalls[0]).toEqual({ name: 'get_weather', arguments: { city: 'Paris' } });
+      expect(allToolCalls[1]).toEqual({ name: 'get_time', arguments: { tz: 'CET' } });
+    });
+
+    it('detects parallel tool calls in a raw (non-fenced) JSON array', () => {
+      const matcher = new ToolMatcher([tool('get_weather'), tool('get_time')]);
+      const detector = new StreamingToolDetector(matcher);
+
+      const { allToolCalls } = processAll(detector, [
+        'Sure, calling both:\n',
+        '[{"name": "get_weather", "arguments": {"city": "Paris"}}, ',
+        '{"name": "get_time", "arguments": {"tz": "CET"}}]',
+      ]);
+
+      expect(allToolCalls).toHaveLength(2);
+      expect(allToolCalls.map((c) => c.name)).toEqual(['get_weather', 'get_time']);
+    });
+
+    it('handles a raw JSON array split byte-by-byte across many chunks', () => {
+      const matcher = new ToolMatcher([tool('a'), tool('b'), tool('c')]);
+      const detector = new StreamingToolDetector(matcher);
+
+      const json = '[{"name":"a","arguments":{}},{"name":"b","arguments":{}},{"name":"c","arguments":{}}]';
+      const chunks = json.split('');
+      const { allToolCalls } = processAll(detector, chunks);
+
+      expect(allToolCalls).toHaveLength(3);
+      expect(allToolCalls.map((c) => c.name)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('drops array elements that match no declared tool but keeps the valid ones', () => {
+      const matcher = new ToolMatcher([tool('get_weather')]);
+      const detector = new StreamingToolDetector(matcher);
+
+      const { allToolCalls } = processAll(detector, [
+        '[{"name":"get_weather","arguments":{"city":"Paris"}},',
+        '{"name":"totally_unrelated","arguments":{}}]',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].name).toBe('get_weather');
+    });
+
+    it('passes a plain (non-tool-shaped) JSON array through as text', () => {
+      const detector = new StreamingToolDetector();
+      const { allText, allToolCalls } = processAll(detector, [
+        'Here is a list: ',
+        '[1, 2, 3, {"foo":"bar"}]',
+      ]);
+
+      expect(allToolCalls).toHaveLength(0);
+      expect(allText).toContain('[1, 2, 3');
+    });
+  });
 });

@@ -120,8 +120,10 @@ export class StreamingToolDetector {
     }
 
     // Look for raw JSON start (but be careful - need context)
-    // Only match if it looks like start of a tool call object
-    const jsonMatch = this.pendingText.match(/(?:^|\n)\s*(\{[\n\s]*")/);
+    // Only match if it looks like start of a tool call object, or a JSON
+    // array of tool call objects (parallel tool calls), e.g.
+    // `[{"name":...}, {"name":...}]`.
+    const jsonMatch = this.pendingText.match(/(?:^|\n)\s*(\[\s*\{[\n\s]*"|\{[\n\s]*")/);
     if (jsonMatch && jsonMatch.index !== undefined) {
       logger.debug(`Raw JSON opener found: ${this.showSnippet(jsonMatch.index)}`);
 
@@ -196,10 +198,10 @@ export class StreamingToolDetector {
     // fix fenceMatch matching ``` before ```json
     this.buffer = this.buffer.replace(/^json/, '');
 
-    // Try to parse as tool call
-    const toolCall = this.tryParseToolCall(this.buffer.trim());
-    if (toolCall) {
-      result.completedToolCalls.push(toolCall);
+    // Try to parse as tool call(s)
+    const toolCalls = this.tryParseToolCall(this.buffer.trim());
+    if (toolCalls && toolCalls.length > 0) {
+      result.completedToolCalls.push(...toolCalls);
     } else {
       // Not a valid tool call, emit as text with code fence formatting
       result.textToEmit += '```\n' + this.buffer + '```';
@@ -220,9 +222,9 @@ export class StreamingToolDetector {
       // At least one JSON object completed
       for (const json of completedJsons) {
         logger.debug('Raw JSON ending found');
-        const toolCall = this.tryParseToolCall(json.trim());
-        if (toolCall) {
-          result.completedToolCalls.push(toolCall);
+        const toolCalls = this.tryParseToolCall(json.trim());
+        if (toolCalls && toolCalls.length > 0) {
+          result.completedToolCalls.push(...toolCalls);
         } else {
           // Not a valid tool call, emit as text
           result.textToEmit += json;
@@ -262,55 +264,21 @@ export class StreamingToolDetector {
   }
 
   /**
-   * Try to parse content as a tool call JSON.
-   * Strips the configured prefix from the tool name.
-   * Only logs/tracks as invalid if content appears to be an attempted tool call (has a name).
+   * Try to parse content as tool call JSON.
+   * Strips the configured prefix from each tool name.
+   *
+   * Supports both a single tool call object and a JSON array of tool call
+   * objects (parallel tool calls), e.g. `[{"name":...}, {"name":...}]`.
+   * Only logs/tracks as invalid if content appears to be an attempted tool
+   * call (has a name).
+   *
+   * Returns null if content isn't a tool call at all (caller should emit it
+   * as plain text), otherwise an array of 1+ resolved tool calls.
    */
-  private tryParseToolCall(content: string): ParsedToolCall | null {
+  private tryParseToolCall(content: string): ParsedToolCall[] | null {
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(content);
-      if (isToolCallJson(parsed)) {
-        const normalized = parseToolCallJson(parsed);
-        if (!normalized) return null;
-        const prefix = getCustomToolsConfig().prefix;
-        const candidateName = stripToolPrefix(normalized.name, prefix);
-
-        const resolved = this.resolveAgainstDeclaredTools(candidateName);
-        if (resolved === null) {
-          // Shape looks like a tool call, but the name doesn't match any tool
-          // the client actually declared for this request. Most likely this
-          // is coincidental JSON in the model's answer (e.g. an example
-          // payload) rather than a genuine tool call - let it flow through
-          // as normal text instead of swallowing it.
-          logger.debug(
-            `Tool-shaped JSON ignored, no declared tool matches "${candidateName}"`
-          );
-          return null;
-        }
-        if (!resolved.exact) {
-          logger.info(
-            `Tool call name "${candidateName}" fuzzy-matched to declared tool "${resolved.name}" (distance ${resolved.distance})`
-          );
-        }
-
-        logger.info(`Tool call detected: ${content.replace(/\n/g, ' ').substring(0, 100)}...`);
-        return {
-          name: resolved.name,
-          arguments: normalized.arguments,
-        };
-      }
-      // JSON parsed but schema invalid - only track if it has a name that
-      // also matches a declared tool (otherwise it's unrelated JSON that
-      // merely happens to have a "name" field).
-      if ('name' in parsed && typeof parsed.name === 'string') {
-        const prefix = getCustomToolsConfig().prefix;
-        const candidateName = stripToolPrefix(parsed.name, prefix);
-        const resolved = this.resolveAgainstDeclaredTools(candidateName);
-        if (resolved) {
-          this.trackInvalidToolCall('missing arguments', content, resolved.name);
-        }
-      }
-      // Otherwise it's just regular JSON, don't track
+      parsed = JSON.parse(content);
     } catch {
       // JSON parse failed - only track if regex finds a name that also
       // matches a declared tool (looks like a genuinely attempted tool call).
@@ -321,9 +289,91 @@ export class StreamingToolDetector {
           this.trackInvalidToolCall('malformed JSON', content, resolved.name);
         }
       }
-      // Otherwise it's just broken/regular JSON, don't track
+      // Otherwise it's just broken/regular text, don't track
+      return null;
     }
+
+    if (Array.isArray(parsed)) {
+      return this.resolveToolCallArray(parsed);
+    }
+
+    return this.resolveSingleToolCallObject(parsed, content);
+  }
+
+  /**
+   * Resolve a single parsed JSON value (already confirmed not to be an
+   * array) as a tool call. Shared by the single-object path and by each
+   * element of a parallel-tool-calls array.
+   */
+  private resolveSingleToolCallObject(parsed: unknown, content: string): ParsedToolCall[] | null {
+    if (isToolCallJson(parsed)) {
+      const normalized = parseToolCallJson(parsed);
+      if (!normalized) return null;
+      const prefix = getCustomToolsConfig().prefix;
+      const candidateName = stripToolPrefix(normalized.name, prefix);
+
+      const resolved = this.resolveAgainstDeclaredTools(candidateName);
+      if (resolved === null) {
+        // Shape looks like a tool call, but the name doesn't match any tool
+        // the client actually declared for this request. Most likely this
+        // is coincidental JSON in the model's answer (e.g. an example
+        // payload) rather than a genuine tool call - let it flow through
+        // as normal text instead of swallowing it.
+        logger.debug(
+          `Tool-shaped JSON ignored, no declared tool matches "${candidateName}"`
+        );
+        return null;
+      }
+      if (!resolved.exact) {
+        logger.info(
+          `Tool call name "${candidateName}" fuzzy-matched to declared tool "${resolved.name}" (distance ${resolved.distance})`
+        );
+      }
+
+      logger.info(`Tool call detected: ${content.replace(/\n/g, ' ').substring(0, 100)}...`);
+      return [{
+        name: resolved.name,
+        arguments: normalized.arguments,
+      }];
+    }
+    // JSON parsed but schema invalid - only track if it has a name that
+    // also matches a declared tool (otherwise it's unrelated JSON that
+    // merely happens to have a "name" field).
+    if (parsed && typeof parsed === 'object' && 'name' in parsed && typeof (parsed as { name: unknown }).name === 'string') {
+      const prefix = getCustomToolsConfig().prefix;
+      const candidateName = stripToolPrefix((parsed as { name: string }).name, prefix);
+      const resolved = this.resolveAgainstDeclaredTools(candidateName);
+      if (resolved) {
+        this.trackInvalidToolCall('missing arguments', content, resolved.name);
+      }
+    }
+    // Otherwise it's just regular JSON, don't track
     return null;
+  }
+
+  /**
+   * Resolve a JSON array as a batch of parallel tool calls.
+   *
+   * If none of the elements look tool-call-shaped, the array is treated as
+   * ordinary data (e.g. the model was asked to return a JSON array) and
+   * null is returned so the whole thing is emitted as text. Otherwise each
+   * shaped element is resolved independently; elements that don't match a
+   * declared tool (or are malformed) are dropped with the same logging as
+   * the single-object path, rather than discarding the whole batch.
+   */
+  private resolveToolCallArray(arr: unknown[]): ParsedToolCall[] | null {
+    if (arr.length === 0) return null;
+    if (!arr.some((el) => isToolCallJson(el))) return null;
+
+    const results: ParsedToolCall[] = [];
+    for (const el of arr) {
+      const single = this.resolveSingleToolCallObject(el, JSON.stringify(el));
+      if (single) results.push(...single);
+    }
+    if (results.length === 0) return null;
+
+    logger.info(`Parallel tool calls detected: ${results.length} call(s) in JSON array`);
+    return results;
   }
 
   /**
@@ -366,9 +416,9 @@ export class StreamingToolDetector {
         // End-of-stream fallback: try JSON.parse on the complete buffer.
         // Catches edge cases where char-by-char tracking failed but JSON is actually complete.
         if (this.state === 'in_raw_json') {
-          const toolCall = this.tryParseToolCall(trackerBuffer.trim());
-          if (toolCall) {
-            result.completedToolCalls.push(toolCall);
+          const toolCalls = this.tryParseToolCall(trackerBuffer.trim());
+          if (toolCalls && toolCalls.length > 0) {
+            result.completedToolCalls.push(...toolCalls);
             this.jsonTracker.reset();
             this.state = 'normal';
             return result;

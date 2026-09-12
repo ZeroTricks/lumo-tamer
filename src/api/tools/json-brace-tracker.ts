@@ -71,10 +71,16 @@ export class JsonBraceTracker {
                 this.buffer += char;
                 this.inString = true;
                 this.escaped = false;
-            } else if (char === '{') {
+            } else if (char === '{' || char === '[') {
+                // Tracked with a single combined depth counter. Safe for
+                // well-formed JSON (which is always properly nested) and
+                // lets a top-level array of tool calls - e.g.
+                // `[{"name":"a",...},{"name":"b",...}]` for parallel tool
+                // calls - be extracted as one complete unit, the same way a
+                // top-level object is.
                 this.braceDepth++;
                 this.buffer += char;
-            } else if (char === '}') {
+            } else if (char === '}' || char === ']') {
                 this.braceDepth--;
                 this.buffer += char;
                 if (this.braceDepth === 0) {
@@ -83,10 +89,10 @@ export class JsonBraceTracker {
                     lastCompleteIndex = i;
                 }
             } else if (this.braceDepth > 0) {
-                // Only accumulate chars when inside an object
+                // Only accumulate chars when inside an object/array
                 this.buffer += char;
             }
-            // Characters outside any JSON object are discarded
+            // Characters outside any JSON value are discarded
         }
 
         const remainder = lastCompleteIndex >= 0 && lastCompleteIndex < chunk.length - 1
