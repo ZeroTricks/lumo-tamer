@@ -7,6 +7,13 @@
 
 import { describe, it, expect } from 'vitest';
 import { StreamingToolDetector } from '../../src/api/tools/streaming-tool-detector.js';
+import { ToolMatcher } from '../../src/api/tools/tool-matcher.js';
+import type { OpenAITool } from '../../src/api/types.js';
+
+/** Build a minimal OpenAI-style tool declaration for tests. */
+function tool(name: string): OpenAITool {
+  return { type: 'function', function: { name, parameters: { type: 'object', properties: {} } } } as OpenAITool;
+}
 
 /** Feed chunks through detector and return accumulated text + tool calls */
 function processAll(detector: StreamingToolDetector, chunks: string[]) {
@@ -197,6 +204,70 @@ describe('StreamingToolDetector', () => {
       expect(allToolCalls).toHaveLength(0);
       expect(allText).toContain('foo');
       expect(allText).toContain('bar');
+    });
+  });
+
+  describe('matching against declared OpenAI tools', () => {
+    it('without a matcher, accepts any tool-shaped JSON (legacy behavior)', () => {
+      const detector = new StreamingToolDetector();
+      const { allToolCalls } = processAll(detector, [
+        '{"name":"totally_made_up","arguments":{"x":1}}',
+      ]);
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].name).toBe('totally_made_up');
+    });
+
+    it('rejects tool-shaped JSON whose name matches no declared tool (false positive fix)', () => {
+      const matcher = new ToolMatcher([tool('get_weather'), tool('search')]);
+      const detector = new StreamingToolDetector(matcher);
+
+      // The model is just illustrating a JSON payload in its answer; it is
+      // NOT calling any of the two declared tools.
+      const { allText, allToolCalls } = processAll(detector, [
+        'Sure, here is an example payload: ',
+        '{"name":"Alice","arguments":{"age":30}}',
+        ' - hope that helps!',
+      ]);
+
+      expect(allToolCalls).toHaveLength(0);
+      expect(allText).toContain('example payload');
+      expect(allText).toContain('Alice');
+    });
+
+    it('accepts a call whose name exactly matches a declared tool', () => {
+      const matcher = new ToolMatcher([tool('get_weather'), tool('search')]);
+      const detector = new StreamingToolDetector(matcher);
+
+      const { allToolCalls } = processAll(detector, [
+        '{"name":"get_weather","arguments":{"city":"Paris"}}',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].name).toBe('get_weather');
+    });
+
+    it('fuzzy-matches a slightly mangled tool name to the declared tool', () => {
+      const matcher = new ToolMatcher([tool('get_weather')]);
+      const detector = new StreamingToolDetector(matcher);
+
+      // Small open-source model drops a letter and uses a space instead of "_"
+      const { allToolCalls } = processAll(detector, [
+        '{"name":"get weathr","arguments":{"city":"Paris"}}',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].name).toBe('get_weather');
+    });
+
+    it('rejects a name too different from any declared tool even in tool shape', () => {
+      const matcher = new ToolMatcher([tool('get_weather')]);
+      const detector = new StreamingToolDetector(matcher);
+
+      const { allToolCalls } = processAll(detector, [
+        '{"name":"delete_database","arguments":{}}',
+      ]);
+
+      expect(allToolCalls).toHaveLength(0);
     });
   });
 });

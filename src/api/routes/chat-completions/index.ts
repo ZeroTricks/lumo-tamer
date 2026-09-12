@@ -193,7 +193,7 @@ async function handleChatRequest(
     emitToolCall(callId, tc) {
       emitter?.emitToolCallDelta(callId, tc.name, tc.arguments);
     },
-  });
+  }, ctx.tools);
 
   // Check for command before calling Lumo
   const commandResult = await tryExecuteCommand(turns, ctx.commandContext);

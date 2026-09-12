@@ -38,6 +38,8 @@ export function mapToolCallsForPersistence(
 
 export interface RequestContext {
   hasCustomTools: boolean;
+  /** Tools declared by the client for this request (unprefixed), for tool-name matching. */
+  tools?: OpenAITool[];
   commandContext: CommandContext;
   requestTitle: boolean;
 }
@@ -54,6 +56,7 @@ export function buildRequestContext(
   const serverToolsConfig = getCustomToolsConfig();
   return {
     hasCustomTools: serverToolsConfig.enabled && !!tools && tools.length > 0,
+    tools,
     commandContext: {
       syncInitialized: deps.syncInitialized ?? false,
       conversationId,

@@ -16,6 +16,7 @@ import { logger } from '../../app/logger.js';
 import { getCustomToolsConfig } from '../../app/config.js';
 import { stripToolPrefix } from './prefix.js';
 import { getMetrics } from '../../app/metrics.js';
+import { ToolMatcher } from './tool-matcher.js';
 
 type DetectorState = 'normal' | 'in_code_fence' | 'in_raw_json';
 
@@ -35,6 +36,17 @@ export class StreamingToolDetector {
   private buffer = '';
   private pendingText = '';
   private jsonTracker = new JsonBraceTracker();
+
+  /**
+   * Optional matcher built from the tools declared in the current request
+   * (`request.tools`). When provided (and non-empty), tool-shaped JSON is
+   * only accepted as a real tool call if its name resolves against it -
+   * this is what actually implements "matching against the OpenAI tools
+   * API" rather than accepting any `{"name":...,"arguments":...}` blob.
+   * When omitted, behavior falls back to the legacy shape-only detection
+   * (kept for callers that don't have a tool list handy, e.g. some tests).
+   */
+  constructor(private readonly toolMatcher?: ToolMatcher) {}
 
   // Patterns for detection
   private static readonly CODE_FENCE_START = /```(?:json)?\s*$/;
@@ -251,29 +263,74 @@ export class StreamingToolDetector {
         const normalized = parseToolCallJson(parsed);
         if (!normalized) return null;
         const prefix = getCustomToolsConfig().prefix;
-        const toolName = stripToolPrefix(normalized.name, prefix);
+        const candidateName = stripToolPrefix(normalized.name, prefix);
+
+        const resolved = this.resolveAgainstDeclaredTools(candidateName);
+        if (resolved === null) {
+          // Shape looks like a tool call, but the name doesn't match any tool
+          // the client actually declared for this request. Most likely this
+          // is coincidental JSON in the model's answer (e.g. an example
+          // payload) rather than a genuine tool call - let it flow through
+          // as normal text instead of swallowing it.
+          logger.debug(
+            `Tool-shaped JSON ignored, no declared tool matches "${candidateName}"`
+          );
+          return null;
+        }
+        if (!resolved.exact) {
+          logger.info(
+            `Tool call name "${candidateName}" fuzzy-matched to declared tool "${resolved.name}" (distance ${resolved.distance})`
+          );
+        }
+
         logger.info(`Tool call detected: ${content.replace(/\n/g, ' ').substring(0, 100)}...`);
         return {
-          name: toolName,
+          name: resolved.name,
           arguments: normalized.arguments,
         };
       }
-      // JSON parsed but schema invalid - only track if it has a name (looks like attempted tool call)
+      // JSON parsed but schema invalid - only track if it has a name that
+      // also matches a declared tool (otherwise it's unrelated JSON that
+      // merely happens to have a "name" field).
       if ('name' in parsed && typeof parsed.name === 'string') {
         const prefix = getCustomToolsConfig().prefix;
-        const toolName = stripToolPrefix(parsed.name, prefix);
-        this.trackInvalidToolCall('missing arguments', content, toolName);
+        const candidateName = stripToolPrefix(parsed.name, prefix);
+        const resolved = this.resolveAgainstDeclaredTools(candidateName);
+        if (resolved) {
+          this.trackInvalidToolCall('missing arguments', content, resolved.name);
+        }
       }
       // Otherwise it's just regular JSON, don't track
     } catch {
-      // JSON parse failed - only track if regex finds a name (looks like attempted tool call)
+      // JSON parse failed - only track if regex finds a name that also
+      // matches a declared tool (looks like a genuinely attempted tool call).
       const toolName = this.extractToolName(content);
       if (toolName) {
-        this.trackInvalidToolCall('malformed JSON', content, toolName);
+        const resolved = this.resolveAgainstDeclaredTools(toolName);
+        if (resolved) {
+          this.trackInvalidToolCall('malformed JSON', content, resolved.name);
+        }
       }
       // Otherwise it's just broken/regular JSON, don't track
     }
     return null;
+  }
+
+  /**
+   * Resolve a candidate name (already stripped of the custom-tool prefix)
+   * against the tools declared for this request.
+   *
+   * When no matcher was provided, or it was built from an empty tool list,
+   * this falls back to accepting any name (legacy shape-only behavior) so
+   * existing callers without access to `request.tools` keep working.
+   */
+  private resolveAgainstDeclaredTools(
+    candidateName: string
+  ): { name: string; exact: boolean; distance: number } | null {
+    if (!this.toolMatcher || this.toolMatcher.size === 0) {
+      return { name: candidateName, exact: true, distance: 0 };
+    }
+    return this.toolMatcher.match(candidateName);
   }
 
   /**
