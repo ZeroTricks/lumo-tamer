@@ -369,4 +369,71 @@ describe('StreamingToolDetector', () => {
       expect(allText).toContain('[1, 2, 3');
     });
   });
+
+  describe('JSON tool call content containing literal ``` (regression)', () => {
+    it('does not let a literal ``` inside a JSON string argument close the fence early', () => {
+      // Reproduces a real-world failure: a write_file call whose "content"
+      // argument is a markdown file that itself contains fenced code
+      // blocks. A naive text scan for the closing "```" matches the FIRST
+      // occurrence - which is inside the JSON string, not the real fence
+      // end - corrupting the tool call and leaking raw JSON into the chat.
+      const matcher = new ToolMatcher([tool('write_file')]);
+      const detector = new StreamingToolDetector(matcher);
+
+      const fileContent = '# Title\n\nSome text.\n\n```bash\necho hi\n```\n\nMore text.\n\n```\nplain fenced block\n```\n';
+      const payload = JSON.stringify({ name: 'write_file', arguments: { file_path: 'a.md', content: fileContent } });
+
+      const { allToolCalls, allText } = processAll(detector, [
+        '```json\n',
+        payload,
+        '\n```',
+        '\nDone writing the file.',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].name).toBe('write_file');
+      expect(allToolCalls[0].arguments).toEqual({ file_path: 'a.md', content: fileContent });
+      expect(allText).toContain('Done writing the file.');
+      // The raw tool-call JSON must never leak into the visible text.
+      expect(allText).not.toContain('"name"');
+    });
+
+    it('handles embedded ``` split arbitrarily across many small chunks', () => {
+      const matcher = new ToolMatcher([tool('write_file')]);
+      const detector = new StreamingToolDetector(matcher);
+
+      const fileContent = 'Tree:\n\n```\n.\n├── a\n└── b\n```\n';
+      const payload = JSON.stringify({ name: 'write_file', arguments: { path: 'x.md', content: fileContent } });
+      const full = '```json\n' + payload + '\n```\nAll done.';
+
+      // Split into small, arbitrary chunks (not aligned to any boundary).
+      const chunks: string[] = [];
+      for (let i = 0; i < full.length; i += 3) {
+        chunks.push(full.slice(i, i + 3));
+      }
+
+      const { allToolCalls, allText } = processAll(detector, chunks);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].arguments).toEqual({ path: 'x.md', content: fileContent });
+      expect(allText).toContain('All done.');
+    });
+
+    it('still detects a parallel-tool-call array whose arguments contain literal ```', () => {
+      const matcher = new ToolMatcher([tool('write_file'), tool('read_file')]);
+      const detector = new StreamingToolDetector(matcher);
+
+      const content = 'See ```code``` here.';
+      const payload = JSON.stringify([
+        { name: 'write_file', arguments: { path: 'a.md', content } },
+        { name: 'read_file', arguments: { path: 'a.md' } },
+      ]);
+
+      const { allToolCalls } = processAll(detector, ['```json\n', payload, '\n```']);
+
+      expect(allToolCalls).toHaveLength(2);
+      expect(allToolCalls[0]).toEqual({ name: 'write_file', arguments: { path: 'a.md', content } });
+      expect(allToolCalls[1]).toEqual({ name: 'read_file', arguments: { path: 'a.md' } });
+    });
+  });
 });
