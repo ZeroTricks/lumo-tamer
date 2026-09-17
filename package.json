@@ -19,6 +19,7 @@
     "build": "npx tsc && npx tsc-alias",
     "build:login": "cd src/auth/login/go && go build -o ../../../../dist/proton-auth$(go env GOEXE) && echo 'All done!' || echo 'Warning: Go binary not built (Is Go installed?)'",
     "build:all": "npm run build && npm run build:login",
+    "captcha:test": "cd src/auth/login/go && go run . --captcha-test",
     "clean": "rm -rf dist",
     "server": "node dist/src/tamer.js server",
     "cli": "node dist/src/tamer.js",

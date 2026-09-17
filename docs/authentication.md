@@ -24,13 +24,13 @@ After successful authentication, `config.yaml` is updated with your selected met
 
 ## Login (Recommended)
 
-A secure and lightweight option where you provide your credentials. Requires Go. No support for CAPTCHA or conversation sync.
+A secure and lightweight option where you provide your credentials. Requires Go. No support for conversation sync.
 
 Uses Proton's SRP (Secure Remote Password) protocol via a Go binary built from [go-proton-api](https://github.com/henrybear327/go-proton-api).
 
 ### Why Login?
 
-- **No browser dependency**: Pure API-based authentication
+- **API-based login**: A browser is needed only if Proton requires a CAPTCHA
 - **Direct keyPassword access**: Derives the mailbox password needed for encryption
 
 ### Setup
@@ -42,8 +42,9 @@ Uses Proton's SRP (Secure Remote Password) protocol via a Go binary built from [
    ```
 2. Run `tamer auth login`
 3. Enter username, password, and TOTP code (if 2FA is enabled).
+4. If Proton demands a CAPTCHA, it is served on a local URL and opened in your default browser (set `captchaAutoOpen: false` to disable auto-open). Solve it there and login continues automatically. On a headless machine, forward the printed port first: `ssh -L <port>:127.0.0.1:<port> <host>`, then open the URL locally.
 
-> **Tip:** If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first. This may clear the challenge for subsequent login attempts.
+To test the CAPTCHA window, run `npm run captcha:test` or `./dist/proton-auth --captcha-test`. Solve the challenge in the browser; the helper exits after receiving its token. This checks the CAPTCHA page and token delivery without authenticating an account. Press Ctrl+C to cancel.
 
 ### Config
 
@@ -55,11 +56,22 @@ auth:
     # Headers to help avoid CAPTCHA
     appVersion: "macos-drive@1.0.0-alpha.1+rclone"
     userAgent: "Mozilla/5.0 ..."
+    # Open the CAPTCHA page in the default browser automatically when required
+    captchaAutoOpen: true
 ```
+
+### Non-interactive login
+
+Set `PROTON_AUTH_USERNAME` and `PROTON_AUTH_PASSWORD` before running `tamer auth login` to skip the credential prompts. If 2FA is enabled, also set `PROTON_AUTH_TOTP` to a current code or `PROTON_AUTH_TOTP_SECRET` to the base32 secret used by your authenticator. A supplied code takes precedence over the secret. CAPTCHA challenges still require a browser.
+
+The standalone `proton-auth` helper also accepts `--username`, `--password`, `--totp`, and `--totp-secret`; flags take precedence over environment variables. It writes token JSON to stdout or to the file specified by `-o`. Use `tamer auth login` to save credentials to the encrypted vault.
+
+When calling the helper directly, `--proxy <url>` routes login and proxied CAPTCHA requests through the same proxy, and `--captcha-auto-open=false` disables automatic browser launch during login. These flags do not configure the standalone `--captcha-test` mode.
 
 ### Limitations
 
-- **CAPTCHA**: May trigger CAPTCHA on Proton's servers (see tip above)
+- **CAPTCHA needs a browser somewhere**: When Proton requires a CAPTCHA, you solve it on a locally served page (see Setup above)
+- **CAPTCHA follows Proton's web flow**: Proton may require a lumo-tamer update if it changes that flow
 - **No conversation sync**: Cannot fetch userKeys/masterKeys due to API scope restrictions
 - **TOTP only**: Only supports TOTP for 2FA (no security keys)
 
@@ -194,7 +206,7 @@ client_salted_key_pass = base64encodedKeyPassword==
 | keyPassword | Yes | Yes | Yes |
 | Token refresh | Automatic | Automatic | Automatic |
 | 2FA support | TOTP only | Any | Any (via rclone) |
-| CAPTCHA handling | May fail | Browser handles | rclone handles |
+| CAPTCHA handling | Local page in browser | Browser handles | rclone handles |
 | Extra tools needed | Go binary | Browser + CDP | rclone |
 | Setup complexity | Medium | Medium | Low |
 

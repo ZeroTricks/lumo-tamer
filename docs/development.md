@@ -33,6 +33,8 @@ npm run build                # TypeScript compilation + alias resolution
 cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
 ```
 
+To test the CAPTCHA page without logging in, run `npm run captcha:test`. It runs the Go helper from source and opens a challenge in your browser. See [authentication.md](authentication.md) for the login flow and headless setup.
+
 ## Project Structure
 
 ```

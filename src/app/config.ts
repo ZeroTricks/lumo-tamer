@@ -123,6 +123,7 @@ const authConfigSchema = z.object({
     binaryPath: z.string(),
     appVersion: z.string(),
     userAgent: z.string(),
+    captchaAutoOpen: z.boolean(),
   }),
 });
 
