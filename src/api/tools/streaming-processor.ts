@@ -7,9 +7,10 @@
 
 import { logger } from '../../app/logger.js';
 import { StreamingToolDetector } from './streaming-tool-detector.js';
+import { ToolMatcher } from './tool-matcher.js';
 import { generateCallId } from './call-id.js';
 import type { ParsedToolCall } from './types.js';
-import type { OpenAIToolCall } from '../types.js';
+import type { OpenAIToolCall, OpenAITool } from '../types.js';
 
 // ── Streaming tool processor ───────────────────────────────────────
 
@@ -37,9 +38,19 @@ export interface StreamingToolProcessor {
  */
 export function createStreamingToolProcessor(
   hasCustomTools: boolean,
-  emitter: StreamingToolEmitter
+  emitter: StreamingToolEmitter,
+  /**
+   * Tools declared by the client for this request (`request.tools`),
+   * unprefixed. Used to validate/resolve tool-call-like JSON detected in
+   * the stream against tools that actually exist, instead of accepting
+   * any `{"name":...,"arguments":...}` shape. Optional for backward
+   * compatibility; omitting it falls back to shape-only detection.
+   */
+  declaredTools?: OpenAITool[]
 ): StreamingToolProcessor {
-  const detector = hasCustomTools ? new StreamingToolDetector() : null;
+  const detector = hasCustomTools
+    ? new StreamingToolDetector(new ToolMatcher(declaredTools))
+    : null;
   const toolCallsEmitted: OpenAIToolCall[] = [];
 
   function processToolCalls(completedToolCalls: ParsedToolCall[]): void {
@@ -89,13 +100,16 @@ export interface AccumulatingToolProcessor {
  * Create a tool processor that accumulates text instead of emitting.
  * Used for non-streaming requests that still process the Lumo stream.
  */
-export function createAccumulatingToolProcessor(hasCustomTools: boolean): AccumulatingToolProcessor {
+export function createAccumulatingToolProcessor(
+  hasCustomTools: boolean,
+  declaredTools?: OpenAITool[]
+): AccumulatingToolProcessor {
   let accumulatedText = '';
 
   const processor = createStreamingToolProcessor(hasCustomTools, {
     emitTextDelta(text) { accumulatedText += text; },
     emitToolCall(_callId, _tc) { /* tool calls tracked in processor.toolCallsEmitted */ },
-  });
+  }, declaredTools);
 
   return {
     processor,

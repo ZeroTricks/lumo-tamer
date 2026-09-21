@@ -95,6 +95,25 @@ describe('JsonBraceTracker', () => {
     expect(results).toEqual(['{"error":true}', '{"error":true}']);
   });
 
+  it('extracts a top-level JSON array as one complete unit (parallel tool calls)', () => {
+    const tracker = new JsonBraceTracker();
+    const results = tracker.feed('[{"name":"a","arguments":{}},{"name":"b","arguments":{}}]');
+    expect(results).toHaveLength(1);
+    expect(JSON.parse(results[0])).toEqual([
+      { name: 'a', arguments: {} },
+      { name: 'b', arguments: {} },
+    ]);
+  });
+
+  it('handles a JSON array split across multiple chunks', () => {
+    const tracker = new JsonBraceTracker();
+    expect(tracker.feed('[{"name":"a"')).toEqual([]);
+    expect(tracker.feed(',"arguments":{}},{"na')).toEqual([]);
+    const results = tracker.feed('me":"b","arguments":{}}]');
+    expect(results).toHaveLength(1);
+    expect(JSON.parse(results[0])).toHaveLength(2);
+  });
+
   describe('feedWithRemainder', () => {
     it('returns remainder after completed object', () => {
       const tracker = new JsonBraceTracker();

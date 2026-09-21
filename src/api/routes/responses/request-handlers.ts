@@ -197,7 +197,7 @@ export async function handleRequest(
       emitToolCall(callId, tc) {
         emitter?.emitFunctionCallEvents(id, callId, tc.name, JSON.stringify(tc.arguments), nextOutputIndex++);
       },
-    });
+    }, ctx.tools);
 
     try {
       const result = await deps.queue.add(async () =>
