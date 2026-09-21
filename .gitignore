@@ -1,10 +1,7 @@
 node_modules/
 dist/
-dist.bak-*/
 config.yaml
-config.yaml.bak*
 *.log
-*.tgz
 .DS_Store
 sessions/
 extra-docs/
