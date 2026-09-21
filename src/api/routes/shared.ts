@@ -5,11 +5,14 @@ import { getMetrics } from '../../app/metrics';
 import type { CommandContext } from '../../app/commands.js';
 import type { EndpointDependencies, OpenAITool, OpenAIToolCall } from '../types.js';
 import type { ConversationId } from '../../conversations/types.js';
-import type { ChatResult, AssistantMessageData, Turn } from '../../lumo-client/index.js';
+import type { ChatResult, AssistantMessageData } from '../../lumo-client/index.js';
 import type { LumoUsage } from '../../lumo-client/types.js';
 
 // Re-export for convenience
 export { tryExecuteCommand, type CommandResult } from '../../app/commands.js';
+
+// Standard English-text approximation used for token estimation.
+const CHARS_PER_TOKEN = 4;
 
 // ── Tool call type for persistence ─────────────────────────────────
 
@@ -122,18 +125,14 @@ export function persistAssistantTurn(
  */
 export function buildOpenAIUsage(
   usage: LumoUsage | undefined,
-  turns: Turn[],
-  completionText: string
+  promptLength: number,
+  completionLength: number
 ): { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokensEstimated?: boolean; completion_tokensEstimated?: boolean } | null {
   if (!usage) return null;
   const completion = typeof usage.completion_tokens === 'number' && usage.completion_tokens > 0
     ? usage.completion_tokens
-    : Math.ceil(completionText.length / 4);
-  let promptChars = 0;
-  for (const t of turns) {
-    promptChars += (t.content ?? '').length;
-  }
-  const prompt = Math.ceil(promptChars / 4);
+    : Math.ceil(completionLength / CHARS_PER_TOKEN);
+  const prompt = Math.ceil(promptLength / CHARS_PER_TOKEN);
   const out: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokensEstimated?: boolean; completion_tokensEstimated?: boolean } = {
     prompt_tokens: prompt,
     completion_tokens: completion,

@@ -232,7 +232,7 @@ async function handleChatRequest(
         reasoningContent = result.reasoning;
       }
       processor.finalize();
-      resultUsage = buildOpenAIUsage(result.usage, turns, accumulatedText);
+      resultUsage = buildOpenAIUsage(result.usage, result.promptLength ?? 0, result.completionLength ?? 0);
       persistTitle(result, deps, conversationId);
       toolCalls = processor.toolCallsEmitted.length > 0 ? processor.toolCallsEmitted : undefined;
 

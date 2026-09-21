@@ -159,6 +159,10 @@ export interface ChatResult {
     reasoning?: string;
     /** Usage/limit metadata from the final `usage` chunk */
     usage?: LumoUsage;
+    /** Total character count of the turns actually sent to Lumo (post-instruction injection), for prompt token estimation. */
+    promptLength?: number;
+    /** Character count of the raw Lumo response (pre-stripping), for completion token estimation. */
+    completionLength?: number;
     /** Generated conversation title (for new conversations) */
     title?: string;
     /** Whether the native tool call failed server-side (tool_result contained error) */

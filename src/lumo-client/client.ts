@@ -412,10 +412,14 @@ export class LumoClient {
         const titleResult = titlePromise ? await titlePromise : null;
         const title = titleResult?.content ? postProcessTitle(titleResult.content) : undefined;
 
+        const promptLength = turnsWithInstructions.reduce((sum, t) => sum + (t.content ?? '').length, 0);
+
         return {
             message,
             reasoning: main.reasoning || undefined,
             usage: main.usage,
+            promptLength,
+            completionLength: main.content.length,
             title,
             nativeToolCallFailed: main.native.toolCall ? main.native.failed : undefined,
             misrouted: main.native.misrouted,
