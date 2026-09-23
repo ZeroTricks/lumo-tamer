@@ -3,6 +3,7 @@ module proton-auth
 go 1.24
 
 require (
+	github.com/cli/browser v1.3.0
 	github.com/henrybear327/go-proton-api v1.0.0
 	golang.org/x/term v0.30.0
 )

@@ -9,3 +9,5 @@ secrets/
 browser-data/
 coverage/
 *.pid
+/src/auth/login/go/proton-auth
+/src/auth/login/go/proton-auth.exe

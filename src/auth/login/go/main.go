@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"syscall"
@@ -36,11 +37,29 @@ const (
 func main() {
 	// Parse command line flags
 	outputPath := flag.String("o", "", "Output file path (if not specified, outputs to stdout)")
+	username := flag.String("username", "", "Proton username (email); non-interactive when set (env PROTON_AUTH_USERNAME)")
+	password := flag.String("password", "", "Proton password; non-interactive when set (env PROTON_AUTH_PASSWORD)")
+	totpCode := flag.String("totp", "", "Current TOTP code for 2FA (env PROTON_AUTH_TOTP)")
+	totpSecret := flag.String("totp-secret", "", "Base32 TOTP secret to auto-generate 2FA codes (env PROTON_AUTH_TOTP_SECRET)")
 	appVersion := flag.String("app-version", defaultAppVersion, "X-PM-AppVersion header value")
 	userAgent := flag.String("user-agent", defaultUserAgent, "User-Agent header value")
+	captchaAutoOpen := flag.Bool("captcha-auto-open", true, "Open the browser automatically when a CAPTCHA is required")
+	captchaTest := flag.Bool("captcha-test", false, "Open Proton's CAPTCHA in a browser without logging in (smoke test), then exit")
+	proxyURL := flag.String("proxy", "", "Route Proton requests (login and CAPTCHA solve) through this proxy, e.g. http://user:pass@host:port, so they share one IP")
 	flag.Parse()
 
-	result := authenticate(*appVersion, *userAgent)
+	if *captchaTest {
+		os.Exit(runCaptchaTest())
+	}
+
+	creds := credentials{
+		username:   firstNonEmpty(*username, os.Getenv("PROTON_AUTH_USERNAME")),
+		password:   firstNonEmptyExact(*password, os.Getenv("PROTON_AUTH_PASSWORD")),
+		totpCode:   firstNonEmpty(*totpCode, os.Getenv("PROTON_AUTH_TOTP")),
+		totpSecret: firstNonEmpty(*totpSecret, os.Getenv("PROTON_AUTH_TOTP_SECRET")),
+	}
+
+	result := authenticate(*appVersion, *userAgent, *proxyURL, *captchaAutoOpen, creds)
 
 	// Output JSON
 	output, _ := json.MarshalIndent(result, "", "  ")
@@ -61,54 +80,158 @@ func main() {
 	}
 }
 
-func authenticate(appVersion, userAgent string) AuthResult {
+// credentials carry optional non-interactive login inputs. When username and
+// password are both set the stdin prompts are skipped entirely; 2FA is then
+// satisfied from totpCode or auto-generated from totpSecret (base32).
+// Environment fallbacks: PROTON_AUTH_USERNAME / PROTON_AUTH_PASSWORD /
+// PROTON_AUTH_TOTP / PROTON_AUTH_TOTP_SECRET.
+type credentials struct {
+	username   string
+	password   string
+	totpCode   string
+	totpSecret string
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+// firstNonEmptyExact keeps credential bytes intact. Passwords may legitimately
+// begin or end with whitespace, so they must not use firstNonEmpty's trimming.
+func firstNonEmptyExact(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// login performs SRP authentication. If Proton demands human verification
+// (Code=9001) and offers a CAPTCHA, it lets the user solve it in a browser and
+// retries once with the verification token attached. A non-empty proxyURL
+// routes every Proton request through the proxy, so the whole exchange comes
+// from the IP the HumanVerificationToken was issued to.
+// The default host (mail.proton.me/api) is assumed here and by the CAPTCHA
+// proxy's hardcoded mail-api.proton.me sibling, so don't override it.
+func login(ctx context.Context, appVersion, userAgent, username, password, proxyURL string, captchaAutoOpen bool) (*proton.Manager, *proton.Client, proton.Auth, error) {
+	baseTransport, err := proxyTransport(proxyURL)
+	if err != nil {
+		return nil, nil, proton.Auth{}, err
+	}
+	// newManager builds a Proton manager carrying the given round-tripper (the
+	// proxy, optionally wrapped with the human-verification headers). A nil
+	// round-tripper keeps go-proton-api's default transport.
+	newManager := func(rt http.RoundTripper) *proton.Manager {
+		opts := []proton.Option{
+			proton.WithAppVersion(appVersion),
+			proton.WithUserAgent(userAgent),
+		}
+		if rt != nil {
+			opts = append(opts, proton.WithTransport(rt))
+		}
+		return proton.New(opts...)
+	}
+
+	firstTransport := baseTransport
+	if proxyURL == "" {
+		firstTransport = nil // no proxy: keep the library default transport
+	}
+	manager := newManager(firstTransport)
+
+	client, auth, err := manager.NewClientWithLogin(ctx, username, []byte(password))
+	if err == nil {
+		return manager, client, auth, nil
+	}
+	manager.Close()
+
+	hv, ok := asHumanVerification(err)
+	if !ok {
+		return nil, nil, proton.Auth{}, err
+	}
+	if !hv.supportsCaptcha() {
+		return nil, nil, proton.Auth{}, fmt.Errorf(
+			"human verification required, but CAPTCHA is not offered (available methods: %s): %w",
+			strings.Join(hv.Methods, ", "), err,
+		)
+	}
+
+	// Bind the challenge to Proton's real HumanVerificationToken and solve it
+	// through the same proxy the login used.
+	captchaToken, err := solveCaptcha(ctx, legacyTarget(hv.Token), username, captchaAutoOpen, proxyURL)
+	if err != nil {
+		return nil, nil, proton.Auth{}, err
+	}
+
+	manager = newManager(newHVTransport(baseTransport, captchaToken, "captcha"))
+	client, auth, err = manager.NewClientWithLogin(ctx, username, []byte(password))
+	if err != nil {
+		manager.Close()
+		return nil, nil, proton.Auth{}, err
+	}
+
+	return manager, client, auth, nil
+}
+
+func authenticate(appVersion, userAgent, proxyURL string, captchaAutoOpen bool, creds credentials) AuthResult {
 	reader := bufio.NewReader(os.Stdin)
 
-	// Prompt for username
-	fmt.Fprint(os.Stderr, "Proton username (email): ")
-	username, err := reader.ReadString('\n')
-	if err != nil {
-		return AuthResult{Error: "Failed to read username", ErrorCode: 1000}
-	}
-	username = strings.TrimSpace(username)
+	password := creds.password
+	if creds.username == "" || password == "" {
+		// Interactive path: prompt for username and (hidden) password.
+		fmt.Fprint(os.Stderr, "Proton username (email): ")
+		username, err := reader.ReadString('\n')
+		if err != nil {
+			return AuthResult{Error: "Failed to read username", ErrorCode: 1000}
+		}
+		creds.username = strings.TrimSpace(username)
 
-	// Prompt for password (hidden input)
-	fmt.Fprint(os.Stderr, "Password: ")
-	passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
-	fmt.Fprintln(os.Stderr) // newline after password
-	if err != nil {
-		return AuthResult{Error: "Failed to read password", ErrorCode: 1000}
+		fmt.Fprint(os.Stderr, "Password: ")
+		passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
+		fmt.Fprintln(os.Stderr) // newline after password
+		if err != nil {
+			return AuthResult{Error: "Failed to read password", ErrorCode: 1000}
+		}
+		password = string(passwordBytes)
 	}
-	password := string(passwordBytes)
+	username := creds.username
 
-	// Create Proton API manager
-	// Use default host URL (https://mail.proton.me/api) - don't override it
-	// Note: SRP auth often triggers CAPTCHA. Browser auth is the preferred method.
+	// Perform SRP authentication, letting the user solve a CAPTCHA if Proton asks for one
 	ctx := context.Background()
-	manager := proton.New(
-		proton.WithAppVersion(appVersion),
-		proton.WithUserAgent(userAgent),
-	)
-	defer manager.Close()
-
-	// Perform SRP authentication
-	client, auth, err := manager.NewClientWithLogin(ctx, username, []byte(password))
+	manager, client, auth, err := login(ctx, appVersion, userAgent, username, password, proxyURL, captchaAutoOpen)
 	if err != nil {
 		return AuthResult{
-			Error:     fmt.Sprintf("Authentication failed: %v", err),
+			Error:     friendlyAuthError(err),
 			ErrorCode: 1001,
 		}
 	}
+	defer manager.Close()
 	defer client.Close()
 
 	// Check if 2FA is required
 	if auth.TwoFA.Enabled != 0 {
-		fmt.Fprint(os.Stderr, "2FA TOTP code: ")
-		totp, err := reader.ReadString('\n')
-		if err != nil {
-			return AuthResult{Error: "Failed to read TOTP", ErrorCode: 1002}
+		totp := creds.totpCode
+		if totp == "" && creds.totpSecret != "" {
+			totp = generateTOTP(creds.totpSecret, time.Now())
 		}
-		totp = strings.TrimSpace(totp)
+		if totp == "" {
+			// Interactive fallback only when stdin is usable; in non-interactive
+			// mode (-username/-password or env) fail with an actionable error.
+			if creds.username != "" && creds.password != "" {
+				return AuthResult{Error: "2FA required: supply -totp <code> or -totp-secret <base32>", ErrorCode: 1002}
+			}
+			fmt.Fprint(os.Stderr, "2FA TOTP code: ")
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return AuthResult{Error: "Failed to read TOTP", ErrorCode: 1002}
+			}
+			totp = strings.TrimSpace(line)
+		}
 
 		err = client.Auth2FA(ctx, proton.Auth2FAReq{TwoFactorCode: totp})
 		if err != nil {
