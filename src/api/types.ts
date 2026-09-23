@@ -166,7 +166,7 @@ export interface OpenAIResponseRequest {
 }
 
 // Output item types for OpenAI Response
-export type OutputItem = MessageOutputItem | FunctionCallOutputItem;
+export type OutputItem = MessageOutputItem | FunctionCallOutputItem | ReasoningOutputItem;
 
 export interface MessageOutputItem {
   type: 'message';
@@ -187,6 +187,17 @@ export interface FunctionCallOutputItem {
   status: 'completed' | 'in_progress';
   name: string;
   arguments: string;
+}
+
+export interface ReasoningOutputItem {
+  type: 'reasoning';
+  id: string;
+  status: 'completed' | 'in_progress';
+  summary: string[];
+  content: Array<{
+    type: 'reasoning_text';
+    text: string;
+  }>;
 }
 
 export interface OpenAIResponse {
@@ -247,4 +258,6 @@ export type ResponseStreamEvent =
   | { type: 'response.output_text.done'; item_id: string; output_index: number; content_index: number; text: string; sequence_number: number }
   | { type: 'response.function_call_arguments.delta'; item_id: string; output_index: number; delta: string; sequence_number: number }
   | { type: 'response.function_call_arguments.done'; item_id: string; output_index: number; arguments: string; name: string; sequence_number: number }
+  | { type: 'response.reasoning_text.delta'; item_id: string; output_index: number; content_index: number; delta: string; sequence_number: number }
+  | { type: 'response.reasoning_text.done'; item_id: string; output_index: number; content_index: number; text: string; sequence_number: number }
   | { type: 'error'; code: string; message: string; param: string | null; sequence_number: number };

@@ -60,6 +60,89 @@ export class ResponseEventEmitter {
     });
   }
 
+  emitReasoningItemAdded(itemId: string, outputIndex: number): void {
+    this.emit({
+      type: 'response.output_item.added',
+      output_index: outputIndex,
+      item: {
+        id: itemId,
+        type: 'reasoning',
+        status: 'in_progress',
+        summary: [],
+        content: [],
+      },
+      sequence_number: this.sequenceNumber++,
+    });
+  }
+
+  emitReasoningPartAdded(itemId: string, outputIndex: number, contentIndex: number): void {
+    this.emit({
+      type: 'response.content_part.added',
+      item_id: itemId,
+      output_index: outputIndex,
+      content_index: contentIndex,
+      part: {
+        type: 'reasoning_text',
+        text: '',
+      },
+      sequence_number: this.sequenceNumber++,
+    });
+  }
+
+  emitReasoningTextDelta(itemId: string, outputIndex: number, contentIndex: number, delta: string): void {
+    this.emit({
+      type: 'response.reasoning_text.delta',
+      item_id: itemId,
+      output_index: outputIndex,
+      content_index: contentIndex,
+      delta,
+      sequence_number: this.sequenceNumber++,
+    });
+  }
+
+  emitReasoningTextDone(itemId: string, outputIndex: number, contentIndex: number, text: string): void {
+    this.emit({
+      type: 'response.reasoning_text.done',
+      item_id: itemId,
+      output_index: outputIndex,
+      content_index: contentIndex,
+      text,
+      sequence_number: this.sequenceNumber++,
+    });
+  }
+
+  emitReasoningPartDone(itemId: string, outputIndex: number, contentIndex: number, text: string): void {
+    this.emit({
+      type: 'response.content_part.done',
+      item_id: itemId,
+      output_index: outputIndex,
+      content_index: contentIndex,
+      part: {
+        type: 'reasoning_text',
+        text,
+      },
+      sequence_number: this.sequenceNumber++,
+    });
+  }
+
+  emitReasoningItemDone(itemId: string, outputIndex: number, text: string): void {
+    this.emit({
+      type: 'response.output_item.done',
+      output_index: outputIndex,
+      item: {
+        id: itemId,
+        type: 'reasoning',
+        status: 'completed',
+        summary: [],
+        content: [{
+          type: 'reasoning_text',
+          text,
+        }],
+      },
+      sequence_number: this.sequenceNumber++,
+    });
+  }
+
   emitContentPartAdded(itemId: string, outputIndex: number, contentIndex: number): void {
     this.emit({
       type: 'response.content_part.added',

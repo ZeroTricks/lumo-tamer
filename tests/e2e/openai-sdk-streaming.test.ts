@@ -41,10 +41,12 @@ const EXPECTED_SEQUENCE = [
 
 describe('OpenAI SDK - Responses API', () => {
   describe('streaming', () => {
+    let events: any[];
     let eventTypes: string[];
     let fullText: string;
 
     beforeAll(async () => {
+      events = [];
       eventTypes = [];
       fullText = '';
 
@@ -55,6 +57,7 @@ describe('OpenAI SDK - Responses API', () => {
       });
 
       for await (const event of stream) {
+        events.push(event);
         eventTypes.push(event.type);
         if (event.type === 'response.output_text.delta') {
           fullText += event.delta;
@@ -95,10 +98,18 @@ describe('OpenAI SDK - Responses API', () => {
     });
 
     it('event order matches OpenAI spec', () => {
-      const structural = eventTypes.filter(t => t !== 'response.output_text.delta');
-      for (let i = 0; i < EXPECTED_SEQUENCE.length; i++) {
-        expect(structural[i]).toBe(EXPECTED_SEQUENCE[i]);
-      }
+      const messageLifecycle = events.filter((event) => {
+        if (event.type === 'response.output_text.delta') return false;
+        if (event.type === 'response.output_item.added' || event.type === 'response.output_item.done') {
+          return event.item?.type === 'message';
+        }
+        if (event.type === 'response.content_part.added' || event.type === 'response.content_part.done') {
+          return event.part?.type === 'output_text';
+        }
+        return !event.type.startsWith('response.reasoning_text');
+      });
+
+      expect(messageLifecycle.map((event) => event.type)).toEqual(EXPECTED_SEQUENCE);
     });
 
     it('has non-empty text', () => {

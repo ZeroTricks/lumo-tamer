@@ -121,8 +121,7 @@ server:
     # Used when the client does not send reasoning_effort. "none" or "high".
     # (Inbound reasoning_effort low/medium/high all map to high.)
     default: "none"
-    # Forward Lumo's thinking tokens to the client as delta.reasoning_content
-    # (streaming) or message.reasoning_content (non-streaming).
+    # Forward Lumo's thinking to the client
     surfaceThinking: false
 
   # Max request body size

@@ -5,9 +5,9 @@
  * formatting without hitting any real API.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { createTestServer, parseSSEEvents, type TestServer } from '../helpers/test-server.js';
-import { getCustomToolsConfig } from '../../src/app/config.js';
+import { getCustomToolsConfig, getReasoningConfig } from '../../src/app/config.js';
 
 /** POST /v1/responses with JSON body, returning the raw Response. */
 function postResponses(ts: TestServer, body: Record<string, unknown>): Promise<Response> {
@@ -18,7 +18,34 @@ function postResponses(ts: TestServer, body: Record<string, unknown>): Promise<R
   });
 }
 
+const REASONING_CHUNKS = ['Plan ', 'carefully.'];
+const REASONING_TEXT = REASONING_CHUNKS.join('');
+const RESPONSE_TEXT = 'Visible answer.';
+
+function mockReasoningCompletion(ts: TestServer) {
+  return vi.spyOn(ts.deps.lumoClient, 'chatWithHistory').mockImplementation(
+    async (_turns, onChunk, options = {}) => {
+      if (options.enableReasoning) {
+        for (const chunk of REASONING_CHUNKS) options.onReasoning?.(chunk);
+      }
+      onChunk?.(RESPONSE_TEXT);
+
+      return {
+        message: { content: RESPONSE_TEXT },
+        reasoning: options.enableReasoning ? REASONING_TEXT : undefined,
+      };
+    },
+  );
+}
+
 describe('/v1/responses', () => {
+  const originalReasoningConfig = { ...getReasoningConfig() };
+
+  afterEach(() => {
+    Object.assign(getReasoningConfig(), originalReasoningConfig);
+    vi.restoreAllMocks();
+  });
+
   describe('non-streaming (success)', () => {
     let ts: TestServer;
 
@@ -132,6 +159,91 @@ describe('/v1/responses', () => {
       expect(Array.isArray(body.tools)).toBe(true);
       expect(body.tools).toHaveLength(1);
     });
+
+    it('includes surfaced reasoning as a completed output item', async () => {
+      Object.assign(getReasoningConfig(), { default: 'none', surfaceThinking: true });
+      const chat = mockReasoningCompletion(ts);
+
+      const res = await postResponses(ts, {
+        input: 'Think first',
+        stream: false,
+        reasoning: { effort: 'high' },
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      const reasoningItem = body.output.find((item: any) => item.type === 'reasoning');
+
+      expect(chat).toHaveBeenCalledOnce();
+      expect(chat.mock.calls[0][2]?.enableReasoning).toBe(true);
+      expect(body.reasoning).toEqual({ effort: 'high', summary: null });
+      expect(reasoningItem).toMatchObject({
+        type: 'reasoning',
+        status: 'completed',
+        summary: [],
+        content: [{ type: 'reasoning_text', text: REASONING_TEXT }],
+      });
+    });
+
+    it('does not expose reasoning output when surfaceThinking is disabled', async () => {
+      Object.assign(getReasoningConfig(), { default: 'none', surfaceThinking: false });
+      mockReasoningCompletion(ts);
+
+      const res = await postResponses(ts, {
+        input: 'Think privately',
+        stream: false,
+        reasoning: { effort: 'high' },
+      });
+
+      const body = await res.json();
+      expect(body.reasoning.effort).toBe('high');
+      expect(body.output.some((item: any) => item.type === 'reasoning')).toBe(false);
+    });
+
+    it('reports high when the server default enables reasoning', async () => {
+      Object.assign(getReasoningConfig(), { default: 'high', surfaceThinking: true });
+      const chat = mockReasoningCompletion(ts);
+
+      const res = await postResponses(ts, { input: 'Use the default', stream: false });
+
+      const body = await res.json();
+      expect(chat.mock.calls[0][2]?.enableReasoning).toBe(true);
+      expect(body.reasoning.effort).toBe('high');
+    });
+
+    it.each(['low', 'medium', 'high'] as const)(
+      'reports the effective high effort when %s is requested',
+      async (effort) => {
+        Object.assign(getReasoningConfig(), { default: 'none', surfaceThinking: false });
+        const chat = mockReasoningCompletion(ts);
+
+        const res = await postResponses(ts, {
+          input: 'Think',
+          stream: false,
+          reasoning: { effort },
+        });
+
+        const body = await res.json();
+        expect(chat.mock.calls[0][2]?.enableReasoning).toBe(true);
+        expect(body.reasoning.effort).toBe('high');
+      },
+    );
+
+    it('honors explicit none even when the server default enables reasoning', async () => {
+      Object.assign(getReasoningConfig(), { default: 'high', surfaceThinking: true });
+      const chat = mockReasoningCompletion(ts);
+
+      const res = await postResponses(ts, {
+        input: 'Do not reason',
+        stream: false,
+        reasoning: { effort: 'none' },
+      });
+
+      const body = await res.json();
+      expect(chat.mock.calls[0][2]?.enableReasoning).toBe(false);
+      expect(body.reasoning.effort).toBe('none');
+      expect(body.output.some((item: any) => item.type === 'reasoning')).toBe(false);
+    });
   });
 
   describe('streaming (success)', () => {
@@ -179,6 +291,89 @@ describe('/v1/responses', () => {
 
       expect(doneEvent).toBeDefined();
       expect((doneEvent!.data as any).text.length).toBeGreaterThan(0);
+    });
+
+    it('streams a consistent reasoning lifecycle', async () => {
+      Object.assign(getReasoningConfig(), { default: 'none', surfaceThinking: true });
+      mockReasoningCompletion(ts);
+
+      const res = await postResponses(ts, {
+        input: 'Think first',
+        stream: true,
+        reasoning: { effort: 'high' },
+      });
+
+      const events = parseSSEEvents(await res.text()).map((event) => event.data as any);
+      const reasoningEvents = events.filter((event) =>
+        event?.type?.startsWith('response.reasoning_text')
+        || event?.item?.type === 'reasoning'
+        || event?.part?.type === 'reasoning_text',
+      );
+
+      expect(reasoningEvents.map((event) => event.type)).toEqual([
+        'response.output_item.added',
+        'response.content_part.added',
+        'response.reasoning_text.delta',
+        'response.reasoning_text.delta',
+        'response.reasoning_text.done',
+        'response.content_part.done',
+        'response.output_item.done',
+      ]);
+
+      const reasoningItemId = reasoningEvents[0].item.id;
+      expect(reasoningEvents.map((event) => event.item_id ?? event.item.id))
+        .toEqual(Array(reasoningEvents.length).fill(reasoningItemId));
+      expect(reasoningEvents.every((event) => event.output_index === 0)).toBe(true);
+
+      const contentEvents = reasoningEvents.filter((event) => 'content_index' in event);
+      expect(contentEvents.every((event) => event.content_index === 0)).toBe(true);
+
+      const deltas = reasoningEvents
+        .filter((event) => event.type === 'response.reasoning_text.delta')
+        .map((event) => event.delta);
+      expect(deltas.join('')).toBe(REASONING_TEXT);
+
+      const textDone = reasoningEvents.find(
+        (event) => event.type === 'response.reasoning_text.done',
+      );
+      const partDone = reasoningEvents.find(
+        (event) => event.type === 'response.content_part.done',
+      );
+      const itemDone = reasoningEvents.find(
+        (event) => event.type === 'response.output_item.done',
+      );
+      expect(textDone.text).toBe(REASONING_TEXT);
+      expect(partDone.part.text).toBe(REASONING_TEXT);
+      expect(itemDone.item.content[0].text).toBe(REASONING_TEXT);
+
+      expect(events.map((event) => event.sequence_number))
+        .toEqual(events.map((_, index) => index));
+
+      const completed = events.find((event) => event.type === 'response.completed');
+      const completedReasoning = completed.response.output.find(
+        (item: any) => item.type === 'reasoning',
+      );
+      expect(completed.response.reasoning.effort).toBe('high');
+      expect(completedReasoning).toEqual(itemDone.item);
+    });
+
+    it('does not emit reasoning events when surfaceThinking is disabled', async () => {
+      Object.assign(getReasoningConfig(), { default: 'none', surfaceThinking: false });
+      mockReasoningCompletion(ts);
+
+      const res = await postResponses(ts, {
+        input: 'Think privately',
+        stream: true,
+        reasoning: { effort: 'high' },
+      });
+
+      const events = parseSSEEvents(await res.text()).map((event) => event.data as any);
+      expect(events.some((event) => event.type?.startsWith('response.reasoning_text'))).toBe(false);
+      expect(events.some((event) => event.item?.type === 'reasoning')).toBe(false);
+
+      const completed = events.find((event) => event.type === 'response.completed');
+      expect(completed.response.reasoning.effort).toBe('high');
+      expect(completed.response.output.some((item: any) => item.type === 'reasoning')).toBe(false);
     });
   });
 
