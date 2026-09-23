@@ -39,11 +39,21 @@ export class CLIClient {
   async run(): Promise<void> {
     // Check if query provided as argument
     const query = process.argv[2];
-    if (query && !query.startsWith('-')) {
-      await this.singleQuery(process.argv.slice(2).join(' '));
-    } else {
+    if (!query) {
       await this.interactiveMode();
+      return;
     }
+    if (query.startsWith('-')) {
+      // One-shot mode takes a single plain-text prompt; it has no flags of its own.
+      // Without this check, an unrecognized `-`-prefixed arg silently fell through to
+      // interactiveMode(), which then exited immediately on non-interactive (closed) stdin.
+      logger.error(
+        { arg: query },
+        `Unrecognized option "${query}". One-shot mode takes a plain prompt, e.g. tamer "your prompt", and does not support flags. Run "tamer" with no arguments for interactive mode.`
+      );
+      process.exit(1);
+    }
+    await this.singleQuery(process.argv.slice(2).join(' '));
   }
 
   /**
