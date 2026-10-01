@@ -306,7 +306,7 @@ See the [full guide](docs/howto-home-assistant.md). TLDR:
 ### OpenClaw
 Add Lumo to `models.providers` in your OpenClaw config. [Example](docs/openclaw.md).
 
-### OpenCode
+### OpenCode V1
 Add Lumo to `models.providers` in your `opencode.json` configuration file. [Example](docs/opencode.md).
 
 ### Nanocoder
