@@ -15,12 +15,12 @@ COPY tsconfig.json ./
 # ============================================================================
 # Go builder stage - compile static Go binary
 # ============================================================================
-FROM golang:1.24-alpine AS go-builder
+FROM golang:1.26-alpine AS go-builder
 
 WORKDIR /build
 COPY src/auth/login/go ./
 # CGO_ENABLED=0 produces a static binary - runs on Alpine, Debian, or native
-RUN CGO_ENABLED=0 go build -o proton-auth
+RUN CGO_ENABLED=0 go build -o proton-auth github.com/Arsylk/proton-auth/cmd/proton-auth
 
 # ============================================================================
 # Builder stage - compile TypeScript
