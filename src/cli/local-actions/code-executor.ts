@@ -30,6 +30,12 @@ export function summarizeExecutableBlock(language: string | null, content: strin
 /**
  * Check if a code block language is executable (has a shell mapping in config)
  */
+const DANGEROUS = /\b(rm\s+(-[a-zA-Z]*f|-[a-zA-Z]*r)|sudo|chmod\s+777|mkfs|dd\s+if=|curl\s+|wget\s+|pip\s+install|npm\s+i(nstall)?|pnpm\s+add|yarn\s+add)\b/i;
+
+export function isDangerousCommand(content: string): boolean {
+  return DANGEROUS.test(content);
+}
+
 export function isExecutable(language: string | null): boolean {
   if (!language) return false;
   const { executors } = getLocalActionsConfig();
@@ -59,6 +65,7 @@ export async function executeBlock(
   return new Promise((resolve) => {
     const proc = spawn(cmd, [...args, block.content], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: process.cwd(),
     });
 
     let output = '';
@@ -98,10 +105,15 @@ export const executeHandler: BlockHandler = {
   summarize: (block) => summarizeExecutableBlock(block.language, block.content),
   requiresConfirmation: true,
   confirmOptions: (block) => ({
-    label: `Code block detected: ${block.language || 'code'}`,
-    prompt: 'Execute this code?',
+    label: isDangerousCommand(block.content)
+      ? `Dangerous ${block.language || 'code'} command`
+      : `Code block detected: ${block.language || 'code'}`,
+    prompt: isDangerousCommand(block.content)
+      ? 'This looks destructive or installs packages. Run it anyway?'
+      : 'Execute this code?',
     verb: 'Executing',
     errorLabel: 'Execution error',
+    kind: 'execute',
   }),
   apply: (block) => executeBlock(block, (chunk) => process.stdout.write(chunk)),
   formatApplyOutput: (result) => `[Exit code: ${(result as ExecutionResult).exitCode}]`,

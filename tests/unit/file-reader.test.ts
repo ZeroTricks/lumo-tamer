@@ -15,6 +15,7 @@ import type { CodeBlock } from '../../src/cli/local-actions/types.js';
 // CLI tests need CLI mode config
 beforeAll(() => {
   initConfig('cli');
+  getLocalActionsConfig().restrictToCwd = false;
 });
 
 function readBlock(content: string): CodeBlock {

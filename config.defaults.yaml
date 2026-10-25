@@ -104,17 +104,19 @@ server:
 
   # Model tier selection (Lumo 2.0).
   # The inbound OpenAI "model" field picks the tier:
-  #   lumo      -> Proton routes automatically
-  #   lumo-lite -> Lumo 2.0 Lite (fast, everyday)
-  #   lumo-max  -> Lumo 2.0 Max (high-performance)
+  #   lumo        -> Proton routes automatically
+  #   lumo-lite   -> Lumo 2.0 Lite (fast, everyday)
+  #   lumo-max    -> Lumo 2.0 Max (high-performance)
+  #   apertus-15  -> Apertus 1.5 (open model; use when Max quota is exhausted)
   # Tier used when a request omits the model field (auto = lumo / Proton routes):
   defaultModelTier: "auto"
-  # Models advertised on /v1/models and accepted in the "model" field.
-  # Unknown models are rejected with HTTP 400.
+  # Models advertised on /v1/models and preferred in the "model" field.
+  # Unknown string model ids from IDE clients fall back to defaultModelTier.
   allowedModels:
     - "lumo"
     - "lumo-lite"
     - "lumo-max"
+    - "apertus-15"
 
   # Thinking / reasoning mode (Lumo 2.0).
   reasoning:
@@ -235,11 +237,41 @@ cli:
   # Enable Lumo's native web_search tool (and other external tools: weather, stock, cryptocurrency)
   enableWebSearch: false
 
+  # Model tier (Lumo 2.0): auto, lumo-lite, lumo-max, apertus-15
+  defaultModelTier: "auto"
+  # Review/chat vs write/run. Override both to apertus-15 if Max quota is exhausted.
+  reviewModelTier: "auto"
+  codingModelTier: "lumo-max"
+  reasoning:
+    # "none" or "high". high turns on thinking mode.
+    default: "none"
+
   # Local actions: code block detection and execution
   localActions:
     # Enable code block detection (```bash, ```read, ```edit, etc.)
     # WARNING: When enabled, Lumo can trigger actions on your machine!
     enabled: false
+
+    # Attach cwd source files when the user asks to review the project
+    projectContext:
+      enabled: true
+      maxFiles: 24
+      maxTotalSize: "80kb"
+
+    search:
+      enabled: true
+      maxResults: 40
+
+    runAfterWrite:
+      enabled: true
+      confirm: true
+
+    undo:
+      enabled: true
+      maxEntries: 20
+
+    # Refuse reads/writes outside the current working directory
+    restrictToCwd: true
 
     # ```read blocks: Lumo can read local files without user confirmation
     fileReads:

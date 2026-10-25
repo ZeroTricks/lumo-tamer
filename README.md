@@ -27,7 +27,7 @@ lumo-tamer is a lightweight local proxy that talks to Proton's Lumo API using th
 
 - OpenAI-compatible API server with experimental tool support.
 - Select the Lumo 2.0 model tier (Lite/Max) and thinking mode per request, via the OpenAI `model` and `reasoning_effort` fields.
-- Interactive CLI, let Lumo help you execute commands, read, create and edit files.
+- Interactive CLI: review a folder, `@file` mentions, search, create/edit/undo, and optional run-after-write.
 - Sync your conversations with Proton to access them on https://lumo.proton.me or in mobile apps.
 
 
@@ -201,29 +201,33 @@ cli:
 
 lumo-tamer maps standard OpenAI request fields to Lumo 2.0's model tier and answer mode:
 
-- `model`: `lumo` (Proton auto-routes), `lumo-lite`, or `lumo-max`. These are advertised on `/v1/models`; an unknown model returns HTTP 400.
+- `model`: `lumo` (Proton auto-routes), `lumo-lite`, `lumo-max`, or `apertus-15` (Apertus 1.5). These are advertised on `/v1/models`. Aliases `apertus` and `apertus-1.5` also map to Apertus. Unknown string model ids from IDE clients fall back to the server default instead of failing.
 - `reasoning_effort`: `high` (also `low`/`medium`) turns on thinking mode, `none` turns it off. In the Responses API, use `reasoning.effort` instead.
 
 Defaults and surfacing are configurable:
 
 ```yaml
 server:
-  # Tier used when a request omits the model field: auto, lumo-lite, lumo-max
+  # Tier used when a request omits the model field: auto, lumo-lite, lumo-max, apertus-15
   defaultModelTier: "auto"
   # Models advertised on /v1/models and accepted in the model field
-  allowedModels: ["lumo", "lumo-lite", "lumo-max"]
+  allowedModels: ["lumo", "lumo-lite", "lumo-max", "apertus-15"]
   reasoning:
     # Used when a request omits reasoning_effort: "none" or "high"
     default: "none"
     # Forward Lumo's thinking tokens as delta.reasoning_content (streaming)
     # or message.reasoning_content (non-streaming)
     surfaceThinking: false
+
+cli:
+  reviewModelTier: "apertus-15"
+  codingModelTier: "apertus-15"
 ```
 
-> **Note:** Availability of `lumo-max` and thinking mode depends on your Proton plan. Requests are end-to-end encrypted the same way as the rest of lumo-tamer.
+> **Note:** Availability of `lumo-max` and thinking mode depends on your Proton plan. When Max quota is exhausted, use `apertus-15`. Requests are end-to-end encrypted the same way as the rest of lumo-tamer.
 
 **Known limitations:**
-- `low`/`medium`/`high` effort values are equivalent: Lumo only has binary thinking on/off.
+- `low`/`medium`/`high` effort values are equivalent: Lumo only has binary thinking on/off. IDE aliases `minimal`/`auto` map to off, `xhigh` maps to on.
 - `"none"` is a lumo-tamer extension; standard OpenAI clients don't send it (the config default covers that case).
 - `reasoning_content` follows Deepseek's convention, not the OpenAI spec. It works with clients that support it (Cursor, Open WebUI with Deepseek config). For the Responses API, reasoning is not yet surfaced.
 
@@ -288,7 +292,7 @@ The server implements a subset of OpenAI-compatible endpoints and has so far bee
 |----------|-------------|
 | `POST /v1/chat/completions` | [OpenAI chat completions](https://platform.openai.com/docs/api-reference/chat/create) |
 | `POST /v1/responses` | [OpenAI responses API](https://platform.openai.com/docs/api-reference/responses/create) |
-| `GET /v1/models` | List available models (`lumo`, `lumo-lite`, `lumo-max`) |
+| `GET /v1/models` | List available models (`lumo`, `lumo-lite`, `lumo-max`, `apertus-15`) |
 | `GET /health` | Health check |
 | `GET /metrics` | [Prometheus metrics](docs/development.md#metrics) |
 
@@ -305,6 +309,15 @@ See the [full guide](docs/howto-home-assistant.md). TLDR:
 
 ### OpenClaw
 Add Lumo to `models.providers` in your OpenClaw config. [Example](docs/openclaw.md).
+
+### Android Studio
+Add a **Third-Party Remote Provider** (OpenAI-compatible):
+
+- URL: `http://127.0.0.1:3003/v1`
+- API key: your `server.apiKey`
+- Model: `apertus-15` (or `lumo` / `lumo-lite` / `lumo-max`)
+
+Use chat, not Agent Mode. Keep `tamer server` running. Some Studio features still send tool calls that Lumo will not handle well.
 
 ### OpenCode
 Add Lumo to `models.providers` in your `opencode.json` configuration file. [Example](docs/opencode.md).

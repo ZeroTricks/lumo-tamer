@@ -105,4 +105,13 @@ describe('LumoClient (Lumo 2.0 chat/completions)', () => {
         expect(body.model).toBe('lumo-max');
         expect(body.reasoning_effort).toBe('high');
     });
+
+    it('sends Apertus 1.5 as apertus-15 on the wire', async () => {
+        const { client, api } = makeClient(() => [cc({ content: 'ok' })]);
+        await client.chatWithHistory([{ role: Role.User, content: 'hi' }], undefined, {
+            modelTier: 'apertus-15',
+        });
+        const body = api.mock.calls[0][0].data as { model: string };
+        expect(body.model).toBe('apertus-15');
+    });
 });

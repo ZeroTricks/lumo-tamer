@@ -15,6 +15,9 @@ Add Lumo to `models.providers` in your OpenCode `opencode.json` config:
         },
         "lumo-max": {
           "name": "lumo-max"
+        },
+        "apertus-15": {
+          "name": "Apertus 1.5"
         }
       },
       "name": "Lumo (local)",

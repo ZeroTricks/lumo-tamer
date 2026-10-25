@@ -145,6 +145,9 @@ function getHelpText(): string {
   /load <id>         - Load a conversation from Proton by ID
   /refreshtokens     - Manually refresh auth tokens
   /logout            - Revoke session and delete tokens
+  /new               - Start a fresh CLI conversation
+  /files             - List source files in the current folder
+  /undo              - Restore files from the last create/edit
   /quit              - Exit CLI (CLI mode only)${wakewordHint}`;
 }
 

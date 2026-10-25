@@ -1,17 +1,43 @@
 import { Router, Request, Response } from 'express';
-import { EndpointDependencies, OpenAIResponseRequest, FunctionCallOutput } from '../../types.js';
+import { EndpointDependencies, OpenAIResponseRequest, OpenAIResponseMessage, FunctionCallOutput } from '../../types.js';
 import { logger } from '../../../app/logger.js';
 import { handleRequest } from './request-handlers.js';
 import { convertOpenAIResponseMessages } from '../../message-converter.js';
 import { buildInstructions } from '../../instructions.js';
 import { getConversationsConfig, getServerInstructionsConfig, getServerConfig } from '../../../app/config.js';
 import { isModelAllowed, normalizeModelId, isValidReasoningEffort } from '../../../lumo-client/model-tier.js';
+import { Role } from '../../../lumo-client/index.js';
 import { getMetrics } from '../../../app/metrics.js';
 import { trackCustomToolCompletion } from '../../tools/call-id.js';
 import { sendInvalidRequest, sendServerError } from '../../error-handler.js';
 import { deterministicUUID } from '../../../app/id-generator.js';
 
 import type { ConversationId } from '../../../conversations/index.js';
+
+function extractLoosePrompt(input: OpenAIResponseRequest['input']): string {
+  if (typeof input === 'string') return input.trim();
+  if (!Array.isArray(input)) return '';
+  const parts: string[] = [];
+  for (const item of input) {
+    if (typeof item === 'string') {
+      parts.push(item);
+      continue;
+    }
+    if (typeof item !== 'object' || item === null) continue;
+    const obj = item as Record<string, unknown>;
+    if (typeof obj.content === 'string') parts.push(obj.content);
+    else if (typeof obj.text === 'string') parts.push(obj.text);
+    else if (Array.isArray(obj.content)) {
+      for (const part of obj.content) {
+        if (typeof part === 'string') parts.push(part);
+        else if (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string') {
+          parts.push((part as { text: string }).text);
+        }
+      }
+    }
+  }
+  return parts.join('\n').trim();
+}
 
 /**
  * Generate a deterministic conversation ID from the `user` field in the request.
@@ -57,15 +83,30 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
     try {
       const request: OpenAIResponseRequest = req.body;
 
+      // Continue / Android Studio / Codex often send Chat Completions `messages`
+      // to /v1/responses instead of Responses `input`.
+      if (request.input === undefined || request.input === null) {
+        if (request.messages !== undefined) {
+          request.input = request.messages as OpenAIResponseRequest['input'];
+        } else if (typeof request.prompt === 'string') {
+          request.input = request.prompt;
+        } else if (typeof request.query === 'string') {
+          request.input = request.query;
+        } else {
+          // IDE model/tool probes send tools with no prompt. Answer instead of 400.
+          logger.warn({ keys: Object.keys(request as object) }, 'Responses request had no input; using probe prompt');
+          request.input = 'Hello';
+        }
+      }
+      if (request.input && !Array.isArray(request.input) && typeof request.input !== 'string') {
+        request.input = [request.input as OpenAIResponseMessage];
+      }
+
       // ===== STEP 1: Determine conversation ID =====
       // Without a deterministic ID, treat the request as stateless (no persistence/dedup).
       if (request.previous_response_id && request.conversation) {
-        return sendInvalidRequest(
-          res,
-          'previous_response_id and conversation cannot be used together',
-          'previous_response_id',
-          'mutually_exclusive_fields'
-        );
+        logger.warn('Ignoring previous_response_id because conversation is also set');
+        delete request.previous_response_id;
       }
 
       let conversationId: ConversationId | undefined;
@@ -88,19 +129,15 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       if (request.input === undefined || request.input === null) {
         return sendInvalidRequest(res, 'input is required (string or message array)', 'input', 'missing_input');
       }
-      if (Array.isArray(request.input)) {
-        const hasUserMessage = request.input.some((m) =>
-          typeof m === 'object' && 'role' in m && m.role === 'user'
-        );
-        if (!hasUserMessage) {
-          return sendInvalidRequest(res, 'input array must include at least one user message', 'input', 'missing_user_message');
-        }
+      if (Array.isArray(request.input) && request.input.length === 0 && !request.instructions) {
+        logger.warn('Empty input array from client; using probe prompt');
+        request.input = 'Hello';
       }
 
       // Validate model + reasoning effort before any side effects.
       if (request.model !== undefined && request.model !== null) {
         const allowedModels = getServerConfig().allowedModels;
-        if (typeof request.model !== 'string' || !isModelAllowed(normalizeModelId(request.model), allowedModels)) {
+        if (typeof request.model !== 'string') {
           return sendInvalidRequest(
             res,
             `Unknown model '${String(request.model)}'. Allowed models: ${allowedModels.join(', ')}`,
@@ -108,19 +145,30 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
             'model_not_found',
           );
         }
+        if (!isModelAllowed(normalizeModelId(request.model), allowedModels)) {
+          logger.warn(
+            { model: request.model, allowedModels },
+            'Unknown model from client; falling back to server default',
+          );
+        }
       }
       if (!isValidReasoningEffort(request.reasoning?.effort)) {
-        return sendInvalidRequest(
-          res,
-          `Invalid reasoning.effort '${String(request.reasoning?.effort)}'. Allowed: none, low, medium, high`,
-          'reasoning.effort',
-          'invalid_reasoning_effort',
+        logger.warn(
+          { effort: request.reasoning?.effort },
+          'Unknown reasoning.effort from client; using server default',
         );
+        if (request.reasoning) request.reasoning.effort = undefined;
       }
 
       // ===== STEP 3: Convert input to turns =====
       // Handles normal messages, function_call, and function_call_output items.
-      const turns = convertOpenAIResponseMessages(request.input, request.instructions);
+      let turns = convertOpenAIResponseMessages(request.input, request.instructions);
+      if (turns.length === 0) {
+        const fallbackPrompt = request.instructions || extractLoosePrompt(request.input);
+        if (fallbackPrompt) {
+          turns = [{ role: Role.User, content: fallbackPrompt }];
+        }
+      }
 
       // ===== Build instructions (injected in LumoClient, not persisted) =====
       const instructions = buildInstructions(request.tools, request.instructions);

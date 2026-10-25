@@ -28,6 +28,8 @@ export function resolveChatModel(tier: LumoModelTier): string {
             return 'lumo-lite';
         case 'lumo-max':
             return 'lumo-max';
+        case 'apertus-15':
+            return 'apertus-15';
         default:
             return 'lumo';
     }

@@ -185,7 +185,7 @@ export async function handleRequest(
   const model = request.model || serverConfig.apiModelName;
   const ctx = buildRequestContext(deps, conversationId, request.tools);
 
-  // Resolve tier (Lite/Max) and thinking mode from the inbound request.
+  // Resolve tier (Lite/Max/Apertus) and thinking mode from the inbound request.
   const tier: LumoModelTier = request.model
     ? modelToTier(normalizeModelId(request.model))
     : serverConfig.defaultModelTier;

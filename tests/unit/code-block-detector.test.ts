@@ -116,13 +116,21 @@ describe('CodeBlockDetector', () => {
   describe('edge cases', () => {
     it('handles incomplete block at end (no closing fence)', () => {
       const detector = new CodeBlockDetector();
-      const { text, blocks } = processAll(detector, [
+      const { blocks } = processAll(detector, [
         '```bash\nls -la',
       ]);
 
-      expect(blocks).toHaveLength(0);
-      expect(text).toContain('```bash');
-      expect(text).toContain('ls -la');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].language).toBe('bash');
+      expect(blocks[0].content).toBe('ls -la');
+    });
+
+    it('reports receiving progress while a fence is open', () => {
+      const detector = new CodeBlockDetector();
+      const mid = detector.processChunk('```html\n<!DOCTYPE html>\n<html>');
+      expect(mid.opened).toBe('html');
+      expect(mid.receiving?.language).toBe('html');
+      expect(mid.receiving?.bytes).toBeGreaterThan(10);
     });
 
     it('handles empty code block', () => {

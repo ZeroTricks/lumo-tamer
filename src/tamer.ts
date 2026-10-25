@@ -65,7 +65,12 @@ if (args._[0] === 'auth') {
   const { CLIClient } = await import('./cli/client.js');
 
   logger.info('Starting lumo-tamer cli...');
+  const { print } = await import('./app/terminal.js');
+  const { cliStatus } = await import('./app/status-line.js');
+  cliStatus.start('Loading session');
   const app = await Application.create();
+  cliStatus.stop();
+  print('Session loaded.\n');
   const cliClient = new CLIClient(app);
   await cliClient.run();
   process.exit(0);

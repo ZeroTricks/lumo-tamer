@@ -103,41 +103,49 @@ describe('/v1/responses', () => {
       expect(body.status).toBe('completed');
     });
 
-    it('returns OpenAI-style 400 for missing input', async () => {
-      const res = await postResponses(ts, { stream: false });
+    it('accepts a tools-only IDE probe with no input', async () => {
+      const res = await postResponses(ts, {
+        model: 'lumo',
+        stream: false,
+        tools: [{ type: 'function', name: 'read_file', parameters: { type: 'object' } }],
+      });
 
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error.type).toBe('invalid_request_error');
-      expect(body.error.param).toBe('input');
-      expect(body.error.code).toBe('missing_input');
+      expect(res.status).toBe(200);
     });
 
-    it('returns OpenAI-style 400 when input array has no user message', async () => {
+    it('accepts a prompt alias', async () => {
+      const res = await postResponses(ts, { prompt: 'Hello', stream: false });
+      expect(res.status).toBe(200);
+    });
+
+    it('accepts Chat Completions messages on the Responses endpoint', async () => {
+      const res = await postResponses(ts, {
+        messages: [{ role: 'user', content: 'Hello from Continue' }],
+        stream: false,
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe('completed');
+    });
+
+    it('accepts an input array without a user role by using available text', async () => {
       const res = await postResponses(ts, {
         input: [{ role: 'assistant', content: 'hello' }],
         stream: false,
       });
 
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error.type).toBe('invalid_request_error');
-      expect(body.error.param).toBe('input');
-      expect(body.error.code).toBe('missing_user_message');
+      expect(res.status).toBe(200);
     });
 
-    it('returns OpenAI-style 400 for mutually exclusive previous_response_id + conversation', async () => {
+    it('accepts previous_response_id together with conversation', async () => {
       const res = await postResponses(ts, {
         input: 'Hello',
         previous_response_id: 'resp_123',
         conversation: { id: 'conv_123' },
       });
 
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error.type).toBe('invalid_request_error');
-      expect(body.error.param).toBe('previous_response_id');
-      expect(body.error.code).toBe('mutually_exclusive_fields');
+      expect(res.status).toBe(200);
     });
 
     it('supports max_tokens alias and echoes compatibility fields', async () => {

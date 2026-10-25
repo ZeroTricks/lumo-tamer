@@ -14,6 +14,7 @@ import bytes from 'bytes';
 import { closeSync, openSync, readFileSync, readSync, statSync } from 'fs';
 import { getLocalActionsConfig } from '../../app/config.js';
 import { FILE_PREFIX, type BlockHandler, type CodeBlock } from './types.js';
+import { isSecretPath, resolveProjectFile } from './paths-guard.js';
 
 export interface ReadResult {
   type: 'read';
@@ -79,11 +80,30 @@ export async function applyReadBlock(block: CodeBlock): Promise<ReadResult> {
   const files: string[] = [];
   let allSuccess = true;
 
+  let restrict = false;
+  try {
+    restrict = getLocalActionsConfig().restrictToCwd;
+  } catch {
+    restrict = false;
+  }
+
   for (const path of paths) {
     files.push(path);
     try {
+      if (!restrict && isSecretPath(path)) {
+        allSuccess = false;
+        sections.push(`${FILE_PREFIX} ${path}\nError: Refusing secret file: ${path}`);
+        continue;
+      }
+      const resolved = restrict ? resolveProjectFile(path) : undefined;
+      if (resolved && !resolved.ok) {
+        allSuccess = false;
+        sections.push(`${FILE_PREFIX} ${path}\nError: ${resolved.error}`);
+        continue;
+      }
+      const diskPath = resolved && resolved.ok ? resolved.absolute : path;
       // Guard: file size
-      const size = getFileSize(path);
+      const size = getFileSize(diskPath);
       if (maxFileSize !== null && size > maxFileSize) {
         allSuccess = false;
         sections.push(
@@ -93,7 +113,7 @@ export async function applyReadBlock(block: CodeBlock): Promise<ReadResult> {
       }
 
       // Guard: binary detection
-      if (isBinaryFile(path)) {
+      if (isBinaryFile(diskPath)) {
         allSuccess = false;
         sections.push(
           `${FILE_PREFIX} ${path}\nError: File appears to be binary. Only text files can be read.`
@@ -101,7 +121,7 @@ export async function applyReadBlock(block: CodeBlock): Promise<ReadResult> {
         continue;
       }
 
-      const content = readFileSync(path, 'utf8');
+      const content = readFileSync(diskPath, 'utf8');
       sections.push(`${FILE_PREFIX} ${path}\n${content}`);
     } catch (err) {
       allSuccess = false;
@@ -122,7 +142,13 @@ export const readHandler: BlockHandler = {
   matches: (block) => block.language === 'read',
   summarize: (block) => summarizeReadBlock(block.content),
   requiresConfirmation: false,
-  confirmOptions: () => ({ label: '', prompt: '', verb: '', errorLabel: '' }),
+  confirmOptions: () => ({
+    label: '',
+    prompt: '',
+    verb: '',
+    errorLabel: '',
+    kind: 'create',
+  }),
   apply: (block) => {
     if (!getLocalActionsConfig().fileReads.enabled) {
       return Promise.resolve({

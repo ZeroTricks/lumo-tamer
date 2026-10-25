@@ -146,6 +146,11 @@ export type OpenAIResponseMessage =
 export interface OpenAIResponseRequest {
   model?: string;
   input?: string | Array<OpenAIResponseMessage>;
+  /** Chat Completions alias used by Continue / Android Studio / Codex. */
+  messages?: Array<OpenAIResponseMessage> | string;
+  /** Extra aliases used by some IDE probes. */
+  prompt?: string;
+  query?: string;
   instructions?: string;
   // Thinking mode (Responses API places effort under reasoning.effort).
   reasoning?: { effort?: 'none' | 'low' | 'medium' | 'high' | null };

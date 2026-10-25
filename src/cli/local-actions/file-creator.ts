@@ -12,9 +12,12 @@
  *   ...
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
 import { FILE_PREFIX, type BlockHandler, type CodeBlock } from './types.js';
+import { resolveProjectFile } from './paths-guard.js';
+import { writeJournal } from './write-journal.js';
+import { getLocalActionsConfig } from '../../app/config.js';
 
 export interface CreateResult {
   type: 'create';
@@ -51,37 +54,52 @@ export async function applyCreateBlock(block: CodeBlock): Promise<CreateResult> 
     return { type: 'create', success: false, output: 'Missing === FILE: header', files: [] };
   }
 
-  const filename = firstLine.slice(FILE_PREFIX.length).trim();
-  if (!filename) {
+  const rawName = firstLine.slice(FILE_PREFIX.length).trim();
+  if (!rawName) {
     return { type: 'create', success: false, output: 'Empty filename in === FILE: header', files: [] };
   }
 
+  let restrict = true;
+  try {
+    restrict = getLocalActionsConfig().restrictToCwd;
+  } catch {
+    restrict = true;
+  }
+  const resolved = restrict
+    ? resolveProjectFile(rawName)
+    : { ok: true as const, absolute: rawName, relative: rawName };
+  if (!resolved.ok) {
+    return { type: 'create', success: false, output: resolved.error, files: [rawName] };
+  }
+
+  const filename = resolved.absolute;
   const fileContent = lines.slice(1).join('\n');
 
   try {
-    // Create parent directories if needed
     const dir = dirname(filename);
     if (dir && dir !== '.') {
       mkdirSync(dir, { recursive: true });
     }
 
     const existed = existsSync(filename);
+    const previous = existed ? readFileSync(filename, 'utf8') : null;
     writeFileSync(filename, fileContent, 'utf8');
+    writeJournal.record([{ path: filename, previous }]);
 
     const action = existed ? 'overwritten' : 'created';
     return {
       type: 'create',
       success: true,
-      output: `${filename}: ${action} successfully`,
-      files: [filename],
+      output: `${resolved.relative}: ${action} successfully`,
+      files: [resolved.relative],
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
       type: 'create',
       success: false,
-      output: `${filename}: ${msg}`,
-      files: [filename],
+      output: `${resolved.relative}: ${msg}`,
+      files: [resolved.relative],
     };
   }
 }
@@ -90,12 +108,20 @@ export const createHandler: BlockHandler = {
   matches: (block) => block.language === 'create',
   summarize: (block) => summarizeCreateBlock(block.content),
   requiresConfirmation: true,
-  confirmOptions: () => ({
-    label: 'Create block detected',
-    prompt: 'Create this file?',
-    verb: 'Creating',
-    errorLabel: 'Create error',
-  }),
+  confirmOptions: (block) => {
+    const firstLine = block.content.split('\n')[0] ?? '';
+    const targetPath = firstLine.startsWith(FILE_PREFIX)
+      ? firstLine.slice(FILE_PREFIX.length).trim()
+      : undefined;
+    return {
+      label: 'Create block detected',
+      prompt: 'Create this file?',
+      verb: 'Creating',
+      errorLabel: 'Create error',
+      kind: 'create',
+      targetPath,
+    };
+  },
   apply: (block) => applyCreateBlock(block),
   formatApplyOutput: (result) => result.output,
   formatResult: (_block, result) => {

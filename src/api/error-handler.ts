@@ -20,6 +20,7 @@ export function sendInvalidRequest(
   param: string | null = null,
   code: string | null = 'invalid_request'
 ): Response<OpenAIErrorBody> {
+  logger.warn({ message, param, code }, 'Invalid API request');
   return res.status(400).json({
     error: {
       message,

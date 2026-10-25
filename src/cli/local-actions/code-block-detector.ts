@@ -13,6 +13,10 @@ export type { CodeBlock };
 export interface DetectorResult {
   text: string; // Text to display (excludes code block markers)
   blocks: CodeBlock[]; // Completed code blocks
+  /** Set when a fence just opened in this chunk. */
+  opened?: string | null;
+  /** Size of the fence currently being received. */
+  receiving?: { language: string | null; bytes: number };
 }
 
 type State = 'normal' | 'in_block';
@@ -58,6 +62,13 @@ export class CodeBlockDetector {
       }
     }
 
+    if (this.state === 'in_block') {
+      result.receiving = {
+        language: this.language,
+        bytes: this.buffer.length + this.pendingText.length,
+      };
+    }
+
     return result;
   }
 
@@ -73,11 +84,11 @@ export class CodeBlockDetector {
       this.pendingText = '';
     }
 
-    // If in block, emit as incomplete (no closing fence)
+    // If the stream ended inside a fence, still treat it as a block so tamer can save it.
     if (this.state === 'in_block' && this.buffer) {
-      // Reconstruct the opening fence + content
-      const lang = this.language || '';
-      result.text += '```' + lang + '\n' + this.buffer;
+      const trimmed = this.buffer.trim();
+      result.blocks.push({ language: this.language, content: trimmed });
+      result.text += summarizeBlock(this.language, trimmed);
       this.buffer = '';
     }
 
@@ -101,6 +112,7 @@ export class CodeBlockDetector {
       this.buffer = '';
       this.state = 'in_block';
       this.pendingText = this.pendingText.slice(match.index + match[0].length);
+      result.opened = this.language;
       return;
     }
 
@@ -142,12 +154,11 @@ export class CodeBlockDetector {
       this.state = 'normal';
 
       const trimmed = this.buffer.trim();
-      if (this.isActionable(this.language)) {
-        result.text += summarizeBlock(this.language, trimmed);
-        result.blocks.push({ language: this.language, content: trimmed });
-      } else {
-        result.text += `\`\`\`${this.language || ''}\n${trimmed}\n\`\`\``;
-      }
+      result.blocks.push({ language: this.language, content: trimmed });
+      const hideBody = this.isActionable(this.language) || trimmed.length > 400;
+      result.text += hideBody
+        ? summarizeBlock(this.language, trimmed)
+        : `\`\`\`${this.language || ''}\n${trimmed}\n\`\`\``;
 
       this.buffer = '';
       this.language = null;

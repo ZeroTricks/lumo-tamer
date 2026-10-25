@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse } from '../../types.js';
 import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig, getReasoningConfig } from '../../../app/config.js';
 import { modelToTier, normalizeModelId, isModelAllowed, resolveReasoning, isValidReasoningEffort } from '../../../lumo-client/model-tier.js';
+import { Role } from '../../../lumo-client/index.js';
 import type { LumoModelTier } from '../../../lumo-client/types.js';
 import { logger } from '../../../app/logger.js';
 import { convertOpenAIChatMessages, extractSystemMessage } from '../../message-converter.js';
@@ -73,19 +74,21 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
 
       // Validate request
       if (!Array.isArray(request.messages) || request.messages.length === 0) {
-        return sendInvalidRequest(res, 'messages must be a non-empty array', 'messages', 'missing_messages');
+        logger.warn('Chat request had no messages; using probe prompt');
+        request.messages = [{ role: 'user', content: 'Hello' }];
       }
 
-      // Get the last user message
+      // Get the last user message. IDE clients sometimes send only system/developer.
       const lastUserMessage = [...request.messages].reverse().find(m => m.role === 'user');
-      if (!lastUserMessage) {
+      const systemContentForPrompt = extractSystemMessage(request.messages);
+      if (!lastUserMessage && !systemContentForPrompt) {
         return sendInvalidRequest(res, 'At least one user message is required', 'messages', 'missing_user_message');
       }
 
       // Validate model + reasoning_effort before any side effects (persistence, SSE, queue).
       if (request.model !== undefined && request.model !== null) {
         const allowedModels = getServerConfig().allowedModels;
-        if (typeof request.model !== 'string' || !isModelAllowed(normalizeModelId(request.model), allowedModels)) {
+        if (typeof request.model !== 'string') {
           return sendInvalidRequest(
             res,
             `Unknown model '${String(request.model)}'. Allowed models: ${allowedModels.join(', ')}`,
@@ -93,14 +96,19 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
             'model_not_found',
           );
         }
+        if (!isModelAllowed(normalizeModelId(request.model), allowedModels)) {
+          logger.warn(
+            { model: request.model, allowedModels },
+            'Unknown model from client; falling back to server default',
+          );
+        }
       }
       if (!isValidReasoningEffort(request.reasoning_effort)) {
-        return sendInvalidRequest(
-          res,
-          `Invalid reasoning_effort '${String(request.reasoning_effort)}'. Allowed: none, low, medium, high`,
-          'reasoning_effort',
-          'invalid_reasoning_effort',
+        logger.warn(
+          { effort: request.reasoning_effort },
+          'Unknown reasoning_effort from client; using server default',
         );
+        request.reasoning_effort = undefined;
       }
 
       // ===== Generate conversation ID for persistence =====
@@ -124,10 +132,13 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       }
 
       // ===== Convert messages to Lumo turns =====
-      const turns = convertOpenAIChatMessages(request.messages);
+      let turns = convertOpenAIChatMessages(request.messages);
 
       // ===== Build instructions (injected in LumoClient, not persisted) =====
       const systemContent = extractSystemMessage(request.messages);
+      if (turns.length === 0 && systemContent) {
+        turns = [{ role: Role.User, content: systemContent }];
+      }
       const instructions = buildInstructions(request.tools, systemContent);
       const { injectInto } = getServerInstructionsConfig();
 
@@ -168,7 +179,7 @@ async function handleChatRequest(
   const model = request.model || serverConfig.apiModelName;
   const ctx = buildRequestContext(deps, conversationId, request.tools);
 
-  // Resolve tier (Lite/Max) and thinking mode from the inbound request.
+  // Resolve tier (Lite/Max/Apertus) and thinking mode from the inbound request.
   const tier: LumoModelTier = request.model
     ? modelToTier(normalizeModelId(request.model))
     : serverConfig.defaultModelTier;
