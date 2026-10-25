@@ -10,6 +10,25 @@ import { PROTON_URLS } from '../app/urls.js';
 import { logger } from '../app/logger.js';
 import { getMetrics } from '../app/metrics.js';
 
+function isTransientNetworkError(error: unknown): boolean {
+    const parts: string[] = [];
+    let current: unknown = error;
+    for (let i = 0; i < 3 && current; i++) {
+        if (current instanceof Error) {
+            parts.push(current.message, current.name);
+            current = current.cause;
+        } else {
+            parts.push(String(current));
+            break;
+        }
+    }
+    return /ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|ENETUNREACH|UND_ERR_SOCKET/i.test(parts.join(' '));
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export interface ApiFactoryOptions {
     uid: string;
     accessToken: string;
@@ -96,7 +115,23 @@ export function createProtonApi(options: ApiFactoryOptions): ProtonApi {
             return fetch(fullUrl, fetchOptions);
         };
 
-        let response = await makeRequest(uid, accessToken);
+        const requestWithNetworkRetry = async (
+            currentUid: string,
+            currentAccessToken: string,
+        ): Promise<Response> => {
+            try {
+                return await makeRequest(currentUid, currentAccessToken);
+            } catch (error) {
+                if (!isTransientNetworkError(error)) {
+                    throw error;
+                }
+                logger.warn({ error }, 'Proton request failed, retrying once');
+                await delay(1000);
+                return makeRequest(currentUid, currentAccessToken);
+            }
+        };
+
+        let response = await requestWithNetworkRetry(uid, accessToken);
 
         // Handle 401 with retry if onAuthError callback is provided
         if (response.status === 401 && onAuthError) {

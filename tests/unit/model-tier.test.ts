@@ -15,13 +15,13 @@ describe('normalizeModelId', () => {
 });
 
 describe('isValidReasoningEffort', () => {
-    it('accepts valid values and absent/null', () => {
-        for (const e of ['none', 'low', 'medium', 'high', undefined, null]) {
+    it('accepts valid values, aliases, and absent/null', () => {
+        for (const e of ['none', 'low', 'medium', 'high', 'minimal', 'auto', 'xhigh', 'HIGH', 'NONE', undefined, null]) {
             expect(isValidReasoningEffort(e)).toBe(true);
         }
     });
-    it('rejects invalid values (including wrong case and non-strings)', () => {
-        for (const e of ['NONE', 'HIGH', 'typo', '', 5, {}]) {
+    it('rejects invalid values (including non-strings)', () => {
+        for (const e of ['typo', '', 5, {}]) {
             expect(isValidReasoningEffort(e)).toBe(false);
         }
     });
@@ -32,15 +32,21 @@ describe('modelToTier', () => {
         expect(modelToTier('lumo')).toBe('auto');
         expect(modelToTier('lumo-lite')).toBe('lumo-lite');
         expect(modelToTier('lumo-max')).toBe('lumo-max');
+        expect(modelToTier('apertus-15')).toBe('apertus-15');
+        expect(modelToTier('apertus')).toBe('apertus-15');
+        expect(modelToTier('apertus-1.5')).toBe('apertus-15');
+        expect(modelToTier('apertus 1.5')).toBe('apertus-15');
         expect(modelToTier('something-else')).toBe('auto');
     });
 });
 
 describe('isModelAllowed', () => {
-    const allowed = ['lumo', 'lumo-lite', 'lumo-max'];
+    const allowed = ['lumo', 'lumo-lite', 'lumo-max', 'apertus-15'];
     it('accepts allowed models (normalized) and rejects others', () => {
         expect(isModelAllowed('lumo-max', allowed)).toBe(true);
         expect(isModelAllowed(normalizeModelId('proton/lumo'), allowed)).toBe(true);
+        expect(isModelAllowed('apertus-15', allowed)).toBe(true);
+        expect(isModelAllowed('apertus', allowed)).toBe(true);
         expect(isModelAllowed('gpt-4', allowed)).toBe(false);
     });
 });
@@ -48,9 +54,13 @@ describe('isModelAllowed', () => {
 describe('resolveReasoning', () => {
     it('maps reasoning_effort to a thinking-mode boolean', () => {
         expect(resolveReasoning('none', false)).toBe(false);
+        expect(resolveReasoning('minimal', true)).toBe(false);
+        expect(resolveReasoning('auto', true)).toBe(false);
         expect(resolveReasoning('low', false)).toBe(true);
         expect(resolveReasoning('medium', false)).toBe(true);
         expect(resolveReasoning('high', false)).toBe(true);
+        expect(resolveReasoning('xhigh', false)).toBe(true);
+        expect(resolveReasoning('HIGH', false)).toBe(true);
     });
     it('falls back to the config default when absent', () => {
         expect(resolveReasoning(undefined, false)).toBe(false);

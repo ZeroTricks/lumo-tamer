@@ -90,12 +90,32 @@ const serverInstructionsConfigSchema = z.object({
 });
 
 // CLI local actions config
+const modelTierSchema = z.enum(['auto', 'lumo-lite', 'lumo-max', 'apertus-15']);
+
 const localActionsConfigSchema = z.object({
   enabled: z.boolean(),
   fileReads: z.object({
     enabled: z.boolean(),
     maxFileSize: byteSizeSchema,
   }),
+  projectContext: z.object({
+    enabled: z.boolean(),
+    maxFiles: z.number().int().positive(),
+    maxTotalSize: byteSizeSchema,
+  }),
+  search: z.object({
+    enabled: z.boolean(),
+    maxResults: z.number().int().positive(),
+  }),
+  runAfterWrite: z.object({
+    enabled: z.boolean(),
+    confirm: z.boolean(),
+  }),
+  undo: z.object({
+    enabled: z.boolean(),
+    maxEntries: z.number().int().positive(),
+  }),
+  restrictToCwd: z.boolean(),
   executors: z.record(z.string(), z.array(z.string())),
 });
 
@@ -140,7 +160,7 @@ const serverMergedConfigSchema = z.object({
   port: z.number().int().positive(),
   apiKey: z.string().min(1, 'server.apiKey is required'),
   apiModelName: z.string().min(1),
-  defaultModelTier: z.enum(['auto', 'lumo-lite', 'lumo-max']),
+  defaultModelTier: modelTierSchema,
   allowedModels: z.array(z.string().min(1)).min(1),
   reasoning: z.object({
     default: z.enum(['none', 'high']),
@@ -155,6 +175,12 @@ const cliMergedConfigSchema = z.object({
   conversations: conversationsConfigSchema,
   commands: z.object({ enabled: z.boolean(), wakeword: z.string() }),
   enableWebSearch: z.boolean(),
+  defaultModelTier: modelTierSchema,
+  reviewModelTier: modelTierSchema,
+  codingModelTier: modelTierSchema,
+  reasoning: z.object({
+    default: z.enum(['none', 'high']),
+  }),
   localActions: localActionsConfigSchema,
   instructions: cliInstructionsConfigSchema,
 });
@@ -289,6 +315,25 @@ export function getLocalActionsConfig() {
 export function getCliInstructionsConfig() {
   const cfg = getCliConfig();
   return cfg.instructions;
+}
+
+export function getCliModelTier() {
+  return getCliConfig().defaultModelTier;
+}
+
+export function getCliModelTierForIntent(intent: 'review' | 'edit' | 'create' | 'run' | 'chat') {
+  const cfg = getCliConfig();
+  if (intent === 'edit' || intent === 'create' || intent === 'run') {
+    return cfg.codingModelTier;
+  }
+  if (intent === 'review') {
+    return cfg.reviewModelTier;
+  }
+  return cfg.defaultModelTier;
+}
+
+export function getCliEnableReasoning() {
+  return getCliConfig().reasoning.default === 'high';
 }
 
 // Generic instructions getter (works for both modes)

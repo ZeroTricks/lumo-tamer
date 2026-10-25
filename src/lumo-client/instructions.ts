@@ -57,12 +57,13 @@ export function findLastUserTurnIndex(turns: Turn[]): number {
  * @param injectInto - "first" injects into first user turn (less token usage),
  *                     "last" injects into last user turn (matches WebClient behavior)
  *
- * Instructions are prepended as [Project instructions: ...] wrapper.
+ * Instructions are prepended as [Project instructions: ...] unless wrapper is `cli`.
  */
 export function injectInstructionsIntoTurns(
   turns: Turn[],
   instructions: string | undefined,
-  injectInto: 'first' | 'last'
+  injectInto: 'first' | 'last',
+  wrapper: 'project' | 'cli' = 'project',
 ): Turn[] {
   if (!instructions) return turns;
 
@@ -77,9 +78,12 @@ export function injectInstructionsIntoTurns(
 
   return turns.map((turn, index) => {
     if (index === targetIdx) {
+      const content = wrapper === 'cli'
+        ? `${turn.content}\n\n${sanitizedInstructions}`
+        : `[Project instructions: ${sanitizedInstructions}]\n\n${turn.content}`;
       return {
         ...turn,
-        content: `[Project instructions: ${sanitizedInstructions}]\n\n${turn.content}`,
+        content,
       };
     }
     return turn;

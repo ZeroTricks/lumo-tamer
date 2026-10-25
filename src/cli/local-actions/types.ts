@@ -22,6 +22,9 @@ export interface BlockHandler {
   /** One-line summary for streaming display */
   summarize(block: CodeBlock): string;
 
+  /** Optional confirm preview (unified diff, etc.) */
+  preview?(block: CodeBlock): string;
+
   /** Needs user confirmation? (false = silent apply, like read) */
   requiresConfirmation: boolean;
 
@@ -31,6 +34,8 @@ export interface BlockHandler {
     prompt: string;
     verb: string;
     errorLabel: string;
+    kind: 'create' | 'edit' | 'execute';
+    targetPath?: string;
   };
 
   /** Apply the block, return result */

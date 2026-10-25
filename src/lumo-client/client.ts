@@ -310,6 +310,7 @@ export class LumoClient {
             requestTitle = false,
             instructions,
             injectInstructionsInto = 'first',
+            instructionWrapper = 'project',
             modelTier = this.defaultOptions?.modelTier ?? 'auto',
             enableReasoning = this.defaultOptions?.enableReasoning ?? false,
             onReasoning = this.defaultOptions?.onReasoning,
@@ -332,7 +333,7 @@ export class LumoClient {
 
         // Inject instructions at the last moment (kept out of persisted turns).
         const turnsWithInstructions = instructions
-            ? injectInstructionsIntoTurns(turns, instructions, injectInstructionsInto)
+            ? injectInstructionsIntoTurns(turns, instructions, injectInstructionsInto, instructionWrapper)
             : turns;
 
         // Title generation is a separate, concurrent, non-fatal completion.

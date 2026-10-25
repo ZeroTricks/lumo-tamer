@@ -21,18 +21,37 @@ describe('model tier + reasoning (chat/completions)', () => {
         expect(body.choices[0].message.content).toContain('Mocked');
     });
 
+    it('accepts Apertus 1.5 aliases', async () => {
+        for (const model of ['apertus-15', 'apertus', 'apertus-1.5']) {
+            const res = await chat({ model, messages: [{ role: 'user', content: 'hi' }] });
+            expect(res.status).toBe(200);
+        }
+    });
+
     it('accepts a provider-prefixed tier model', async () => {
         const res = await chat({ model: 'proton/lumo-lite', messages: [{ role: 'user', content: 'hi' }] });
         expect(res.status).toBe(200);
     });
 
-    it('rejects an unknown model with a 400', async () => {
+    it('falls back an unknown string model to the server default', async () => {
         const res = await chat({ model: 'gpt-4', messages: [{ role: 'user', content: 'hi' }] });
-        expect(res.status).toBe(400);
+        expect(res.status).toBe(200);
         const body = await res.json();
-        expect(body.error.type).toBe('invalid_request_error');
-        expect(body.error.code).toBe('model_not_found');
-        expect(body.error.param).toBe('model');
+        expect(body.choices[0].message.content).toContain('Mocked');
+    });
+
+    it('accepts IDE probe messages that only include a system role', async () => {
+        const res = await chat({ model: 'lumo', messages: [{ role: 'system', content: 'ping' }] });
+        expect(res.status).toBe(200);
+    });
+
+    it('accepts OpenAI reasoning aliases used by Android Studio', async () => {
+        const res = await chat({
+            model: 'lumo',
+            reasoning_effort: 'minimal',
+            messages: [{ role: 'user', content: 'hi' }],
+        });
+        expect(res.status).toBe(200);
     });
 
     it('accepts reasoning_effort', async () => {
@@ -40,12 +59,9 @@ describe('model tier + reasoning (chat/completions)', () => {
         expect(res.status).toBe(200);
     });
 
-    it('rejects an invalid reasoning_effort with a 400', async () => {
+    it('ignores an unknown reasoning_effort and continues', async () => {
         const res = await chat({ reasoning_effort: 'ludicrous', messages: [{ role: 'user', content: 'hi' }] });
-        expect(res.status).toBe(400);
-        const body = await res.json();
-        expect(body.error.code).toBe('invalid_reasoning_effort');
-        expect(body.error.param).toBe('reasoning_effort');
+        expect(res.status).toBe(200);
     });
 
     it('rejects a non-string model with a 400 (not a 500)', async () => {

@@ -43,6 +43,6 @@ describe('GET /v1/models', () => {
     const body = await res.json();
     const ids = body.data.map((m: { id: string }) => m.id);
     // Defaults from config.defaults.yaml
-    expect(ids).toEqual(['lumo', 'lumo-lite', 'lumo-max']);
+    expect(ids).toEqual(['lumo', 'lumo-lite', 'lumo-max', 'apertus-15']);
   });
 });

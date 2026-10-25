@@ -7,6 +7,7 @@ describe('resolveChatModel', () => {
         expect(resolveChatModel('auto')).toBe('lumo');
         expect(resolveChatModel('lumo-lite')).toBe('lumo-lite');
         expect(resolveChatModel('lumo-max')).toBe('lumo-max');
+        expect(resolveChatModel('apertus-15')).toBe('apertus-15');
     });
 });
 

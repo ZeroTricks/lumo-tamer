@@ -41,4 +41,21 @@ describe('createProtonApi error handling', () => {
         expect(err?.data).toBeUndefined();
         expect(err?.message).toContain('502');
     });
+
+    it('retries once after a transient DNS error', async () => {
+        const fetchMock = vi.fn()
+            .mockRejectedValueOnce(Object.assign(new TypeError('fetch failed'), {
+                cause: Object.assign(new Error('getaddrinfo ENOTFOUND lumo.proton.me'), { code: 'ENOTFOUND' }),
+            }))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+        vi.stubGlobal('fetch', fetchMock);
+        vi.useFakeTimers();
+
+        const api = createProtonApi({ uid: 'u', accessToken: 't' });
+        const pending = api({ url: 'ai/v1/chat/completions', method: 'post', data: {} });
+        await vi.advanceTimersByTimeAsync(1000);
+        await expect(pending).resolves.toEqual({ ok: true });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        vi.useRealTimers();
+    });
 });
