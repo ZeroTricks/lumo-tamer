@@ -10,6 +10,7 @@ import { getMetrics } from '../../../app/metrics.js';
 import { trackCustomToolCompletion } from '../../tools/call-id.js';
 import { sendInvalidRequest, sendServerError } from '../../error-handler.js';
 import { deterministicUUID } from '../../../app/id-generator.js';
+import { ImageInputError, resolveRemoteImageUrls } from '../../images.js';
 
 import type { ConversationId } from '../../../conversations/index.js';
 
@@ -119,8 +120,18 @@ export function createResponsesRouter(deps: EndpointDependencies): Router {
       }
 
       // ===== STEP 3: Convert input to turns =====
-      // Handles normal messages, function_call, and function_call_output items.
-      const turns = convertOpenAIResponseMessages(request.input, request.instructions);
+      // Handles normal messages, function_call, function_call_output items and
+      // input_image parts (remote image URLs are downloaded first, when allowed).
+      let turns: ReturnType<typeof convertOpenAIResponseMessages>;
+      try {
+        await resolveRemoteImageUrls(request.input);
+        turns = convertOpenAIResponseMessages(request.input, request.instructions);
+      } catch (error) {
+        if (error instanceof ImageInputError) {
+          return sendInvalidRequest(res, error.message, error.param ?? 'input', error.code);
+        }
+        throw error;
+      }
 
       // ===== Build instructions (injected in LumoClient, not persisted) =====
       const instructions = buildInstructions(request.tools, request.instructions);

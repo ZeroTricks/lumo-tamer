@@ -85,10 +85,10 @@ Bypass authentication and use simulated Lumo responses for development:
 test:
   mock:
     enabled: true
-    scenario: "success"  # success, error, timeout, rejected, toolCall, weeklyLimit
+    scenario: "success"  # success, error, timeout, rejected, toolCall, misroutedToolCall, imageInput, weeklyLimit, cycle
 ```
 
-Encryption and conversation sync are disabled automatically. Scenarios are adapted from Proton WebClients `applications/lumo/src/app/mocks/handlers.ts`.
+Encryption and conversation sync are disabled automatically. Scenarios are adapted from Proton WebClients `applications/lumo/src/app/mocks/handlers.ts`; `misroutedToolCall` and `imageInput` (echoes the images received, for vision clients) are lumo-tamer additions in `src/mock/custom-scenarios.ts`.
 
 ## Testing
 

@@ -28,10 +28,30 @@ export interface AssistantMessageWithToolCalls {
   tool_calls: OpenAIToolCall[];
 }
 
+// Content parts (multimodal messages). Image parts are decoded in src/api/images.ts.
+export interface TextContentPart {
+  type: 'text' | 'input_text';
+  text: string;
+}
+
+export interface ImageUrlContentPart {
+  type: 'image_url';
+  image_url: { url: string; detail?: 'auto' | 'low' | 'high' } | string;
+}
+
+export interface InputImageContentPart {
+  type: 'input_image';
+  image_url?: string | { url: string };
+  file_id?: string;
+  detail?: 'auto' | 'low' | 'high';
+}
+
+export type ContentPart = TextContentPart | ImageUrlContentPart | InputImageContentPart;
+
 // Standard message with role and content
 export interface StandardChatMessage {
   role: 'user' | 'assistant' | 'system';
-  content: string;
+  content: string | ContentPart[];
 }
 
 // Union type for all possible chat messages in requests
@@ -140,7 +160,7 @@ export interface FunctionCallOutput {
 }
 
 export type OpenAIResponseMessage =
-  | { role: string; content: string }
+  | { role: string; content: string | ContentPart[] }
   | FunctionCallOutput;
 
 export interface OpenAIResponseRequest {

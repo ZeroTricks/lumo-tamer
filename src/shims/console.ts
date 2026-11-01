@@ -28,7 +28,11 @@ const suppressLogs = [
     '\\[STREAM\\] Parsed item:',
     'API:',
     'deserializeMessageSaga',
-    'Lumo API call ignored \\(local only mode\\)'
+    'Lumo API call ignored \\(local only mode\\)',
+    // Upstream encryptImage() logs truncated image bytes; keep them out of debug logs
+    'image\\.data \\(truncated\\):',
+    'decoded data \\(truncated\\):',
+    'encryptedData \\(truncated\\):',
 ];
 const suppressLogRegex = new RegExp(`^(?:${suppressLogs.join('|')})`);
 
