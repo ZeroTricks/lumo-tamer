@@ -5,6 +5,7 @@
 
 // Import types from upstream @lumo
 import type { ConversationId, MessageId, SpaceId, ProjectSpace, ConversationPriv, MessagePub, ConversationPub, Role } from '@lumo/types.js';
+import type { ImageInput } from '../lumo-client/types.js';
 import { ConversationStatus } from '@lumo/types.js';
 import type { RemoteId } from '@lumo/remote/types.ts';
 
@@ -28,7 +29,8 @@ export interface Conversation extends ConversationPub {
  * parity with WebClient's native tool storage.
  *
  * WebClient also has: attachments?: ShallowAttachment[], contextFiles?: AttachmentId[]
- * We don't handle attachments yet.
+ * We don't persist attachments. Image inputs are forwarded to Lumo per request
+ * (MessageForStore.images) but only the message text is stored and synced.
  *
  * Tool calls (native tools like web_search, weather):
  * - Legacy: Single tool call stored in `toolCall` (JSON string) and `toolResult` (JSON string),
@@ -81,4 +83,9 @@ export interface MessageForStore {
     role: Role;
     content?: string;
     id?: string; // Semantic ID for deduplication (call_id for tools)
+    /**
+     * Image inputs attached to this (user) message, in the order they were sent.
+     * Forwarded to Lumo as part of the turn; not persisted or synced (see docs/images.md).
+     */
+    images?: ImageInput[];
 }

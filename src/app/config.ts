@@ -64,11 +64,26 @@ const metricsConfigSchema = z.object({
   prefix: z.string(),
 });
 
-// Validates size strings using the bytes library (same parser Express uses)
+// Validates size strings using the bytes library (same parser Express uses).
+// Strings must be a positive number with an optional unit; bytes.parse alone
+// would accept "0", "-1mb" or "5mbb" (parsed as 5 bytes).
+const BYTE_SIZE_RE = /^\d+(\.\d+)?\s*(b|kb|mb|gb|tb)?$/i;
 const byteSizeSchema = z.union([
-  z.string().refine((val) => bytes.parse(val) !== null, 'Invalid size format (e.g., "360kb", "1mb")'),
+  z.string().refine(
+    (val) => BYTE_SIZE_RE.test(val.trim()) && (bytes.parse(val) ?? 0) > 0,
+    'Invalid size format (e.g., "360kb", "1mb"); must be positive',
+  ),
   z.number().positive(),
 ]);
+
+// Image input config (server-only)
+const imagesConfigSchema = z.object({
+  enabled: z.boolean(),
+  maxImageSize: byteSizeSchema,
+  maxImagesPerRequest: z.number().int().min(0),
+  allowRemoteUrls: z.boolean(),
+  enableDescribeImageTool: z.boolean(),
+});
 
 // Injection location enum
 const injectIntoSchema = z.enum(['first', 'last']);
@@ -137,6 +152,7 @@ const serverMergedConfigSchema = z.object({
   instructions: serverInstructionsConfigSchema,
   metrics: metricsConfigSchema,
   bodyLimit: byteSizeSchema,
+  images: imagesConfigSchema,
   port: z.number().int().positive(),
   apiKey: z.string().min(1, 'server.apiKey is required'),
   apiModelName: z.string().min(1),
@@ -275,6 +291,11 @@ export function getReasoningConfig() {
   return cfg.reasoning;
 }
 
+export function getImagesConfig() {
+  const cfg = getServerConfig();
+  return cfg.images;
+}
+
 // CLI-specific getters
 export function getCliConfig(): CliMergedConfig {
   if (configMode !== 'cli' || !config) throw new Error('CLI configuration required. Run in CLI mode.');
@@ -315,7 +336,7 @@ export const authConfig = ((): z.infer<typeof authConfigSchema> => {
 // Mock config (eagerly loaded, needed before initConfig to decide auth vs mock)
 const mockConfigSchema = z.object({
   enabled: z.boolean(),
-  scenario: z.enum(['success', 'error', 'timeout', 'rejected', 'toolCall', 'misroutedToolCall', 'weeklyLimit', 'cycle']),
+  scenario: z.enum(['success', 'error', 'timeout', 'rejected', 'toolCall', 'misroutedToolCall', 'imageInput', 'weeklyLimit', 'cycle']),
 });
 
 export const mockConfig = ((): z.infer<typeof mockConfigSchema> => {
@@ -333,4 +354,5 @@ export const mockConfig = ((): z.infer<typeof mockConfigSchema> => {
 export type MockConfig = z.infer<typeof mockConfigSchema>;
 export type LogConfig = z.infer<typeof logConfigSchema>;
 export type ConversationsConfig = z.infer<typeof conversationsConfigSchema>;
+export type ImagesConfig = z.infer<typeof imagesConfigSchema>;
 

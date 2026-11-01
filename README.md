@@ -27,6 +27,7 @@ lumo-tamer is a lightweight local proxy that talks to Proton's Lumo API using th
 
 - OpenAI-compatible API server with experimental tool support.
 - Select the Lumo 2.0 model tier (Lite/Max) and thinking mode per request, via the OpenAI `model` and `reasoning_effort` fields.
+- Image input (vision): send pictures with your messages, e.g. from Frigate's Generative AI features.
 - Interactive CLI, let Lumo help you execute commands, read, create and edit files.
 - Sync your conversations with Proton to access them on https://lumo.proton.me or in mobile apps.
 
@@ -124,7 +125,7 @@ Set an API key in `config.yaml`:
 server:
   apiKey: my-super-secret-key
   port: 3003            #Optional, change listening port
-  bodyLimit: "500kb"    #Optional, adjust bodyLimit for larger client payloads
+  bodyLimit: "10mb"     #Optional, adjust bodyLimit for larger client payloads (default 6mb)
 ```
 
 Then run:
@@ -227,6 +228,21 @@ server:
 - `"none"` is a lumo-tamer extension; standard OpenAI clients don't send it (the config default covers that case).
 - `reasoning_content` follows Deepseek's convention, not the OpenAI spec. It works with clients that support it (Cursor, Open WebUI with Deepseek config). For the Responses API, reasoning is not yet surfaced.
 
+### Image Input
+
+Vision-capable clients can send images (`image_url` / `input_image` content parts) with their messages; lumo-tamer forwards them to Lumo end-to-end encrypted. Enabled by default; limits are configurable:
+
+```yaml
+server:
+  images:
+    maxImageSize: "4mb"       # per image
+    maxImagesPerRequest: 10   # most recent images are kept, like Lumo's web client
+    allowRemoteUrls: false    # let lumo-tamer download http(s) image URLs
+  bodyLimit: "6mb"            # must fit the base64 payloads
+```
+
+See [Image Input](docs/images.md) for formats, limits, Frigate setup and examples.
+
 ### Instructions
 
 Customize instructions with `server.instructions.template` and `cli.instructions.template`. See [`config.defaults.yaml`](config.defaults.yaml) for more options.
@@ -302,6 +318,20 @@ See the [full guide](docs/howto-home-assistant.md). TLDR:
 - Add the OpenAI integration and create a new Voice Assistant that uses it.
 - To let Lumo control your devices, set `server.customTools.enabled: true` in `config.yaml` (Experimental, see [Custom Tools](docs/custom-tools.md)).
 - Open HA Assist in your dashboard or phone and chat away.
+
+### Frigate
+
+Point Frigate's Generative AI `openai` provider at lumo-tamer to get Lumo-generated object and review descriptions from camera images:
+
+```yaml
+genai:
+  provider: openai
+  base_url: http://yourhost:3003/v1
+  api_key: your-secret-api-key-here
+  model: lumo
+```
+
+See [Image Input](docs/images.md#frigate).
 
 ### OpenClaw
 Add Lumo to `models.providers` in your OpenClaw config. [Example](docs/openclaw.md).
@@ -411,6 +441,7 @@ See [docs/](docs/) for detailed documentation:
 - [Authentication](docs/authentication.md): Auth methods, setup and troubleshooting
 - [Conversations](docs/conversations.md): Conversation persistence and sync
 - [Custom Tools](docs/custom-tools.md): Tool support for API clients
+- [Image Input](docs/images.md): Vision support, formats, limits and Frigate setup
 - [Home Assistant Guide](docs/howto-home-assistant.md): Use Lumo as your Voice Assistant
 - [Local Actions](docs/local-actions.md): CLI file operations and code execution
 - [Development](docs/development.md): Development setup and workflow

@@ -47,7 +47,7 @@ test:
   mock:
     # Enable mock mode: bypass authentication, return simulated Lumo responses
     enabled: false
-    # Scenario: success, error, timeout, rejected, toolCall, misroutedToolCall, weeklyLimit, cycle
+    # Scenario: success, error, timeout, rejected, toolCall, misroutedToolCall, imageInput, weeklyLimit, cycle
     scenario: "success"
 
 # Shared Logging Configuration (can be overridden in server/cli sections)
@@ -124,11 +124,34 @@ server:
     # Forward Lumo's thinking to the client
     surfaceThinking: false
 
-  # Max request body size
-  # Increase if clients send larger tool/context payloads, but be aware:
-  # 360kb (for a typical request, containing mainly ASCII characters)
-  # translates to roughly 22.5K tokens, which is Lumo's "warning level" on context size.
-  bodyLimit: "360kb"
+  # Max request body size. Sized for a few base64-encoded images (see images.maxImageSize;
+  # base64 adds ~37%). Note that there is no separate limit on text: 360kb of ASCII text
+  # already translates to roughly 22.5K tokens, Lumo's "warning level" on context size,
+  # so lower this if your clients only send text.
+  bodyLimit: "6mb"
+
+  # Image input (vision): OpenAI image_url / input_image content parts in user messages.
+  # Images are sent to Lumo end-to-end encrypted, the same way as text. See docs/images.md
+  images:
+    # Accept images in requests. When false, requests containing images are rejected with HTTP 400.
+    enabled: true
+    # Max size of a single decoded image (its base64 form must also fit in bodyLimit).
+    # Lumo's web client downsizes uploads to about 1920px / 1MB (JPEG), so there is
+    # little benefit in sending larger images.
+    maxImageSize: "4mb"
+    # Max number of images per request, counted over the whole conversation history.
+    # Older images beyond this limit are dropped and replaced by a placeholder text
+    # (same behaviour as Lumo's web client).
+    maxImagesPerRequest: 10
+    # Download images referenced by http(s) URLs server-side (at most maxImagesPerRequest
+    # per request, 15s timeout each, capped at maxImageSize).
+    # WARNING: any client holding the API key can make lumo-tamer fetch arbitrary URLs
+    # (including hosts on your local network). Keep disabled unless you need it.
+    allowRemoteUrls: false
+    # Advertise Lumo's native describe_image tool when a request contains images.
+    # Lumo's web client always does this; lumo-tamer sends images as native
+    # multimodal content, so the tool is normally not needed.
+    enableDescribeImageTool: false
 
   # Prometheus metrics endpoint
   metrics:

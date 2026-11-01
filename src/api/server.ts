@@ -32,8 +32,9 @@ export class APIServer {
   }
 
   private setupMiddleware(): void {
-    this.expressApp.use(express.json({ limit: this.serverConfig.bodyLimit }));
+    // Auth only needs headers: reject bad keys before buffering up to bodyLimit of JSON.
     this.expressApp.use(setupAuthMiddleware(this.serverConfig.apiKey));
+    this.expressApp.use(express.json({ limit: this.serverConfig.bodyLimit }));
     this.expressApp.use(setupLoggingMiddleware());
     if (this.metrics) {
       this.expressApp.use(setupMetricsMiddleware(this.metrics));
