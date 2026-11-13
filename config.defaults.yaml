@@ -161,10 +161,11 @@ server:
     # WARNING: any client holding the API key can make lumo-tamer fetch arbitrary URLs
     # (including hosts on your local network). Keep disabled unless you need it.
     allowRemoteUrls: false
-    # Advertise Lumo's native describe_image tool when a request contains images.
-    # Lumo's web client always does this; lumo-tamer sends images as native
-    # multimodal content, so the tool is normally not needed.
-    enableDescribeImageTool: false
+    # Advertise Lumo's native describe_image tool when a request contains images,
+    # as Lumo's web client does. The lumo and lumo-lite tiers read the images
+    # directly either way, but lumo-max only sees them through this tool: with it
+    # off, lumo-max answers that no image came through.
+    enableDescribeImageTool: true
 
   # Prometheus metrics endpoint
   metrics:

@@ -82,7 +82,7 @@ server:
     maxImageSize: "4mb"
     maxImagesPerRequest: 10
     allowRemoteUrls: false       # download http(s) image URLs server-side
-    enableDescribeImageTool: false
+    enableDescribeImageTool: true
   bodyLimit: "6mb"
 ```
 
@@ -94,7 +94,7 @@ The download cap is separate from the context limit above: a request with more r
 
 ### describe_image tool
 
-Lumo's web client advertises the native `describe_image` tool whenever image tools are enabled. lumo-tamer sends images as multimodal content, which the model reads directly. If image-aware answers are poor on your plan or model tier, try `enableDescribeImageTool: true`; the tool call is then handled by Lumo server-side, like web search.
+Lumo's web client advertises the native `describe_image` tool whenever image tools are enabled, and lumo-tamer does the same by default (`enableDescribeImageTool: true`). The `lumo` and `lumo-lite` tiers read the multimodal content directly and work with or without the tool. `lumo-max` does not: without the tool it answers that no image came through, with it the tool call is handled by Lumo server-side, like web search, and the model answers from its result.
 
 ## How it works
 
