@@ -129,6 +129,59 @@ describe('StreamingToolDetector', () => {
       expect(allToolCalls[0].name).toBe('read_file');
       expect(allText).toContain('Done talking.');
     });
+
+    it('does not treat a late closing fence as a new code fence', () => {
+      const detector = new StreamingToolDetector();
+      const { allText, allToolCalls } = processAll(detector, [
+        '```json\n{"name":"get_weather","arguments":{"city":"Paris"}}',
+        '\n```\nChecking the weather now.',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allText).not.toContain('```');
+      expect(allText).toContain('Checking the weather now.');
+    });
+
+    it('never leaks the fence for any chunk split of a fenced call followed by text', () => {
+      const message =
+        'Sure.\n```json\n{"name":"get_weather","arguments":{"city":"Paris"}}\n```\n\nChecking the weather now.';
+
+      for (let a = 1; a < message.length; a++) {
+        for (let b = a + 1; b <= Math.min(message.length, a + 8); b++) {
+          const chunks = [message.slice(0, a), message.slice(a, b), message.slice(b)].filter(Boolean);
+          const { allText, allToolCalls } = processAll(new StreamingToolDetector(), chunks);
+
+          expect(allToolCalls, `split at ${a},${b}`).toHaveLength(1);
+          expect(allText, `split at ${a},${b}`).not.toContain('`');
+          expect(allText, `split at ${a},${b}`).not.toContain('get_weather');
+          expect(allText, `split at ${a},${b}`).toContain('Checking the weather now.');
+        }
+      }
+    });
+
+    it('detects two fenced tool calls in a row for any chunk split', () => {
+      const message =
+        '```json\n{"name":"a","arguments":{}}\n```\n```json\n{"name":"b","arguments":{}}\n```\nDone.';
+
+      for (let a = 1; a < message.length; a++) {
+        const { allText, allToolCalls } = processAll(new StreamingToolDetector(), [message.slice(0, a), message.slice(a)]);
+
+        expect(allToolCalls.map((c) => c.name), `split at ${a}`).toEqual(['a', 'b']);
+        expect(allText, `split at ${a}`).not.toContain('`');
+        expect(allText, `split at ${a}`).toContain('Done.');
+      }
+    });
+
+    it('keeps text that follows fenced JSON with no closing fence', () => {
+      const detector = new StreamingToolDetector();
+      const { allText, allToolCalls } = processAll(detector, [
+        '```json\n{"name":"get_weather","arguments":{"city":"Paris"}}',
+        '\nNo closing fence here.',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allText).toContain('No closing fence here.');
+    });
   });
 
   describe('raw JSON detection', () => {

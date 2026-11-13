@@ -17,7 +17,7 @@ import { getCustomToolsConfig } from '../../app/config.js';
 import { stripToolPrefix } from './prefix.js';
 import { getMetrics } from '../../app/metrics.js';
 
-type DetectorState = 'normal' | 'in_code_fence' | 'in_raw_json';
+type DetectorState = 'normal' | 'in_code_fence' | 'in_raw_json' | 'after_json_fence';
 
 export interface ProcessResult {
   /** Normal text to emit as content delta */
@@ -82,6 +82,8 @@ export class StreamingToolDetector {
         this.processCodeFenceState(result);
       } else if (this.state === 'in_raw_json') {
         this.processRawJsonState(result);
+      } else if (this.state === 'after_json_fence') {
+        this.processAfterJsonFenceState();
       }
 
       // Safety: if we didn't make any progress, break to avoid infinite loop
@@ -221,16 +223,36 @@ export class StreamingToolDetector {
       }
     }
 
-    this.state = 'normal';
     this.codeFenceFlavor = 'unknown';
 
-    // What follows the JSON value should be the closing "```" (plus maybe
-    // a trailing newline) - strip it if present; anything left over goes
-    // back to normal-state processing.
-    const fenceClose = remainder.match(/^\s*```/);
-    this.pendingText = fenceClose
-      ? remainder.slice((fenceClose.index ?? 0) + fenceClose[0].length)
-      : remainder;
+    // What follows the JSON value should be the fence's closing "```". It may
+    // not have arrived yet (the JSON often completes at the end of a chunk),
+    // so wait for it in a dedicated state instead of returning to normal,
+    // where a late "```" would be mistaken for the opener of a new fence.
+    this.state = 'after_json_fence';
+    this.pendingText = remainder;
+  }
+
+  /**
+   * Just past the JSON value of a code fence: consume the fence's closing
+   * "```" once enough text has arrived to tell, then return to normal.
+   */
+  private processAfterJsonFenceState(): void {
+    const marker = StreamingToolDetector.CODE_FENCE_MARKER;
+    const rest = this.pendingText.replace(/^\s+/, '');
+
+    if (rest.startsWith(marker)) {
+      // Closing fence: drop it together with the whitespace before it.
+      this.pendingText = rest.slice(marker.length);
+      this.state = 'normal';
+      return;
+    }
+    if (marker.startsWith(rest)) {
+      // Only whitespace and/or part of the marker so far - wait for more data.
+      return;
+    }
+    // Something else follows the JSON: there is no closing fence to strip.
+    this.state = 'normal';
   }
 
   /**
@@ -388,6 +410,13 @@ export class StreamingToolDetector {
       textToEmit: '',
       completedToolCalls: [],
     };
+
+    // Still waiting for the closing fence of a JSON code fence: whatever is
+    // pending is whitespace and/or a partial "```", never content.
+    if (this.state === 'after_json_fence') {
+      this.pendingText = '';
+      this.state = 'normal';
+    }
 
     // Emit any remaining pending text
     if (this.pendingText) {
