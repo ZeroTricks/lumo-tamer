@@ -160,9 +160,14 @@ export class StreamingToolDetector {
     this.buffer += this.pendingText;
     this.pendingText = '';
 
-    if (this.buffer.endsWith('```')) {
-      logger.debug('Code block ending found at end of buffer');
-      this.buffer = this.buffer.slice(0, -3);
+    // The closing fence may straddle two chunks ("``" + "`\n\ntext"), so look
+    // for it anywhere in the buffer, not only at its very end; whatever follows
+    // it goes back to pendingText for normal-state processing.
+    const closeIdx = this.buffer.indexOf('```');
+    if (closeIdx >= 0) {
+      logger.debug('Code block ending found in buffer');
+      this.pendingText = this.buffer.slice(closeIdx + 3);
+      this.buffer = this.buffer.slice(0, closeIdx);
       this.completeCodeFence(result);
     }
   }
@@ -309,6 +314,14 @@ export class StreamingToolDetector {
         }
 
         if (this.state === 'in_code_fence') {
+          // End-of-stream fallback for an unterminated fence: still a tool call if it parses.
+          const fenced = this.tryParseToolCall(trackerBuffer.replace(/^json/, '').trim());
+          if (fenced) {
+            result.completedToolCalls.push(fenced);
+            this.buffer = '';
+            this.state = 'normal';
+            return result;
+          }
           result.textToEmit += '```\n' + trackerBuffer;
         } else {
           result.textToEmit += trackerBuffer;

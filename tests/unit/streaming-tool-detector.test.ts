@@ -97,6 +97,46 @@ describe('StreamingToolDetector', () => {
       expect(allToolCalls).toHaveLength(0);
       expect(allText).toContain('incomplete');
     });
+
+    it('detects tool call when the closing fence is split across chunks and text follows', () => {
+      const detector = new StreamingToolDetector();
+      const { allText, allToolCalls } = processAll(detector, [
+        '```json\n{"name":"get_weather","arguments":{"city":"Paris"}}\n``',
+        '`\n\nChecking the weather now.',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].name).toBe('get_weather');
+      expect(allText).not.toContain('get_weather');
+      expect(allText).toContain('Checking the weather now.');
+    });
+
+    it('detects tool call for every chunk split of a fenced call followed by text', () => {
+      const message =
+        '```json\n{"name":"get_weather","arguments":{"city":"Paris"}}\n```\n\nChecking the weather now.';
+
+      for (let a = 1; a < message.length; a++) {
+        for (let b = a + 1; b <= Math.min(message.length, a + 8); b++) {
+          const chunks = [message.slice(0, a), message.slice(a, b), message.slice(b)].filter(Boolean);
+          const { allText, allToolCalls } = processAll(new StreamingToolDetector(), chunks);
+
+          expect(allToolCalls, `split at ${a},${b}`).toHaveLength(1);
+          expect(allText, `split at ${a},${b}`).not.toContain('get_weather');
+        }
+      }
+    });
+
+    it('salvages a tool call from an unterminated code fence at end of stream', () => {
+      const detector = new StreamingToolDetector();
+      const { allText, allToolCalls } = processAll(detector, [
+        '```json\n{"name":"get_weather",',
+        '"arguments":{"city":"Paris"}}\n',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].arguments).toEqual({ city: 'Paris' });
+      expect(allText).not.toContain('get_weather');
+    });
   });
 
   describe('raw JSON detection', () => {
