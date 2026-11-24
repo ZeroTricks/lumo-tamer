@@ -30,7 +30,7 @@ export { extractBrowserTokens, runBrowserAuthentication } from './browser/authen
 export type { ExtractionOptions, ExtractionResult } from './browser/authenticate.js';
 
 // Re-export extraction utilities (for scripts)
-export { runProtonAuth } from './login/proton-auth-cli.js';
+export { runProtonAuth } from './proton-auth-cli.js';
 export { parseRcloneSection } from './rclone/index.js';
 
 /**

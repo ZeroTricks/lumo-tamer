@@ -6,7 +6,7 @@
  */
 
 import { logger } from '../../app/logger.js';
-import type { SRPAuthTokens } from '../login/types.js';
+import type { SRPAuthTokens } from '../types.js';
 import type { RcloneProtonConfig } from './types.js';
 import { REQUIRED_RCLONE_FIELDS } from './types.js';
 

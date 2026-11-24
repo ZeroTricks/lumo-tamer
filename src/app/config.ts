@@ -99,7 +99,7 @@ const localActionsConfigSchema = z.object({
   executors: z.record(z.string(), z.array(z.string())),
 });
 
-export const authMethodSchema = z.enum(['login', 'browser', 'rclone']);
+export const authMethodSchema = z.enum(['login', 'browser', 'rclone', 'login-captcha']);
 
 const authConfigSchema = z.object({
   method: authMethodSchema,
@@ -123,6 +123,11 @@ const authConfigSchema = z.object({
     binaryPath: z.string(),
     appVersion: z.string(),
     userAgent: z.string(),
+  }),
+  loginCaptcha: z.object({
+    binaryPath: z.string(),
+    captchaAutoOpen: z.boolean(),
+    extraArgs: z.array(z.string()),
   }),
 });
 

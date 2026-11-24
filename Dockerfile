@@ -13,14 +13,19 @@ COPY package*.json ./
 COPY tsconfig.json ./
 
 # ============================================================================
-# Go builder stage - compile static Go binary
+# Go builder stage - compile static Go binaries
 # ============================================================================
-FROM golang:1.24-alpine AS go-builder
+FROM golang:1.26-alpine AS go-builder
 
 WORKDIR /build
 COPY src/auth/login/go ./
 # CGO_ENABLED=0 produces a static binary - runs on Alpine, Debian, or native
 RUN CGO_ENABLED=0 go build -o proton-auth
+
+WORKDIR /build-captcha
+COPY src/auth/login-captcha/go ./
+# Package path is pinned by the `tool` directive in go.mod; `go list tool` reads it from there.
+RUN CGO_ENABLED=0 sh -c 'go build -o proton-auth-captcha $(go list tool)'
 
 # ============================================================================
 # Builder stage - compile TypeScript
@@ -53,8 +58,9 @@ COPY --from=builder /app/dist ./dist
 # Copy config defaults (required at runtime)
 COPY config.defaults.yaml ./
 
-# Copy Go binary from go-builder
+# Copy Go binaries from go-builder
 COPY --from=go-builder /build/proton-auth ./dist/proton-auth
+COPY --from=go-builder /build-captcha/proton-auth-captcha ./dist/proton-auth-captcha
 
 # Make tamer available as command
 RUN npm link

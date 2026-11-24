@@ -35,7 +35,7 @@ Choose your installation method for lumo-tamer. Docker is recommended if you're 
 | Method | Requirements |
 |--------|--------------|
 | [Docker Setup](#docker-setup) | Docker, Git |
-| [Native Setup](#native-setup) | Node.js 18+, Go 1.24+, Git |
+| [Native Setup](#native-setup) | Node.js 18+, Go 1.26+, Git |
 
 ---
 
@@ -78,7 +78,7 @@ Enter your Proton email, password, and 2FA code (if enabled).
 <details>
 <summary><strong>I'm asked to enter a CAPTCHA</strong></summary>
 
-Log in to Proton in a regular browser from the same IP first. This often clears the challenge. If you're still hit with a CAPTCHA challenge after, you might want to try an [alternative auth method](authentication.md).
+Log in to Proton in a regular browser from the same IP first. This often clears the challenge. If you're still hit with a CAPTCHA challenge after, try `tamer auth login-captcha` (a CAPTCHA-capable variant of login) or see an [alternative auth method](authentication.md).
 </details>
 
 <details>
@@ -123,7 +123,7 @@ brew install node go git
 **Verify:**
 ```bash
 node --version   # Should show v18.x or higher
-go version       # Should show go1.24 or higher
+go version       # Should show go1.26 or higher
 ```
 
 #### Step 2: Clone and build
@@ -162,7 +162,7 @@ Enter your Proton email, password, and 2FA code (if enabled).
 <details>
 <summary><strong>I'm asked to enter a CAPTCHA</strong></summary>
 
-Log in to Proton in a regular browser from the same IP first. This often clears the challenge. If you're still hit with a CAPTCHA challenge after, you might want to try an [alternative auth method](authentication.md).
+Log in to Proton in a regular browser from the same IP first. This often clears the challenge. If you're still hit with a CAPTCHA challenge after, try `tamer auth login-captcha` (a CAPTCHA-capable variant of login) or see an [alternative auth method](authentication.md).
 </details>
 
 <details>

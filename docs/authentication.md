@@ -13,16 +13,17 @@ Authenticating to Proton is not straightforward: different flows depending on us
 ```bash
 tamer auth
 # Select method:
-#   1. login   - Enter Proton credentials (recommended)
-#   2. browser - Extract from logged-in browser session
-#   3. rclone  - Paste rclone config section
+#   1. login          - Enter Proton credentials (default)
+#   2. browser        - Extract from logged-in browser session
+#   3. login-captcha  - Like login, but can also solve a CAPTCHA
+#   4. rclone         - Paste rclone config section
 ```
 
 After successful authentication, `config.yaml` is updated with your selected method.
 
 ---
 
-## Login (Recommended)
+## Login (Default)
 
 A secure and lightweight option where you provide your credentials. Requires Go. No support for CAPTCHA or conversation sync.
 
@@ -37,7 +38,7 @@ Uses Proton's SRP (Secure Remote Password) protocol via a Go binary built from [
 
 1. Build the Go binary:
    ```bash
-   # Requires Go 1.24+
+   # Requires Go 1.26+
    npm run build:login # or npm run build:all
    ```
 2. Run `tamer auth login`
@@ -62,6 +63,7 @@ auth:
 - **CAPTCHA**: May trigger CAPTCHA on Proton's servers (see tip above)
 - **No conversation sync**: Cannot fetch userKeys/masterKeys due to API scope restrictions
 - **TOTP only**: Only supports TOTP for 2FA (no security keys)
+- **Two-password accounts**: Does not prompt for a separate mailbox password, so it derives the wrong keyPassword for accounts in two-password mode. Use `login-captcha` or `browser` instead.
 
 ### Troubleshooting
 
@@ -136,6 +138,69 @@ WARN: Conversation persistence may not work without ClientKey
 
 ---
 
+## Login-captcha
+
+Same credential-based flow as Login, but can also solve a CAPTCHA challenge itself: it serves a local page, opens it in your default browser, and retries the login once you solve it. Requires Go. No support for conversation sync.
+
+Uses [proton-auth](https://github.com/Arsylk/proton-auth) by Arsylk, a standalone Go library and CLI built on [go-proton-api](https://github.com/henrybear327/go-proton-api). lumo-tamer pins its version in `src/auth/login-captcha/go/go.mod` and runs the binary; this repository carries no login code for this method, only the pinned, checksum-verified build.
+
+This is a separate, opt-in method from `login`.
+
+### Why Login-captcha?
+
+- **Handles CAPTCHA itself**: No need to fall back to the browser or rclone methods when Proton asks for a CAPTCHA
+- **Two-password accounts**: Automatically prompts for the separate mailbox password when the account needs one; plain `login` has no such prompt and derives the wrong keyPassword for these accounts
+- **Direct keyPassword access**: Same as Login, derives the mailbox password needed for encryption
+
+### Setup
+
+1. Build the binary:
+   ```bash
+   # Requires Go 1.26+
+   npm run build:login-captcha # or npm run build:all
+   ```
+2. Run `tamer auth login-captcha`
+3. Enter username, password, TOTP code (if 2FA is enabled), and mailbox password (only asked if the account uses two-password mode).
+4. If Proton demands a CAPTCHA, it is served on a local URL and opened in your default browser (set `captchaAutoOpen: false` to disable auto-open). Solve it there and login continues automatically. On a headless machine, forward the printed port first: `ssh -L <port>:127.0.0.1:<port> <host>`, then open the URL locally.
+
+### Config
+
+```yaml
+auth:
+  method: login-captcha
+  login:
+    # Shared with the login method: headers to help avoid CAPTCHA
+    appVersion: "macos-drive@1.0.0-alpha.1+rclone"
+    userAgent: "Mozilla/5.0 ..."
+  loginCaptcha:
+    binaryPath: "./dist/proton-auth-captcha"
+    # Open the CAPTCHA page in the default browser automatically
+    captchaAutoOpen: true
+    # Extra flags passed through to the binary as-is, e.g. ["-proxy", "socks5://host:1080"]
+    # See https://github.com/Arsylk/proton-auth#readme for available flags
+    extraArgs: []
+```
+
+### Limitations
+
+- **CAPTCHA needs a browser somewhere**: When Proton requires a CAPTCHA, you solve it on a locally served page (see Setup above)
+- **No conversation sync**: Cannot fetch userKeys/masterKeys due to API scope restrictions
+- **TOTP only**: Only supports TOTP for 2FA (no security keys)
+- **Third-party binary**: Unlike `login`, this depends on a Go project maintained outside this repository (MIT licensed, pinned by version)
+- **Advanced flags need `extraArgs`**: `tamer auth login-captcha` always runs the binary interactively and only sets `--app-version`/`--user-agent`/`--captcha-auto-open` by default. Other flags (env-var credentials, `--totp-secret`, `--proxy`, `--skip-key-password`, etc.) are not modeled individually, use `loginCaptcha.extraArgs` to pass them through. See [proton-auth's README](https://github.com/Arsylk/proton-auth#readme) for what's available.
+
+### Troubleshooting
+
+**"proton-auth binary not found"**
+- Build it: `npm run build:login-captcha`
+
+**"Authentication failed"**
+- Verify username/password
+- Check if 2FA is enabled (will prompt for TOTP)
+- Try the `login` or browser method as fallback
+
+---
+
 ## Rclone
 
 Use rclone to log in and copy the tokens from its config file. No conversation sync.
@@ -188,22 +253,21 @@ client_salted_key_pass = base64encodedKeyPassword==
 
 ## Comparison
 
-| Feature | Login | Browser | Rclone |
-|---------|-------|---------|--------|
-| Conversation sync | No | Yes | No |
-| keyPassword | Yes | Yes | Yes |
-| Token refresh | Automatic | Automatic | Automatic |
-| 2FA support | TOTP only | Any | Any (via rclone) |
-| CAPTCHA handling | May fail | Browser handles | rclone handles |
-| Extra tools needed | Go binary | Browser + CDP | rclone |
-| Setup complexity | Medium | Medium | Low |
+| Feature | Login | Browser | Login-captcha | Rclone |
+|---------|-------|---------|---------------|--------|
+| Conversation sync | No | Yes | No | No |
+| keyPassword | Yes | Yes | Yes | Yes |
+| Token refresh | Automatic | Automatic | Automatic | Automatic |
+| 2FA support | TOTP only | Any | TOTP only | Any (via rclone) |
+| CAPTCHA handling | May fail | Browser handles | Local page in browser | rclone handles |
+| Extra tools needed | Go binary | Browser + CDP | Go binary (3rd-party) | rclone |
 
 ### Conversation Sync
 
 Only **browser** auth supports conversation sync because:
 - Browser tokens have full API scope (including `/lumo/*` endpoints)
 - Browser extraction caches `userKeys` and `masterKeys` which bypass scope checks
-- Login and rclone tokens lack the `lumo` scope needed for the spaces API
+- Login, login-captcha, and rclone tokens lack the `lumo` scope needed for the spaces API
 
 ---
 

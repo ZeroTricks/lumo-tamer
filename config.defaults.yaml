@@ -2,6 +2,8 @@
 auth:
   # - login: enter Proton credentials via go-proton-api
   # - browser: token extraction via browser
+  # - login-captcha: like login, but can also solve a CAPTCHA via a local browser page, among other features. Uses Arsylk's proton-auth CLI
+  # https://github.com/Arsylk/proton-auth
   # - rclone: paste rclone config
   # See docs/authentication.md
   method: "login"
@@ -34,13 +36,24 @@ auth:
     # use this if you're running both app and browser docker containers:
     # cdpEndpoint: "http://browser:9222"
 
-  # Login-specific config (only used when method: login)
+  # Login-specific config (used by both login and login-captcha)
   login:
     # Path to proton-auth Go binary
     binaryPath: "./dist/proton-auth"
     # Headers to help avoid CAPTCHA - see docs/authentication.md
     appVersion: "macos-drive@1.0.0-alpha.1+rclone"
     userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+  # Login-captcha-specific config (only used when method: login-captcha)
+  # Reuses auth.login.appVersion/userAgent above for the SRP headers.
+  loginCaptcha:
+    # Path to the proton-auth-captcha binary
+    binaryPath: "./dist/proton-auth-captcha"
+    # Open the CAPTCHA page in the default browser automatically when required
+    captchaAutoOpen: true
+    # Extra flags passed through to the binary as-is (e.g. ["-proxy", "socks5://host:1080"])
+    # See https://github.com/Arsylk/proton-auth#readme for available flags
+    extraArgs: []
 
 # Test/development configuration
 test:

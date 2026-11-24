@@ -3,14 +3,16 @@
  *
  * Usage (via CLI):
  *   tamer auth              - Interactive authentication
- *   tamer auth login        - Use login method directly
- *   tamer auth browser      - Use browser method directly
- *   tamer auth rclone       - Use rclone method directly
- *   tamer auth status       - Show current auth status
+ *   tamer auth login         - Use login method directly
+ *   tamer auth browser       - Use browser method directly
+ *   tamer auth login-captcha - Use login method with CAPTCHA support directly
+ *   tamer auth rclone        - Use rclone method directly
+ *   tamer auth status        - Show current auth status
  *
  * Prompts for auth method (with config value as default) and runs extraction:
  * - login: Run interactive SRP authentication (requires Go binary)
  * - browser: Extract tokens from browser session via CDP
+ * - login-captcha: Like login, but can also solve a CAPTCHA via a local browser page
  * - rclone: Prompt user to paste rclone config section
  *
  * Updates config.yaml with selected values after successful auth.
@@ -22,14 +24,15 @@ import { logger } from '../app/logger.js';
 import { runBrowserAuthentication } from './browser/authenticate.js';
 import { runRcloneAuthentication } from './rclone/authenticate.js';
 import { runLoginAuthentication } from './login/authenticate.js';
+import { runLoginCaptchaAuthentication } from './login-captcha/authenticate.js';
 import { AuthProvider } from './providers/index.js';
 import { printStatus, printSummary, runStatus } from './status.js';
 import { updateAuthConfig } from './update-config.js';
 import type { AuthMethod } from './types.js';
 import { print } from '../app/terminal.js';
 
-const numToMethod: Record<string, AuthMethod> = { '1': 'login', '2': 'browser', '3': 'rclone' };
-const methodToNum: Record<AuthMethod, string> = { login: '1', browser: '2', rclone: '3' };
+const numToMethod: Record<string, AuthMethod> = { '1': 'login', '2': 'browser', '3': 'login-captcha', '4': 'rclone' };
+const methodToNum: Record<AuthMethod, string> = { login: '1', browser: '2', 'login-captcha': '3', rclone: '4' };
 
 /**
  * Prompt user to select authentication method
@@ -38,9 +41,10 @@ async function promptForMethod(defaultMethod: AuthMethod): Promise<AuthMethod> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   print('Select authentication method:');
-  print('  1. login   - Enter Proton credentials (requires Go binary)');
-  print('  2. browser - Extract from logged-in browser session');
-  print('  3. rclone  - Paste rclone config section');
+  print('  1. login          - Enter Proton credentials (requires Go binary)');
+  print('  2. browser        - Extract from logged-in browser session');
+  print('  3. login-captcha  - Like login, but can also solve a CAPTCHA (requires Go binary)');
+  print('  4. rclone         - Paste rclone config section');
   print('');
 
   const defaultNum = methodToNum[defaultMethod] || '1';
@@ -112,11 +116,14 @@ export async function runAuthCommand(argv: string[]): Promise<void> {
         cdpEndpoint = result.cdpEndpoint;
         break;
       }
-      case 'rclone':
-        await runRcloneAuthentication();
-        break;
       case 'login':
         await runLoginAuthentication();
+        break;
+      case 'login-captcha':
+        await runLoginCaptchaAuthentication();
+        break;
+      case 'rclone':
+        await runRcloneAuthentication();
         break;
       default:
         throw new Error(`Unknown auth method: ${method}`);

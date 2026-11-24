@@ -39,7 +39,7 @@ This is an unofficial, personal project in early stages of development, not affi
 
 - A Proton account (free works; [Lumo Plus](https://lumo.proton.me/) gives unlimited daily chats)
 - Node.js 18+ & npm
-- Go 1.24+ (for the `login` auth method)
+- Go 1.26+ (for the `login` and `login-captcha` auth methods)
 - Docker (optional, for containerized setup)
 
 ## Quick Start
@@ -65,7 +65,7 @@ For Docker installation, see [Docker](#docker).
 <details>
 <summary><strong>I'm asked to enter a CAPTCHA</strong></summary>
 
-Log in to Proton in a regular browser from the same IP first. This often clears the challenge. If you're still hit with a CAPTCHA challenge after, you might want to try an [alternative auth method](docs/authentication.md).
+Log in to Proton in a regular browser from the same IP first. This often clears the challenge. If you're still hit with a CAPTCHA challenge after, try `tamer auth login-captcha` (a CAPTCHA-capable variant of login) or see an [alternative auth method](docs/authentication.md).
 </details>
 
 <details>
@@ -74,6 +74,7 @@ Log in to Proton in a regular browser from the same IP first. This often clears 
 Proton's security model doesn't allow for a simple OAuth authentication. Your credentials are not saved or logged, and security tokens are stored encrypted.
 Alternatively, you can authenticate via:
 - **browser**: Extract tokens from a Chrome session. Required when you want to sync conversations with Lumo's webclient.
+- **login-captcha**: Same as login, but handles CAPTCHA challenges via a local browser page, using [proton-auth](https://github.com/Arsylk/proton-auth) by Arsylk.
 - **rclone**: Paste tokens from an rclone configuration with proton-drive.
 
 See [docs/authentication.md](docs/authentication.md) for details and troubleshooting.
@@ -379,7 +380,7 @@ Enter your Proton email, password, and 2FA code (if enabled).
 <details>
 <summary><strong>I'm asked to enter a CAPTCHA</strong></summary>
 
-Log in to Proton in a regular browser from the same IP first. This often clears the challenge. If you're still hit with a CAPTCHA challenge after, you might want to try an [alternative auth method](docs/authentication.md).
+Log in to Proton in a regular browser from the same IP first. This often clears the challenge. If you're still hit with a CAPTCHA challenge after, try `tamer auth login-captcha` (a CAPTCHA-capable variant of login) or see an [alternative auth method](docs/authentication.md).
 </details>
 
 <details>

@@ -31,6 +31,9 @@ npm run build                # TypeScript compilation + alias resolution
 
 # Optional: Go binary for login auth method
 cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
+
+# Optional: Go binary for login-captcha auth method
+npm run build:login-captcha
 ```
 
 ## Project Structure

@@ -4,7 +4,34 @@
 
 import type { ProtonApi, CachedUserKey, CachedMasterKey } from '../lumo-client/types.js';
 
-export type AuthMethod = 'login' | 'browser' | 'rclone';
+export type AuthMethod = 'login' | 'browser' | 'rclone' | 'login-captcha';
+
+/**
+ * JSON result printed by the proton-auth Go binaries (login and login-captcha).
+ */
+export interface SRPAuthResult {
+    accessToken: string;
+    refreshToken: string;
+    uid: string;
+    userID: string;
+    keyPassword: string;
+    expiresAt?: string;
+    error?: string;
+    errorCode?: number;
+}
+
+/**
+ * Extended auth tokens that include keyPassword (used by rclone import too).
+ */
+export interface SRPAuthTokens {
+    accessToken: string;
+    refreshToken: string;
+    uid: string;
+    userID: string;
+    keyPassword: string;
+    expiresAt: string;
+    extractedAt: string;
+}
 
 /**
  * Unified token storage format
