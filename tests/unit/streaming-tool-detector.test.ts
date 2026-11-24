@@ -97,6 +97,38 @@ describe('StreamingToolDetector', () => {
       expect(allToolCalls).toHaveLength(0);
       expect(allText).toContain('incomplete');
     });
+
+    it('detects the closing fence when it is split across chunks with trailing content in the same chunk (regression)', () => {
+      // This reproduces a real-world failure: the model's closing "```" is
+      // split as "``" (end of one chunk) + "`" immediately followed by more
+      // text in the very next chunk. The old implementation only checked
+      // `pendingText` in isolation and only recognized the fallback when the
+      // buffer ended in EXACTLY "```" with nothing after - so this exact
+      // shape leaked the closing fence into the "JSON" and broke parsing.
+      const detector = new StreamingToolDetector();
+      const { allText, allToolCalls } = processAll(detector, [
+        '```json\n{"name":"write_file","arguments":{"path":"a.txt"}}\n``',
+        '`\nAnd here is some more explanation.',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0]).toEqual({ name: 'write_file', arguments: { path: 'a.txt' } });
+      expect(allText).toContain('And here is some more explanation.');
+      expect(allText).not.toContain('write_file');
+    });
+
+    it('detects the closing fence split one character at a time across three chunks', () => {
+      const detector = new StreamingToolDetector();
+      const { allText, allToolCalls } = processAll(detector, [
+        '```json\n{"name":"read_file","arguments":{}}\n`',
+        '`',
+        '`\nDone talking.',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].name).toBe('read_file');
+      expect(allText).toContain('Done talking.');
+    });
   });
 
   describe('raw JSON detection', () => {
@@ -197,6 +229,54 @@ describe('StreamingToolDetector', () => {
       expect(allToolCalls).toHaveLength(0);
       expect(allText).toContain('foo');
       expect(allText).toContain('bar');
+    });
+  });
+
+  describe('JSON tool call content containing literal ``` (regression)', () => {
+    it('does not let a literal ``` inside a JSON string argument close the fence early', () => {
+      // Reproduces a real-world failure: a write_file call whose "content"
+      // argument is a markdown file that itself contains fenced code
+      // blocks. A naive text scan for the closing "```" matches the FIRST
+      // occurrence - which is inside the JSON string, not the real fence
+      // end - corrupting the tool call and leaking raw JSON into the chat.
+      const detector = new StreamingToolDetector();
+
+      const fileContent = '# Title\n\nSome text.\n\n```bash\necho hi\n```\n\nMore text.\n\n```\nplain fenced block\n```\n';
+      const payload = JSON.stringify({ name: 'write_file', arguments: { file_path: 'a.md', content: fileContent } });
+
+      const { allToolCalls, allText } = processAll(detector, [
+        '```json\n',
+        payload,
+        '\n```',
+        '\nDone writing the file.',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].name).toBe('write_file');
+      expect(allToolCalls[0].arguments).toEqual({ file_path: 'a.md', content: fileContent });
+      expect(allText).toContain('Done writing the file.');
+      // The raw tool-call JSON must never leak into the visible text.
+      expect(allText).not.toContain('"name"');
+    });
+
+    it('handles embedded ``` split arbitrarily across many small chunks', () => {
+      const detector = new StreamingToolDetector();
+
+      const fileContent = 'Tree:\n\n```\n.\n├── a\n└── b\n```\n';
+      const payload = JSON.stringify({ name: 'write_file', arguments: { path: 'x.md', content: fileContent } });
+      const full = '```json\n' + payload + '\n```\nAll done.';
+
+      // Split into small, arbitrary chunks (not aligned to any boundary).
+      const chunks: string[] = [];
+      for (let i = 0; i < full.length; i += 3) {
+        chunks.push(full.slice(i, i + 3));
+      }
+
+      const { allToolCalls, allText } = processAll(detector, chunks);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].arguments).toEqual({ path: 'x.md', content: fileContent });
+      expect(allText).toContain('All done.');
     });
   });
 });

@@ -35,10 +35,21 @@ export class StreamingToolDetector {
   private buffer = '';
   private pendingText = '';
   private jsonTracker = new JsonBraceTracker();
+  /**
+   * Whether the current code-fence's content looks like JSON ('json') or
+   * arbitrary text/code ('generic'), decided once we've seen its first
+   * non-whitespace character. JSON-flavored fences are parsed via
+   * `jsonTracker` (string/escape aware) instead of a naive "```" text scan,
+   * so a literal "```" inside a JSON string value - e.g. a file being
+   * written that itself contains markdown code fences - isn't mistaken for
+   * the fence's closing marker.
+   */
+  private codeFenceFlavor: 'unknown' | 'json' | 'generic' = 'unknown';
 
   // Patterns for detection
   private static readonly CODE_FENCE_START = /```(?:json)?\s*$/;
   private static readonly CODE_FENCE_END = /```/;
+  private static readonly CODE_FENCE_MARKER = '```';
   private static readonly RAW_JSON_START = /\{[\s"']/;
 
   private showSnippet(index: number) {
@@ -103,6 +114,7 @@ export class StreamingToolDetector {
       this.pendingText = this.pendingText.slice(fenceMatch.index + fenceMatch[0].length);
       this.state = 'in_code_fence';
       this.buffer = '';
+      this.codeFenceFlavor = 'unknown';
       return;
     }
 
@@ -140,36 +152,128 @@ export class StreamingToolDetector {
   }
 
   /**
-   * Process code fence state - accumulate until closing ```.
+   * Process code fence state - dispatches to the JSON-aware or generic
+   * handler once we know which flavor of content this fence holds.
    */
   private processCodeFenceState(result: ProcessResult): void {
-    // First check pendingText for closing fence
-    const endMatch = this.pendingText.match(/```/);
-    if (endMatch && endMatch.index !== undefined) {
+    if (this.codeFenceFlavor === 'unknown') {
+      // Merge anything already buffered with the new chunk before deciding.
+      // The fence-opener regex above can match the "```" before a following
+      // "json" language tag has fully arrived in a later chunk (e.g. "```"
+      // and "json\n" split across two chunks), leaving a stray leading
+      // "json" tag as if it were fence content. If what we have so far is
+      // itself still a plain prefix of "json" (e.g. just "j", "js", "json"),
+      // we can't yet tell whether more "json"-tag characters are coming -
+      // wait for more data.
+      const rawProbe = this.buffer + this.pendingText;
+      if ('json'.startsWith(rawProbe)) {
+        this.buffer = rawProbe;
+        this.pendingText = '';
+        return;
+      }
+      const probe = rawProbe.replace(/^json\s*\n?/, '');
+      const firstNonWs = probe.match(/\S/);
+      if (!firstNonWs) {
+        // Still nothing but whitespace - keep buffering, wait for more data.
+        this.buffer = probe;
+        this.pendingText = '';
+        return;
+      }
+      this.codeFenceFlavor = (firstNonWs[0] === '{') ? 'json' : 'generic';
+      this.pendingText = probe;
+      this.buffer = '';
+      if (this.codeFenceFlavor === 'json') {
+        this.jsonTracker.reset();
+      }
+    }
 
-      logger.debug(`Code block ending found: ${this.showSnippet(endMatch.index)}`);
+    if (this.codeFenceFlavor === 'json') {
+      this.processJsonCodeFence(result);
+    } else {
+      this.processGenericCodeFence(result);
+    }
+  }
 
-      // Found closing fence in pendingText
-      this.buffer += this.pendingText.slice(0, endMatch.index);
-      this.pendingText = this.pendingText.slice(endMatch.index + 3);
+  /**
+   * Process a code fence whose content looks like JSON (a tool call).
+   * Delegates to `jsonTracker`, which understands quoted strings and
+   * escapes, so a literal "```" inside a JSON string value - e.g. a file
+   * being written that itself contains markdown code fences - is never
+   * mistaken for the fence's own closing marker (unlike a plain text scan
+   * for "```").
+   */
+  private processJsonCodeFence(result: ProcessResult): void {
+    const { results, remainder } = this.jsonTracker.feedWithRemainder(this.pendingText);
+    this.pendingText = '';
+
+    if (results.length === 0) {
+      // JSON value isn't complete yet - keep waiting for more chunks.
+      return;
+    }
+
+    // Exactly one top-level JSON object per fence is the expected case.
+    for (const jsonStr of results) {
+      const toolCall = this.tryParseToolCall(jsonStr.trim());
+      if (toolCall) {
+        result.completedToolCalls.push(toolCall);
+      } else {
+        result.textToEmit += jsonStr;
+      }
+    }
+
+    this.state = 'normal';
+    this.codeFenceFlavor = 'unknown';
+
+    // What follows the JSON value should be the closing "```" (plus maybe
+    // a trailing newline) - strip it if present; anything left over goes
+    // back to normal-state processing.
+    const fenceClose = remainder.match(/^\s*```/);
+    this.pendingText = fenceClose
+      ? remainder.slice((fenceClose.index ?? 0) + fenceClose[0].length)
+      : remainder;
+  }
+
+  /**
+   * Process a generic (non-JSON) code fence - accumulate until closing ```.
+   *
+   * The closing fence can be split across a chunk boundary (e.g. the buffer
+   * ends with "``" and the next chunk starts with "`" followed immediately
+   * by more content in the *same* chunk). Checking `pendingText` in
+   * isolation misses that case, so we search across a small carried-over
+   * tail of `buffer` plus the new `pendingText` instead.
+   */
+  private processGenericCodeFence(result: ProcessResult): void {
+    const overlap = StreamingToolDetector.CODE_FENCE_MARKER.length - 1; // 2
+    const carry = this.buffer.slice(-overlap);
+    const searchable = carry + this.pendingText;
+    const match = searchable.match(StreamingToolDetector.CODE_FENCE_END);
+
+    if (match && match.index !== undefined) {
+      logger.debug(`Code block ending found: ${this.showSnippet(match.index)}`);
+
+      // Index of the fence relative to pendingText; negative if the fence
+      // starts inside the carried-over tail of buffer.
+      const idxInPending = match.index - carry.length;
+      if (idxInPending < 0) {
+        this.buffer = this.buffer.slice(0, this.buffer.length + idxInPending);
+      } else {
+        this.buffer += this.pendingText.slice(0, idxInPending);
+      }
+      this.pendingText = this.pendingText.slice(idxInPending + StreamingToolDetector.CODE_FENCE_MARKER.length);
       this.completeCodeFence(result);
       return;
     }
 
-    // No closing fence in pendingText - buffer it and check if buffer now ends with ```
+    // No closing fence found even accounting for the boundary - buffer this
+    // chunk and wait for more data.
     this.buffer += this.pendingText;
     this.pendingText = '';
-
-    if (this.buffer.endsWith('```')) {
-      logger.debug('Code block ending found at end of buffer');
-      this.buffer = this.buffer.slice(0, -3);
-      this.completeCodeFence(result);
-    }
   }
 
-  /** Complete a code fence: parse buffer as tool call or emit as text. */
+  /** Complete a generic code fence: parse buffer as tool call or emit as text. */
   private completeCodeFence(result: ProcessResult): void {
     this.state = 'normal';
+    this.codeFenceFlavor = 'unknown';
 
     // fix fenceMatch matching ``` before ```json
     this.buffer = this.buffer.replace(/^json/, '');
@@ -293,17 +397,21 @@ export class StreamingToolDetector {
 
     // If we were in the middle of parsing, try to salvage before emitting as text
     if (this.state !== 'normal') {
-      const trackerBuffer = this.state === 'in_raw_json' ? this.jsonTracker.getBuffer() : this.buffer;
+      const isJsonFence = this.state === 'in_code_fence' && this.codeFenceFlavor === 'json';
+      const trackerBuffer = (this.state === 'in_raw_json' || isJsonFence)
+        ? this.jsonTracker.getBuffer()
+        : this.buffer;
 
       if (trackerBuffer) {
         // End-of-stream fallback: try JSON.parse on the complete buffer.
         // Catches edge cases where char-by-char tracking failed but JSON is actually complete.
-        if (this.state === 'in_raw_json') {
+        if (this.state === 'in_raw_json' || isJsonFence) {
           const toolCall = this.tryParseToolCall(trackerBuffer.trim());
           if (toolCall) {
             result.completedToolCalls.push(toolCall);
             this.jsonTracker.reset();
             this.state = 'normal';
+            this.codeFenceFlavor = 'unknown';
             return result;
           }
         }
@@ -317,6 +425,7 @@ export class StreamingToolDetector {
 
       this.buffer = '';
       this.jsonTracker.reset();
+      this.codeFenceFlavor = 'unknown';
     }
 
     this.state = 'normal';
