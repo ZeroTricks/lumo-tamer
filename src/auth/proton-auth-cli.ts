@@ -1,23 +1,25 @@
 /**
- * Wrapper for calling the proton-auth Go binary
+ * Wrapper for calling a proton-auth Go binary (shared by login and login-captcha)
  */
 
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
-import { authConfig } from '../../app/config.js';
 import type { SRPAuthResult } from './types.js';
 
 /**
- * Run the proton-auth Go binary to perform SRP authentication.
+ * Run a proton-auth Go binary to perform SRP authentication.
  * The binary prompts interactively for credentials.
  *
  * @param binaryPath - Path to the proton-auth binary
+ * @param extraArgs - Extra CLI flags to pass to the binary (method-specific)
  * @param outputPath - Optional path to write the auth result JSON
  * @returns Promise resolving to the auth result
  */
 export async function runProtonAuth(
     binaryPath: string,
-    outputPath?: string
+    extraArgs: string[] = [],
+    outputPath?: string,
+    buildHint?: string
 ): Promise<SRPAuthResult> {
     // On Windows, Go builds produce proton-auth.exe; try that if the configured path doesn't exist.
     if (process.platform === 'win32' && !existsSync(binaryPath) && !binaryPath.endsWith('.exe')) {
@@ -27,8 +29,8 @@ export async function runProtonAuth(
     // Verify binary exists
     if (!existsSync(binaryPath)) {
         throw new Error(
-            `proton-auth binary not found at ${binaryPath}. ` +
-            `Build it with: npm run build:login`
+            `proton-auth binary not found at ${binaryPath}.` +
+            (buildHint ? ` Build it with: ${buildHint}` : '')
         );
     }
 
@@ -39,10 +41,7 @@ export async function runProtonAuth(
             args.push('-o', outputPath);
         }
 
-        // Pass SRP-specific headers to the Go binary (to avoid CAPTCHA)
-        // These are separate from APP_VERSION_HEADER used for API calls
-        args.push('--app-version', authConfig.login.appVersion);
-        args.push('--user-agent', authConfig.login.userAgent);
+        args.push(...extraArgs);
 
         // Spawn the process with stdio inherited for interactive prompts
         // but capture stdout for JSON output
@@ -84,7 +83,7 @@ export async function runProtonAuth(
                 const result = JSON.parse(stdout) as SRPAuthResult;
 
                 if (result.error) {
-                    reject(new Error(`Authentication failed: ${result.error}`));
+                    reject(new Error(result.error));
                     return;
                 }
 

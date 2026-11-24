@@ -1,6 +1,6 @@
 module proton-auth
 
-go 1.24
+go 1.26
 
 require (
 	github.com/henrybear327/go-proton-api v1.0.0
