@@ -1,4 +1,4 @@
-# OpenCode configuration
+# OpenCode V1 configuration
 
 Add Lumo to `models.providers` in your OpenCode `opencode.json` config:
 
