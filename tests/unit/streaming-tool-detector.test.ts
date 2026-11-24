@@ -56,6 +56,38 @@ describe('StreamingToolDetector', () => {
       expect(allToolCalls[0].name).toBe('notag');
     });
 
+    it('still detects a "json" language tag split across the fence opener and content', () => {
+      const detector = new StreamingToolDetector();
+      const { allToolCalls } = processAll(detector, [
+        '```',
+        'json\n{"name":"get_weather","arguments":{"city":"Paris"}}\n```',
+      ]);
+
+      expect(allToolCalls).toHaveLength(1);
+      expect(allToolCalls[0].name).toBe('get_weather');
+    });
+
+    it('does not corrupt a generic fence whose content literally starts with "json"', () => {
+      const detector = new StreamingToolDetector();
+      const { allText, allToolCalls } = processAll(detector, [
+        '```\njsonify(x) is a helper\n```',
+      ]);
+
+      expect(allToolCalls).toHaveLength(0);
+      expect(allText).toContain('jsonify(x) is a helper');
+    });
+
+    it('wraps non-tool-call JSON from a json fence back into a code block', () => {
+      const detector = new StreamingToolDetector();
+      const { allText, allToolCalls } = processAll(detector, [
+        '```json\n{"example":"value"}\n```',
+      ]);
+
+      expect(allToolCalls).toHaveLength(0);
+      expect(allText).toContain('```');
+      expect(allText).toContain('{"example":"value"}');
+    });
+
     it('detects OpenAI-style function_call in code fence and parses string arguments', () => {
       const detector = new StreamingToolDetector();
       const { allToolCalls } = processAll(detector, [

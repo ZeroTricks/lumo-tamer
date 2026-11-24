@@ -173,7 +173,25 @@ export class StreamingToolDetector {
         this.pendingText = '';
         return;
       }
-      const probe = rawProbe.replace(/^json\s*\n?/, '');
+
+      // "json" is there, but everything seen after it so far is blank space -
+      // can't yet tell whether a tag-terminating newline is coming next, or
+      // this is real content like "json is a format" that just hasn't hit a
+      // non-space character yet. Wait for more data.
+      if (/^json[ \t]*$/.test(rawProbe)) {
+        this.buffer = rawProbe;
+        this.pendingText = '';
+        return;
+      }
+
+      // A real language tag is always alone on the fence's opening line, so
+      // only treat "json" as a tag (and strip it) when it's immediately
+      // followed by a newline. Content that merely starts with the letters
+      // "json" - e.g. "jsonify(x)" or "json is a format" - hits a
+      // non-whitespace character before any newline and is left untouched.
+      const tagMatch = rawProbe.match(/^json[ \t]*\n/);
+      const probe = tagMatch ? rawProbe.slice(tagMatch[0].length) : rawProbe;
+
       const firstNonWs = probe.match(/\S/);
       if (!firstNonWs) {
         // Still nothing but whitespace - keep buffering, wait for more data.
@@ -219,7 +237,10 @@ export class StreamingToolDetector {
       if (toolCall) {
         result.completedToolCalls.push(toolCall);
       } else {
-        result.textToEmit += jsonStr;
+        // Not a tool call - re-wrap as a code fence, matching the generic
+        // path (completeCodeFence) so illustrative JSON snippets still
+        // render as a code block instead of bare inline text.
+        result.textToEmit += '```\n' + jsonStr + '```';
       }
     }
 
@@ -296,9 +317,6 @@ export class StreamingToolDetector {
   private completeCodeFence(result: ProcessResult): void {
     this.state = 'normal';
     this.codeFenceFlavor = 'unknown';
-
-    // fix fenceMatch matching ``` before ```json
-    this.buffer = this.buffer.replace(/^json/, '');
 
     // Try to parse as tool call
     const toolCall = this.tryParseToolCall(this.buffer.trim());
