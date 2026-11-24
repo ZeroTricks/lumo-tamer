@@ -24,26 +24,27 @@ After successful authentication, `config.yaml` is updated with your selected met
 
 ## Login (Recommended)
 
-A secure and lightweight option where you provide your credentials. Requires Go. No support for CAPTCHA or conversation sync.
+A secure and lightweight option where you provide your credentials. Requires Go. No support for conversation sync.
 
-Uses Proton's SRP (Secure Remote Password) protocol via a Go binary built from [go-proton-api](https://github.com/henrybear327/go-proton-api).
+Uses Proton's SRP (Secure Remote Password) protocol via [proton-auth](https://github.com/Arsylk/proton-auth), a standalone Go library and CLI built on [go-proton-api](https://github.com/henrybear327/go-proton-api). lumo-tamer pins its version in `src/auth/login/go/go.mod` and runs the binary; no login code lives in this repository.
 
 ### Why Login?
 
-- **No browser dependency**: Pure API-based authentication
+- **API-based login**: A browser is needed only if Proton requires a CAPTCHA
 - **Direct keyPassword access**: Derives the mailbox password needed for encryption
 
 ### Setup
 
 1. Build the Go binary:
    ```bash
-   # Requires Go 1.24+
+   # Requires Go 1.26+
    npm run build:login # or npm run build:all
    ```
 2. Run `tamer auth login`
 3. Enter username, password, and TOTP code (if 2FA is enabled).
+4. If Proton demands a CAPTCHA, it is served on a local URL and opened in your default browser (set `captchaAutoOpen: false` to disable auto-open). Solve it there and login continues automatically. On a headless machine, forward the printed port first: `ssh -L <port>:127.0.0.1:<port> <host>`, then open the URL locally.
 
-> **Tip:** If you hit a CAPTCHA, try logging in to Proton in any regular browser from the same IP first. This may clear the challenge for subsequent login attempts.
+To check the CAPTCHA page and browser wiring without logging in, run `npm run captcha:test`; the helper exits once the challenge is solved. `tamer auth login` always prompts for credentials and never passes them on the command line. The standalone `proton-auth` CLI also supports non-interactive use; see [its README](https://github.com/Arsylk/proton-auth#readme).
 
 ### Config
 
@@ -55,18 +56,20 @@ auth:
     # Headers to help avoid CAPTCHA
     appVersion: "macos-drive@1.0.0-alpha.1+rclone"
     userAgent: "Mozilla/5.0 ..."
+    # Open the CAPTCHA page in the default browser automatically when required
+    captchaAutoOpen: true
 ```
 
 ### Limitations
 
-- **CAPTCHA**: May trigger CAPTCHA on Proton's servers (see tip above)
+- **CAPTCHA needs a browser somewhere**: When Proton requires a CAPTCHA, you solve it on a locally served page (see Setup above)
 - **No conversation sync**: Cannot fetch userKeys/masterKeys due to API scope restrictions
 - **TOTP only**: Only supports TOTP for 2FA (no security keys)
 
 ### Troubleshooting
 
 **"proton-auth binary not found"**
-- Build it: `cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -`
+- Build it: `npm run build:login`
 
 **"Authentication failed"**
 - Verify username/password
@@ -194,7 +197,7 @@ client_salted_key_pass = base64encodedKeyPassword==
 | keyPassword | Yes | Yes | Yes |
 | Token refresh | Automatic | Automatic | Automatic |
 | 2FA support | TOTP only | Any | Any (via rclone) |
-| CAPTCHA handling | May fail | Browser handles | rclone handles |
+| CAPTCHA handling | Local page in browser | Browser handles | rclone handles |
 | Extra tools needed | Go binary | Browser + CDP | rclone |
 | Setup complexity | Medium | Medium | Low |
 

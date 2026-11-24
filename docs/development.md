@@ -29,9 +29,11 @@ To attach a debugger, open `chrome://inspect` in Chrome and add `localhost:9229`
 ```bash
 npm run build                # TypeScript compilation + alias resolution
 
-# Optional: Go binary for login auth method
-cd src/auth/login/go && go build -o ../../../../dist/proton-auth && cd -
+# Optional: Go binary for login auth method (the proton-auth CLI pinned in src/auth/login/go/go.mod)
+npm run build:login
 ```
+
+To test the CAPTCHA page without logging in, run `npm run captcha:test`. See [authentication.md](authentication.md) for the login flow and headless setup.
 
 ## Project Structure
 

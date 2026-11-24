@@ -43,6 +43,7 @@ export async function runProtonAuth(
         // These are separate from APP_VERSION_HEADER used for API calls
         args.push('--app-version', authConfig.login.appVersion);
         args.push('--user-agent', authConfig.login.userAgent);
+        args.push(`--captcha-auto-open=${authConfig.login.captchaAutoOpen}`);
 
         // Spawn the process with stdio inherited for interactive prompts
         // but capture stdout for JSON output
@@ -84,7 +85,7 @@ export async function runProtonAuth(
                 const result = JSON.parse(stdout) as SRPAuthResult;
 
                 if (result.error) {
-                    reject(new Error(`Authentication failed: ${result.error}`));
+                    reject(new Error(result.error));
                     return;
                 }
 

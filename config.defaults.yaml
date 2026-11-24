@@ -41,6 +41,8 @@ auth:
     # Headers to help avoid CAPTCHA - see docs/authentication.md
     appVersion: "macos-drive@1.0.0-alpha.1+rclone"
     userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    # If a CAPTCHA is still required, it is served on a local URL; open it in the default browser automatically
+    captchaAutoOpen: true
 
 # Test/development configuration
 test:
