@@ -7,7 +7,7 @@ import {
   MessageOutputItem,
   FunctionCallOutputItem,
 } from '../../types.js';
-import { getServerConfig, getReasoningConfig } from '../../../app/config.js';
+import { getServerConfig, getReasoningConfig, getImagesConfig } from '../../../app/config.js';
 import {
   modelToTier,
   normalizeModelId,
@@ -192,6 +192,7 @@ export async function handleRequest(
   const reasoningConfig = getReasoningConfig();
   const enableReasoning = resolveReasoning(request.reasoning?.effort, reasoningConfig.default === 'high');
   const surfaceThinking = reasoningConfig.surfaceThinking;
+  const imagesConfig = getImagesConfig();
   const reasoningEffort = enableReasoning ? 'high' : 'none';
   let reasoningItemId: string | undefined;
   if (enableReasoning && surfaceThinking) {
@@ -256,6 +257,8 @@ export async function handleRequest(
                 emitter.emitReasoningTextDelta(reasoningItemId!, 0, 0, text);
               }
               : undefined,
+          maxImagesPerRequest: imagesConfig.maxImagesPerRequest,
+          enableDescribeImageTool: imagesConfig.enableDescribeImageTool,
         }),
       );
 

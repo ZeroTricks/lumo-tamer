@@ -20,7 +20,9 @@ import { logger } from '../../app/logger.js';
 import type { ParsedToolCall } from './types.js';
 
 const KNOWN_NATIVE_TOOLS = new Set([
-  'proton_info', 'web_search', 'weather', 'stock', 'cryptocurrency'
+  'proton_info', 'web_search', 'weather', 'stock', 'cryptocurrency',
+  // Image understanding tool, advertised when server.images.enableDescribeImageTool is on.
+  'describe_image',
 ]);
 
 // ── Internal helpers ─────────────────────────────────────────────────

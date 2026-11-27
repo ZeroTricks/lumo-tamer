@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildChatCompletionsBody, resolveChatModel } from '../../src/lumo-client/v2-body.js';
+import { buildChatCompletionsBody, inferImageMimeType, resolveChatModel } from '../../src/lumo-client/v2-body.js';
 import { Role } from '../../src/lumo-client/types.js';
 
 describe('resolveChatModel', () => {
@@ -76,5 +76,90 @@ describe('buildChatCompletionsBody', () => {
             tier: 'auto', enableReasoning: false, encrypted: false,
         });
         expect(body.messages.map((m) => m.role)).toEqual(['system', 'assistant', 'lumo_tool_call', 'tool']);
+    });
+});
+
+// Image serialization: vectors mirror upstream chat-completions.test.ts
+// (packages/lumo-api-client/core/chat-completions.test.ts).
+describe('buildChatCompletionsBody with images', () => {
+    const base = { tier: 'auto' as const, enableReasoning: false };
+
+    it('omits empty image arrays from serialized messages', () => {
+        const body = buildChatCompletionsBody({
+            ...base, encrypted: false,
+            turns: [{ role: Role.User, content: 'Hello', images: [] }],
+        });
+        expect(body.messages).toEqual([{ role: 'user', content: 'Hello' }]);
+    });
+
+    it('serializes images as OpenAI content parts with data URLs', () => {
+        // "UklGR" base64 prefix -> RIFF/WebP magic bytes
+        const body = buildChatCompletionsBody({
+            ...base, encrypted: false,
+            turns: [{
+                role: Role.User,
+                content: '<lumo-image id="abc" source="user" name="pic.webp" />',
+                images: [{ encrypted: false, image_id: 'abc', data: 'UklGRsAEAAA' }],
+            }],
+        });
+        expect(body.messages).toEqual([{
+            role: 'user',
+            content: [
+                { type: 'text', text: '<lumo-image id="abc" source="user" name="pic.webp" />' },
+                { type: 'image_url', image_url: { url: 'data:image/webp;base64,UklGRsAEAAA' } },
+            ],
+        }]);
+    });
+
+    it('carries U2L ciphertext via a data URL with per-part encrypted flags', () => {
+        const body = buildChatCompletionsBody({
+            ...base, encrypted: true,
+            encryption: { requestKeyEncB64: 'KEY', requestId: 'RID' },
+            turns: [{
+                role: Role.User,
+                content: 'cipher-text-refs',
+                encrypted: true,
+                images: [{ encrypted: true, image_id: 'abc', data: 'cipher-text-bytes' }],
+            }],
+        });
+        expect(body.messages).toEqual([{
+            role: 'user',
+            content: [
+                { type: 'text', text: 'cipher-text-refs', encrypted: true },
+                { type: 'image_url', image_url: { url: 'data:application/octet-stream;base64,cipher-text-bytes', encrypted: true } },
+            ],
+            encrypted: true,
+        }]);
+    });
+
+    it('omits the text part for image-only turns and keeps multiple images in order', () => {
+        const body = buildChatCompletionsBody({
+            ...base, encrypted: false,
+            turns: [{
+                role: Role.User,
+                content: '',
+                images: [
+                    { encrypted: false, image_id: '1', data: 'iVBORw0KGgoAAA' },
+                    { encrypted: false, image_id: '2', data: '/9j/4AAQSkZJRg' },
+                ],
+            }],
+        });
+        expect(body.messages[0].content).toEqual([
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgoAAA' } },
+            { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,/9j/4AAQSkZJRg' } },
+        ]);
+    });
+});
+
+describe('inferImageMimeType', () => {
+    it('maps base64 magic prefixes to MIME types, falling back to png', () => {
+        expect(inferImageMimeType('iVBORw0KGgoAAA')).toBe('image/png');
+        expect(inferImageMimeType('/9j/4AAQ')).toBe('image/jpeg');
+        expect(inferImageMimeType('R0lGODlh')).toBe('image/gif');
+        expect(inferImageMimeType('UklGRsAE')).toBe('image/webp');
+        expect(inferImageMimeType('Qk06AAAA')).toBe('image/bmp');
+        expect(inferImageMimeType(Buffer.from([0, 0, 0, 24, ...Buffer.from('ftypheic'), 0, 0, 0, 0]).toString('base64'))).toBe('image/heic');
+        expect(inferImageMimeType(Buffer.from([0, 0, 0, 24, ...Buffer.from('ftypmif1'), 0, 0, 0, 0]).toString('base64'))).toBe('image/heif');
+        expect(inferImageMimeType('AAAA')).toBe('image/png');
     });
 });

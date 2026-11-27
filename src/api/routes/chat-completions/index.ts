@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { EndpointDependencies, OpenAIChatRequest, OpenAIChatResponse } from '../../types.js';
-import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig, getReasoningConfig } from '../../../app/config.js';
+import { getServerConfig, getConversationsConfig, getLogConfig, getServerInstructionsConfig, getReasoningConfig, getImagesConfig } from '../../../app/config.js';
 import { modelToTier, normalizeModelId, isModelAllowed, resolveReasoning, isValidReasoningEffort } from '../../../lumo-client/model-tier.js';
 import type { LumoModelTier } from '../../../lumo-client/types.js';
 import { logger } from '../../../app/logger.js';
@@ -24,6 +24,7 @@ import {
 } from '../shared.js';
 import { sendInvalidRequest, sendServerError } from '../../error-handler.js';
 import { deterministicUUID } from '../../../app/id-generator.js';
+import { ImageInputError, contentHasImages, resolveRemoteImageUrls } from '../../images.js';
 
 /** Extract tool_call_id from a role: 'tool' message. */
 function extractToolCallId(msg: unknown): string | undefined {
@@ -57,6 +58,7 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
                 i,
                 role: m.role,
                 contentLength: content.length,
+                hasImages: contentHasImages(m.content),
                 preview: getLogConfig().messageContent ? content.slice(0, 120).replace(/\n/g, '\\n') : 'hidden',
               };
             })
@@ -114,6 +116,20 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
       }
       // No else - leave undefined for stateless requests
 
+      // ===== Convert messages to Lumo turns =====
+      // Image parts are decoded here (and remote image URLs downloaded first, when
+      // allowed); invalid images are rejected before any side effects.
+      let turns: Turn[];
+      try {
+        await resolveRemoteImageUrls(request.messages);
+        turns = convertOpenAIChatMessages(request.messages);
+      } catch (error) {
+        if (error instanceof ImageInputError) {
+          return sendInvalidRequest(res, error.message, error.param ?? 'messages', error.code);
+        }
+        throw error;
+      }
+
       // ===== Track tool completions (all requests) =====
       // Set-based dedup in trackCustomToolCompletion prevents double-counting
       for (const msg of request.messages) {
@@ -122,9 +138,6 @@ export function createChatCompletionsRouter(deps: EndpointDependencies): Router 
           trackCustomToolCompletion(callId);
         }
       }
-
-      // ===== Convert messages to Lumo turns =====
-      const turns = convertOpenAIChatMessages(request.messages);
 
       // ===== Build instructions (injected in LumoClient, not persisted) =====
       const systemContent = extractSystemMessage(request.messages);
@@ -175,6 +188,7 @@ async function handleChatRequest(
   const reasoningConfig = getReasoningConfig();
   const enableReasoning = resolveReasoning(request.reasoning_effort, reasoningConfig.default === 'high');
   const surfaceThinking = reasoningConfig.surfaceThinking;
+  const imagesConfig = getImagesConfig();
 
   // Streaming setup
   const emitter = streaming ? new ChatCompletionEventEmitter(res, id, created, model) : null;
@@ -215,6 +229,8 @@ async function handleChatRequest(
           onReasoning: surfaceThinking && emitter
             ? (text) => emitter.emitReasoningDelta(text)
             : undefined,
+          maxImagesPerRequest: imagesConfig.maxImagesPerRequest,
+          enableDescribeImageTool: imagesConfig.enableDescribeImageTool,
         })
       );
 

@@ -5,9 +5,11 @@
  * but also includes an optional `id` field for deduplication of tool messages.
  */
 
-import type { OpenAIChatMessage, OpenAIResponseMessage, OpenAIToolCall } from './types.js';
+import type { OpenAIChatMessage, OpenAIResponseMessage, OpenAIToolCall, StandardChatMessage } from './types.js';
 import { Role } from '../lumo-client/index.js';
 import { addToolNameToFunctionOutput } from './tools/call-id.js';
+import { createImageCounter, extractImages, readImagePart, type ImageCounter } from './images.js';
+import { logger } from '../app/logger.js';
 import { type MessageForStore } from 'src/conversations/types.js';
 
 /**
@@ -17,6 +19,7 @@ import { type MessageForStore } from 'src/conversations/types.js';
  * - [{ type: 'text', text: '...' }]
  * - [{ text: '...' }]
  * - { text: '...' }
+ * Image parts are skipped here; see extractImages().
  */
 function extractTextContent(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -55,9 +58,13 @@ function extractTextContent(content: unknown): string {
  * Tool-related items are converted to user/assistant roles with JSON content,
  * since Lumo's tool_call/tool_result roles are reserved for SSE tools.
  *
+ * @param counter - Request-wide image counter (Responses API tool outputs may carry images)
  * @returns Converted message(s), or null if item is not a tool message
  */
-export function convertToolMessage(item: unknown): MessageForStore | MessageForStore[] | null {
+export function convertToolMessage(
+  item: unknown,
+  counter: ImageCounter = createImageCounter()
+): MessageForStore | MessageForStore[] | null {
   if (typeof item !== 'object' || item === null) return null;
   const obj = item as Record<string, unknown>;
 
@@ -115,21 +122,37 @@ export function convertToolMessage(item: unknown): MessageForStore | MessageForS
     };
   }
 
-  // Responses API: function_call_output -> user with fenced JSON
+  // Responses API: function_call_output -> user with fenced JSON.
+  // `output` may be a string or an array of input_text/input_image items; images
+  // go through the image pipeline instead of being stringified into the prompt.
   if (obj.type === 'function_call_output') {
+    const { output, images } = splitToolOutput(obj.output, counter);
     const json = JSON.stringify({
       type: 'function_call_output',
       call_id: obj.call_id,
-      output: obj.output,
+      output,
     });
     return {
       role: Role.User,
       content: '```json\n' + json + '\n```',
       id: obj.call_id as string,
+      ...(images.length > 0 ? { images } : {}),
     };
   }
 
   return null;
+}
+
+/** Split a Responses API tool output into its text (string or joined text items) and decoded images. */
+function splitToolOutput(output: unknown, counter: ImageCounter): { output: unknown; images: NonNullable<MessageForStore['images']> } {
+  if (!Array.isArray(output)) return { output, images: [] };
+  const images = extractImages(output, counter);
+  const texts = output
+    .filter((part) => readImagePart(part) === undefined)
+    .map((part) => (typeof part === 'object' && part !== null && typeof (part as { text?: unknown }).text === 'string'
+      ? (part as { text: string }).text
+      : JSON.stringify(part)));
+  return { output: texts.join('\n'), images };
 }
 
 /**
@@ -159,6 +182,7 @@ export function extractSystemMessage(messages: OpenAIChatMessage[]): string | un
  */
 export function convertOpenAIChatMessages(messages: OpenAIChatMessage[]): MessageForStore[] {
   const result: MessageForStore[] = [];
+  const counter = createImageCounter();
 
   for (const msg of messages) {
     // Skip system/developer messages - they're handled via instructions parameter
@@ -167,7 +191,7 @@ export function convertOpenAIChatMessages(messages: OpenAIChatMessage[]): Messag
     }
 
     // Handle tool-related messages via convertToolMessage
-    const converted = convertToolMessage(msg);
+    const converted = convertToolMessage(msg, counter);
     if (converted) {
       const convertedArray = Array.isArray(converted) ? converted : [converted];
       for (const item of convertedArray) {
@@ -175,19 +199,46 @@ export function convertOpenAIChatMessages(messages: OpenAIChatMessage[]): Messag
         const content = item.role === Role.User
           ? addToolNameToFunctionOutput(item.content ?? '')
           : item.content;
-        result.push({ role: item.role, content, id: item.id });
+        result.push({ role: item.role, content, id: item.id, ...(item.images ? { images: item.images } : {}) });
       }
       continue;
     }
 
     // Regular user/assistant message
-    result.push({
-      role: msg.role === 'user' ? Role.User : Role.Assistant,
-      content: extractTextContent(msg.content),
-    });
+    result.push(convertContentMessage(msg.role === 'user' ? Role.User : Role.Assistant, msg.content, counter));
   }
 
   return result;
+}
+
+/**
+ * Convert a user/assistant message with string or content-parts content.
+ * Images are only accepted on user messages (what OpenAI vision clients send);
+ * image parts on other roles are dropped.
+ *
+ * An image-only user message gets a placeholder text naming the images, so the
+ * persisted/synced message is not blank and the turn always has content.
+ */
+function convertContentMessage(role: Role, content: unknown, counter: ImageCounter): MessageForStore {
+  const message: MessageForStore = { role, content: extractTextContent(content) };
+  if (role === Role.User) {
+    const images = extractImages(content, counter);
+    if (images.length > 0) {
+      message.images = images;
+      if (!message.content) {
+        message.content = `[${images.length === 1 ? 'Image' : 'Images'}: ${images.map((i) => i.name).join(', ')}]`;
+      }
+    }
+  } else if (Array.isArray(content) && content.some(isImagePart)) {
+    logger.debug({ role }, 'Ignoring image parts on non-user message');
+  }
+  return message;
+}
+
+function isImagePart(part: unknown): boolean {
+  if (typeof part !== 'object' || part === null) return false;
+  const type = (part as { type?: unknown }).type;
+  return type === 'image_url' || type === 'input_image';
 }
 
 /**
@@ -232,10 +283,12 @@ export function convertOpenAIResponseMessages(
       continue;
     }
     if ('role' in item && 'content' in item) {
+      // Pass content through unchanged (string or parts): convertOpenAIChatMessages
+      // extracts text and decodes image parts.
       const obj = item as { role: string; content: unknown };
       chatMessages.push({
         role: obj.role as 'user' | 'assistant' | 'system',
-        content: extractTextContent(obj.content),
+        content: obj.content as StandardChatMessage['content'],
       });
     }
   }

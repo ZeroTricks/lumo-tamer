@@ -11,11 +11,28 @@ export type {
     RequestId,
     ToolName,
     Turn,
+    WireImage,
 } from '@lumo/lib/lumo-api-client/core/types.js';
 
 export { Role } from '@lumo/types-api.js';
 
+import type { WireImage } from '@lumo/lib/lumo-api-client/core/types.js';
+
 // Local-only types
+
+/**
+ * An inbound image (API client upload) in Lumo's wire shape, plus local metadata
+ * used to build the `<lumo-image>` marker. Extra fields never reach the wire:
+ * the body builder only reads `data` and `encrypted`.
+ */
+export interface ImageInput extends WireImage {
+    /** Detected MIME type (from magic bytes). */
+    mimeType?: string;
+    /** Display name used in the marker (e.g. `image-1.jpg`); OpenAI parts carry no filename. */
+    name?: string;
+    /** Decoded size in bytes. */
+    size?: number;
+}
 
 // API adapter interface
 export interface ProtonApiOptions {
@@ -146,6 +163,14 @@ export interface LumoClientOptions {
     enableReasoning?: boolean;
     /** Sink for reasoning/thinking chunks (always drained, even if unused). */
     onReasoning?: (content: string) => void;
+    /**
+     * Max number of images sent per request, counted over all turns. Older images
+     * beyond the limit are dropped and replaced by a placeholder (mirrors Lumo's web
+     * client). Undefined: no limit.
+     */
+    maxImagesPerRequest?: number;
+    /** Advertise Lumo's native describe_image tool when the turns carry images. */
+    enableDescribeImageTool?: boolean;
 }
 
 /** Result from a chat request. */

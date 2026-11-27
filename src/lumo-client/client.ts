@@ -35,6 +35,7 @@ import { buildChatCompletionsBody, LUMO_CHAT_ENDPOINT, type LumoCompletionTarget
 import { V2StreamProcessor } from './v2-stream.js';
 import { getInstructionsConfig, getLogConfig, getConfigMode, getCustomToolsConfig, getEnableWebSearch } from '../app/config.js';
 import { injectInstructionsIntoTurns } from './instructions.js';
+import { countImages, prepareImageTurns, stripImagesForTitle, turnsHaveImages } from './images.js';
 import { NativeToolCallProcessor, type NativeToolCallResult } from '../api/tools/native-tool-call-processor.js';
 import { postProcessTitle } from '@lumo/lib/lumo-api-client/utils.js';
 
@@ -43,6 +44,8 @@ export type { LumoClientOptions, ChatResult };
 
 const DEFAULT_INTERNAL_TOOLS: ToolName[] = ['proton_info'];
 const DEFAULT_EXTERNAL_TOOLS: ToolName[] = ['web_search', 'weather', 'stock', 'cryptocurrency'];
+/** Native image-understanding tool, advertised only on request (see LumoClientOptions). */
+const DESCRIBE_IMAGE_TOOL: ToolName = 'describe_image';
 
 /** Encryption context for decrypting a response stream. */
 interface EncryptionContext {
@@ -313,6 +316,8 @@ export class LumoClient {
             modelTier = this.defaultOptions?.modelTier ?? 'auto',
             enableReasoning = this.defaultOptions?.enableReasoning ?? false,
             onReasoning = this.defaultOptions?.onReasoning,
+            maxImagesPerRequest = this.defaultOptions?.maxImagesPerRequest,
+            enableDescribeImageTool = this.defaultOptions?.enableDescribeImageTool ?? false,
         } = options;
 
         const turn = turns[turns.length - 1];
@@ -325,20 +330,38 @@ export class LumoClient {
                 } `);
         }
 
+        // Images: add <lumo-image> markers to the text and apply the most-recent-images
+        // limit. Done before instruction injection so an image-only user turn still has
+        // content to inject into. The original `turns` stay untouched (bounce re-prepares).
+        const preparedTurns = turnsHaveImages(turns) ? prepareImageTurns(turns, maxImagesPerRequest) : turns;
+        const sendingImages = turnsHaveImages(preparedTurns);
+        if (preparedTurns !== turns) {
+            logger.debug(
+                { images: countImages(turns), sent: countImages(preparedTurns), maxImagesPerRequest },
+                'Sending turns with images',
+            );
+        }
+
         // Read from config - applies to both server and CLI modes
         const tools: ToolName[] = getEnableWebSearch()
             ? [...DEFAULT_INTERNAL_TOOLS, ...DEFAULT_EXTERNAL_TOOLS]
-            : DEFAULT_INTERNAL_TOOLS;
+            : [...DEFAULT_INTERNAL_TOOLS];
+        if (sendingImages && enableDescribeImageTool) {
+            tools.push(DESCRIBE_IMAGE_TOOL);
+        }
 
         // Inject instructions at the last moment (kept out of persisted turns).
         const turnsWithInstructions = instructions
-            ? injectInstructionsIntoTurns(turns, instructions, injectInstructionsInto)
-            : turns;
+            ? injectInstructionsIntoTurns(preparedTurns, instructions, injectInstructionsInto)
+            : preparedTurns;
 
         // Title generation is a separate, concurrent, non-fatal completion.
         // Only at the top level: a bounce must not launch its own title request.
-        const titlePromise = requestTitle && !isBounce
-            ? this.runCompletion(turns, {
+        // Titles are derived from text only; images are never sent twice, and a
+        // conversation with no text yet gets no title request at all.
+        const titleTurns = stripImagesForTitle(turns);
+        const titlePromise = requestTitle && !isBounce && titleTurns.some((t) => t.role === Role.User)
+            ? this.runCompletion(titleTurns, {
                 endpoint,
                 tier: modelTier,
                 enableReasoning: false,

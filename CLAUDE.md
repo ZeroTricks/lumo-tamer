@@ -8,11 +8,11 @@ This project creates an OpenAI-compatible API on top of Proton's conversation ag
 **Application** (`src/app/`): Shared bootstrap for all modes. Loads config, initializes auth, creates LumoClient + ConversationStore + optional sync. Exposes `AppContext` to consumers.
 
 **Clients** (both use LumoClient + ConversationStore):
-- API (`src/api/`): `/v1/responses` (primary), `/v1/chat/completions`. Message conversion in `message-converter.ts`, tool call parsing in `tools/`, shared logic in `routes/shared.ts`.
+- API (`src/api/`): `/v1/responses` (primary), `/v1/chat/completions`. Message conversion in `message-converter.ts`, image input decoding in `images.ts`, tool call parsing in `tools/`, shared logic in `routes/shared.ts`.
 - CLI (`src/cli/`): Interactive client with code block detection/execution.
 
 **Core**:
-- **LumoClient** (`src/lumo-client/client.ts`): Bridge to Proton. Handles U2L encryption, SSE streaming, native tool call detection (web_search, weather, etc.), bounces misrouted custom tools.
+- **LumoClient** (`src/lumo-client/client.ts`): Bridge to Proton. Handles U2L encryption, SSE streaming, native tool call detection (web_search, weather, etc.), bounces misrouted custom tools. Image turns (markers, limits) in `images.ts`, wire body in `v2-body.ts`.
 - **ConversationStore** (`src/conversations/store.ts`): In-memory LRU cache. Message deduplication, turn conversion, dirty-flagging for sync.
 - **Auth** (`src/auth/`): Three providers (login/Go SRP, browser token extraction, rclone). `AuthManager` handles auto-refresh + 401 retries.
 - **Sync** (`src/conversations/sync/`, `encryption/`): Optional Proton-native storage. KeyManager for user keys, SyncService for push/pull.

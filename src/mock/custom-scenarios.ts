@@ -9,18 +9,43 @@ import { Role, type Turn, type ProtonApiOptions } from '../lumo-client/types.js'
 import { formatSSEMessage, delay, type ScenarioGenerator } from './mock-api.js';
 import { getServerInstructionsConfig, getCustomToolsConfig } from '../app/config.js';
 
+/** Content part of a Lumo 2.0 chat/completions message (text or image_url). */
+type MockContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string } };
+
 /** Extract turns from the mock request payload (unencrypted only).
- *  Supports the Lumo 2.0 chat/completions body (`messages`) and the legacy
- *  generation_request body (`Prompt.turns`). */
+ *  Supports the Lumo 2.0 chat/completions body (`messages`, string or content
+ *  parts) and the legacy generation_request body (`Prompt.turns`). */
 function getTurns(options: ProtonApiOptions): Turn[] {
     const body = options.data as {
-        messages?: Array<{ role: Turn['role']; content?: string }>;
+        messages?: Array<{ role: Turn['role']; content?: string | MockContentPart[] }>;
         Prompt?: { turns?: Turn[] };
     };
     if (Array.isArray(body?.messages)) {
-        return body.messages.map((m) => ({ role: m.role, content: m.content })) as Turn[];
+        return body.messages.map((m) => {
+            if (!Array.isArray(m.content)) return { role: m.role, content: m.content };
+            const text = m.content.filter((p) => p.type === 'text').map((p) => p.text).join('\n');
+            const images = m.content
+                .filter((p): p is Extract<MockContentPart, { type: 'image_url' }> => p.type === 'image_url')
+                .map((p, i) => ({ encrypted: false, image_id: `mock-${i}`, data: p.image_url.url.replace(/^data:[^,]*,/, '') }));
+            return { role: m.role, content: text, images };
+        }) as Turn[];
     }
     return body?.Prompt?.turns ?? [];
+}
+
+/** Data URL media type of a mock image part (e.g. `image/jpeg`). */
+function imageMediaTypes(options: ProtonApiOptions): string[] {
+    const body = options.data as { messages?: Array<{ content?: string | MockContentPart[] }> };
+    const types: string[] = [];
+    for (const m of body?.messages ?? []) {
+        if (!Array.isArray(m.content)) continue;
+        for (const p of m.content) {
+            if (p.type === 'image_url') types.push(p.image_url.url.match(/^data:([^;,]*)/)?.[1] ?? 'unknown');
+        }
+    }
+    return types;
 }
 
 /** Find the last turn with a given role. */
@@ -31,6 +56,25 @@ function lastTurnWithRole(turns: Turn[], role: Turn['role']): Turn | undefined {
 }
 
 export const customScenarios: Record<string, ScenarioGenerator> = {
+    imageInput: async function* (options) {
+        // Simulates image understanding: describes what the request carried so tests
+        // and manual runs can verify images made it through the whole pipeline.
+        const turns = getTurns(options);
+        const types = imageMediaTypes(options);
+        const markers = turns.flatMap((t) => t.content?.match(/<lumo-image [^>]*\/>/g) ?? []);
+        yield formatSSEMessage({ type: 'ingesting', target: 'message' });
+        await delay(100);
+        const summary = types.length === 0
+            ? '(Mocked) I received no images.'
+            : `(Mocked) I received ${types.length} image(s) [${types.join(', ')}] with ${markers.length} marker(s).`;
+        const tokens = summary.split(' ');
+        for (let i = 0; i < tokens.length; i++) {
+            yield formatSSEMessage({ type: 'token_data', target: 'message', count: i, content: (i ? ' ' : '') + tokens[i] });
+            await delay(20);
+        }
+        yield formatSSEMessage({ type: 'done' });
+    },
+
     misroutedToolCall: async function* (options) {
         // Simulates a "misrouted" tool call: Lumo routes a custom (client-defined) tool
         // through its native pipeline instead of outputting it as text. Always fails server-side.

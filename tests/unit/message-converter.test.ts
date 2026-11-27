@@ -8,6 +8,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { convertOpenAIChatMessages, convertOpenAIResponseMessages, convertToolMessage } from '../../src/api/message-converter.js';
+import { ImageInputError } from '../../src/api/images.js';
+import { JPEG_DATA_URL, PNG_DATA_URL, imageUrlPart, inputImagePart } from '../helpers/images.js';
 
 describe('convertOpenAIChatMessages', () => {
   it('converts user and assistant messages', () => {
@@ -327,5 +329,98 @@ describe('convertOpenAIChatMessages with tool messages', () => {
     expect(turns[2].role).toBe('user'); // tool result
     expect(turns[3].role).toBe('assistant'); // final response
     expect(turns[3].content).toBe('The weather in NYC is sunny and 72F.');
+  });
+});
+
+describe('image content parts', () => {
+  it('extracts text and images from a Chat Completions user message', () => {
+    const turns = convertOpenAIChatMessages([
+      { role: 'user', content: [{ type: 'text', text: 'What is this?' }, imageUrlPart(PNG_DATA_URL, 'low')] } as any,
+    ]);
+    expect(turns).toHaveLength(1);
+    expect(turns[0].role).toBe('user');
+    expect(turns[0].content).toBe('What is this?');
+    expect(turns[0].images).toHaveLength(1);
+    expect(turns[0].images![0].mimeType).toBe('image/png');
+    expect(turns[0].images![0].encrypted).toBe(false);
+  });
+
+  it('keeps multiple images in order and gives image-only messages a placeholder text', () => {
+    const turns = convertOpenAIChatMessages([
+      { role: 'user', content: [imageUrlPart(JPEG_DATA_URL), imageUrlPart(PNG_DATA_URL)] } as any,
+      { role: 'user', content: [imageUrlPart(PNG_DATA_URL)] } as any,
+    ]);
+    expect(turns[0].content).toBe('[Images: image-1.jpg, image-2.png]');
+    expect(turns[0].images!.map((i) => i.name)).toEqual(['image-1.jpg', 'image-2.png']);
+    expect(turns[1].content).toBe('[Image: image-3.png]');
+  });
+
+  it('numbers images across all messages of a request, with ids unique per position', () => {
+    const turns = convertOpenAIChatMessages([
+      { role: 'user', content: [{ type: 'text', text: 'a' }, imageUrlPart(PNG_DATA_URL)] } as any,
+      { role: 'assistant', content: 'ok' },
+      { role: 'user', content: [{ type: 'text', text: 'b' }, imageUrlPart(PNG_DATA_URL)] } as any,
+    ]);
+    expect(turns[0].images![0].name).toBe('image-1.png');
+    expect(turns[2].images![0].name).toBe('image-2.png');
+    expect(turns[0].images![0].image_id).not.toBe(turns[2].images![0].image_id);
+    // Re-sending the same history yields the same ids
+    const again = convertOpenAIChatMessages([
+      { role: 'user', content: [{ type: 'text', text: 'a' }, imageUrlPart(PNG_DATA_URL)] } as any,
+    ]);
+    expect(again[0].images![0].image_id).toBe(turns[0].images![0].image_id);
+  });
+
+  it('routes input_image items of a function_call_output array through the image pipeline', () => {
+    const turns = convertOpenAIResponseMessages([
+      { role: 'user', content: 'Take a snapshot' },
+      { type: 'function_call_output', call_id: 'call_snap', output: [
+        { type: 'input_text', text: 'Snapshot taken' },
+        inputImagePart(JPEG_DATA_URL),
+      ] } as any,
+    ]);
+    expect(turns).toHaveLength(2);
+    expect(turns[1].role).toBe('user');
+    expect(turns[1].id).toBe('call_snap');
+    expect(turns[1].content).toContain('"output":"Snapshot taken"');
+    expect(turns[1].content).not.toContain('base64');
+    expect(turns[1].images!.map((i) => i.name)).toEqual(['image-1.jpg']);
+  });
+
+  it('does not set images on text-only messages', () => {
+    const turns = convertOpenAIChatMessages([
+      { role: 'user', content: [{ type: 'text', text: 'plain' }] } as any,
+      { role: 'user', content: 'string' },
+    ]);
+    expect(turns[0].images).toBeUndefined();
+    expect(turns[1].images).toBeUndefined();
+  });
+
+  it('ignores image parts on assistant messages', () => {
+    const turns = convertOpenAIChatMessages([
+      { role: 'assistant', content: [{ type: 'text', text: 'see' }, imageUrlPart(PNG_DATA_URL)] } as any,
+    ]);
+    expect(turns[0].content).toBe('see');
+    expect(turns[0].images).toBeUndefined();
+  });
+
+  it('throws ImageInputError for invalid images', () => {
+    expect(() => convertOpenAIChatMessages([
+      { role: 'user', content: [imageUrlPart('data:image/png;base64,bm90IGFuIGltYWdlIGF0IGFsbCwgc29ycnk=')] } as any,
+    ])).toThrow(ImageInputError);
+  });
+
+  it('extracts input_image parts from Responses API input', () => {
+    const turns = convertOpenAIResponseMessages([
+      { role: 'user', content: [{ type: 'input_text', text: 'Describe' }, inputImagePart(JPEG_DATA_URL)] } as any,
+      { role: 'assistant', content: [{ type: 'output_text', text: 'A frame' }] } as any,
+      { role: 'user', content: 'Thanks' },
+    ]);
+    expect(turns).toHaveLength(3);
+    expect(turns[0].content).toBe('Describe');
+    expect(turns[0].images!.map((i) => i.mimeType)).toEqual(['image/jpeg']);
+    expect(turns[1].content).toBe('A frame');
+    expect(turns[1].images).toBeUndefined();
+    expect(turns[2].images).toBeUndefined();
   });
 });
